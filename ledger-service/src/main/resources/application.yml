@@ -7,6 +7,8 @@ spring:
     password: ${DATABASE_PASSWORD:ledger}
     hikari:
       maximum-pool-size: ${DB_POOL_SIZE:10}
+      # Fail fast under overload instead of parking requests for the 30s default.
+      connection-timeout: 3000
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
@@ -32,7 +34,15 @@ management:
 
 ledger:
   events:
-    sink: ${EVENTS_SINK:log}   # log | kafka
+    sink: ${EVENTS_SINK:log}   # log | kafka | sqs
     kafka-topic: ledger.events
+    sqs:
+      queue-url: ${SQS_QUEUE_URL:}
+      region: ${AWS_REGION:us-east-1}
+      endpoint: ${SQS_ENDPOINT:}
   outbox:
     poll-interval-ms: 500
+  http:
+    # Cap on concurrent API requests; see InFlightLimitFilter.
+    max-in-flight: ${MAX_IN_FLIGHT:64}
+    queue-wait-ms: 200

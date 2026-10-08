@@ -1,0 +1,16 @@
+# Render's free tier spins an idle service down after ~15 minutes, and the next visitor
+# waits for it to come back. A ping every 10 minutes keeps the demo instant; one service
+# running all month stays within Render's 750 free instance-hours.
+name: keep-warm
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    if: vars.LEDGER_URL != ''
+    steps:
+      - run: curl -fsS --max-time 60 "${{ vars.LEDGER_URL }}/actuator/health"

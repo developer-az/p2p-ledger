@@ -1,0 +1,31 @@
+# Render Blueprint: one free web service running the native image that CI publishes to GHCR.
+# Secrets marked `sync: false` are entered in the Render dashboard, never committed.
+services:
+  - type: web
+    name: p2p-ledger
+    runtime: image
+    image:
+      url: ghcr.io/developer-az/p2p-ledger:latest
+    plan: free
+    region: virginia          # same region as the Supabase database and the SQS queue (us-east-1)
+    healthCheckPath: /actuator/health
+    autoDeploy: false         # CI triggers deploys through the deploy hook after tests pass
+    envVars:
+      - key: DATABASE_URL     # Supabase session pooler, e.g. jdbc:postgresql://aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require
+        sync: false
+      - key: DATABASE_USERNAME
+        sync: false
+      - key: DATABASE_PASSWORD
+        sync: false
+      - key: DB_POOL_SIZE
+        value: "5"
+      - key: EVENTS_SINK
+        value: sqs
+      - key: SQS_QUEUE_URL
+        sync: false
+      - key: AWS_REGION
+        value: us-east-1
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false

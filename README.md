@@ -122,7 +122,7 @@ Measured with [k6](loadtest/transfers.js): open-model constant arrival rate, ran
 | GraalVM native | 3.6 s | 74 MB |
 
 What the numbers say:
-- **Native wins where the free tier hurts.** Startup is 40× faster and memory about 4× lower. On a 0.1-CPU instance that sleeps when idle, that's the difference between a demo that answers and one that times out, so the deployed build is native.
+- **Native wins where the free tier hurts.** Startup is 40× faster (144 s → 3.6 s). Idle memory is 2.5× lower (182 → 74 MB), and about 5× lower under load. On a 0.1-CPU instance that sleeps when idle, that's the difference between a demo that answers and one that times out, so the deployed build is native.
 - **The warmed JVM wins at saturation.** At 1000 req/s, C2's profile-guided JIT outperforms GraalVM CE's ahead-of-time code (0.6% vs 10.9% shed). On a long-running server with real CPU, the JVM build would be the better choice.
 - **Contention is the real ceiling.** With 10 hot accounts, p99 rises from 30 ms to 336 ms at the same rate. Transfers queue on the same row locks, and that behavior is correct. Scaling past it means sharding hot accounts or batching their postings, not more CPU.
 - **Overload degrades instead of crashing.** Above capacity, the service returns fast 503s rather than growing the heap.

@@ -44,6 +44,13 @@ public class AccountRepository {
                 .optional();
     }
 
+    public List<Account> findByOwner(String ownerId) {
+        return jdbc.sql("select " + COLUMNS + " from accounts where owner_id = :ownerId and type = 'USER' order by id")
+                .param("ownerId", ownerId)
+                .query(AccountRepository::mapAccount)
+                .list();
+    }
+
     public Optional<Account> findFundingAccount(String currency) {
         return jdbc.sql("select " + COLUMNS + " from accounts where type = 'SYSTEM' and currency = :currency")
                 .param("currency", currency)

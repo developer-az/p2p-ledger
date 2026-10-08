@@ -6,7 +6,10 @@ dist/
 .vscode/
 .DS_Store
 .env
+.env.*
+!.env.example
 .terraform/
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+evals/results/

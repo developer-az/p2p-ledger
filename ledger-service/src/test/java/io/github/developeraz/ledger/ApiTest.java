@@ -26,8 +26,9 @@ class ApiTest {
 
     @Test
     void endToEndTransferWithIdempotentReplay() throws Exception {
+        String suffix = UUID.randomUUID().toString();
         String alice = openAccount("alice");
-        String bob = openAccount("bob");
+        String bob = openAccount("bob-" + suffix);
 
         mvc.perform(post("/v1/accounts/{id}/deposits", alice)
                         .header("Idempotency-Key", UUID.randomUUID().toString())
@@ -51,6 +52,9 @@ class ApiTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("Idempotent-Replayed", "true"));
 
+        mvc.perform(get("/v1/accounts").param("ownerId", "bob-" + suffix))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(bob));
         mvc.perform(get("/v1/accounts/{id}", bob))
                 .andExpect(jsonPath("$.balanceMinor").value(1250));
         mvc.perform(get("/v1/accounts/{id}/entries", alice))

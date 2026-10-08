@@ -1,0 +1,54 @@
+name: assistant CI
+
+on:
+  push:
+    branches: [main]
+    paths: ["assistant/**", ".github/workflows/assistant-ci.yml"]
+  pull_request:
+    paths: ["assistant/**", ".github/workflows/assistant-ci.yml"]
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: assistant
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: assistant/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx vite build
+
+  # Real-model evals. Runs only when an API key secret exists, so forks and fresh clones stay green.
+  eval:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: assistant/package-lock.json
+      - run: npm ci
+      - name: Run evals
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then echo "GEMINI_API_KEY not set; skipping evals"; exit 0; fi
+          TRIALS=1 npm run eval
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results
+          path: assistant/evals/results/
+          if-no-files-found: ignore

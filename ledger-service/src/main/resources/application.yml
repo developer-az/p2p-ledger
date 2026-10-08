@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: ledger-service
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/ledger}
+    username: ${DATABASE_USERNAME:ledger}
+    password: ${DATABASE_PASSWORD:ledger}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+  threads:
+    virtual:
+      enabled: true
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+ledger:
+  events:
+    sink: ${EVENTS_SINK:log}   # log | kafka
+    kafka-topic: ledger.events
+  outbox:
+    poll-interval-ms: 500

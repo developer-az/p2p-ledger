@@ -1,0 +1,38 @@
+{
+  "name": "ledger-assistant",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web \"tsx watch --env-file-if-exists=.env.local src/server/main.ts\" \"vite\"",
+    "build": "tsc --noEmit && vite build",
+    "start": "node --import tsx src/server/main.ts",
+    "test": "vitest run",
+    "eval": "tsx --env-file-if-exists=.env.local evals/run.ts",
+    "seed": "tsx scripts/seed.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.132.1",
+    "@google/genai": "^2.28.0",
+    "@hono/node-server": "^2.1.4",
+    "hono": "^4.13.13",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "concurrently": "^10.0.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.3",
+    "vitest": "^5.0.3"
+  }
+}

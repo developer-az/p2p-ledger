@@ -38,6 +38,11 @@ public class AccountService {
     }
 
     @Transactional(readOnly = true)
+    public List<Account> byOwner(String ownerId) {
+        return accounts.findByOwner(ownerId);
+    }
+
+    @Transactional(readOnly = true)
     public List<LedgerEntry> statement(UUID id, Long beforeId, int limit) {
         get(id);
         return accounts.findEntries(id, beforeId, limit);

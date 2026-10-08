@@ -41,6 +41,11 @@ public class AccountController {
         return ResponseEntity.created(URI.create("/v1/accounts/" + account.id())).body(account);
     }
 
+    @GetMapping
+    public List<Account> byOwner(@RequestParam @NotBlank @Size(max = 128) String ownerId) {
+        return service.byOwner(ownerId);
+    }
+
     @GetMapping("/{id}")
     public Account get(@PathVariable UUID id) {
         return service.get(id);

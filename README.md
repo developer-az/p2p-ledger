@@ -4,7 +4,7 @@ A peer-to-peer payments system in two parts:
 
 | Part | Stack | Status |
 |---|---|---|
-| **ledger-service** | Java 21, Spring Boot 4, PostgreSQL, Kafka, Docker | Core done (this README) |
+| **ledger-service** | Java 21, Spring Boot 4, PostgreSQL, Kafka / AWS SQS, GraalVM native, Docker, Terraform | Done (this README) |
 | **assistant** | React + TypeScript, Node/TypeScript, LLM tool calling | Planned |
 
 The ledger is the source of truth for money. The assistant will be a client that answers questions about it ("why was this transfer declined?") by calling the ledger's API as LLM tools.
@@ -56,6 +56,10 @@ A transfer is one database transaction that:
 
 **UUIDv7 ids.** Time-ordered ids keep index inserts sequential and make `ORDER BY id` equal to time order, which the statement endpoints use for keyset pagination.
 
+**Load shedding instead of unbounded queuing.** Virtual threads remove the thread-pool cap, so under a burst every request gets a thread and waits on the 10-connection DB pool. In the first load test this queued thousands of requests on the heap and **the JVM was OOM-killed at 500 req/s on a 512 MB container**. `InFlightLimitFilter` now caps concurrent API requests (default 64). Requests beyond the cap wait up to 200 ms for a slot, then get a fast `503` with `Retry-After`. Latency and memory stay flat for the requests that are admitted, and clients get a signal they can retry safely, because the request is idempotent.
+
+**Event sink chosen at runtime, not by `@ConditionalOnProperty`.** In a GraalVM native image, Spring evaluates bean conditions once at build time, and a conditional bean would freeze the sink into the binary. This was found in the native smoke test, where `EVENTS_SINK=sqs` was silently ignored. A plain factory `switch` keeps it configurable.
+
 **Plain SQL (`JdbcClient`) over JPA.** The interesting behavior here is the SQL (locking order, `ON CONFLICT`, `SKIP LOCKED`, `RETURNING`). Writing it directly keeps it visible and reviewable.
 
 ## API
@@ -92,7 +96,59 @@ docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server localhost:9092 --topic ledger.events --from-beginning --property print.headers=true
 ```
 
-Without Kafka, events go to the log (`EVENTS_SINK=log`, the default).
+Without Kafka, events go to the log (`EVENTS_SINK=log`, the default). `EVENTS_SINK` is `log`, `kafka` or `sqs`.
+
+Native build (needs GraalVM 25): `./mvnw -Pnative -DskipTests native:compile`, then `docker build -f Dockerfile.native .`
+
+## Performance
+
+Measured with [k6](loadtest/transfers.js): open-model constant arrival rate, random transfers between 200 accounts, and 10% of requests replaying an earlier idempotency key. Each run lasts 30s after a warm-up (15s native, 60s JVM). The service ran in a Docker container limited to **1 CPU / 512 MB**, with Postgres 17 and k6 on the same 4-vCPU host. After every run, total money summed to exactly 0 and no user balance was negative.
+
+| Build | Load | p50 | p95 | p99 | Errors | RSS |
+|---|---|---|---|---|---|---|
+| Native | 500 req/s | 4.5 ms | 9.8 ms | 30 ms | 0% | 54 MB |
+| Native | 800 req/s | 6.3 ms | 50 ms | 109 ms | 0% | 80 MB |
+| Native | 1000 req/s | 224 ms | 402 ms | 518 ms | 10.9% shed (503) | 181 MB |
+| JVM (warmed) | 500 req/s | 3.4 ms | 15 ms | 61 ms | 0% | 303 MB |
+| JVM (warmed) | 800 req/s | 4.4 ms | 48 ms | 124 ms | 0% | 394 MB |
+| JVM (warmed) | 1000 req/s | 12 ms | 231 ms | 276 ms | 0.6% shed (503) | 505 MB |
+| Native, **hot accounts** (10 accounts) | 500 req/s | 7.2 ms | 222 ms | 336 ms | 0% | 69 MB |
+| Native, **0.1 CPU** (free-tier size) | 50 req/s | 4.7 ms | 58 ms | 79 ms | 0% | 129 MB |
+
+| Startup on 0.1 CPU / 512 MB | Time to healthy | Idle memory |
+|---|---|---|
+| JVM (Temurin 21) | 144 s | 182 MB |
+| GraalVM native | 3.6 s | 74 MB |
+
+What the numbers say:
+- **Native wins where the free tier hurts.** Startup is 40× faster and memory about 4× lower. On a 0.1-CPU instance that sleeps when idle, that's the difference between a demo that answers and one that times out, so the deployed build is native.
+- **The warmed JVM wins at saturation.** At 1000 req/s, C2's profile-guided JIT outperforms GraalVM CE's ahead-of-time code (0.6% vs 10.9% shed). On a long-running server with real CPU, the JVM build would be the better choice.
+- **Contention is the real ceiling.** With 10 hot accounts, p99 rises from 30 ms to 336 ms at the same rate. Transfers queue on the same row locks, and that behavior is correct. Scaling past it means sharding hot accounts or batching their postings, not more CPU.
+- **Overload degrades instead of crashing.** Above capacity, the service returns fast 503s rather than growing the heap.
+
+Reproduce: run the service with relaxed fraud limits (`LEDGER_FRAUD_VELOCITY_MAX_TRANSFERS=1000000000`, `LEDGER_FRAUD_DAILY_OUTFLOW_LIMIT_MINOR=1000000000000000`, `LEDGER_FRAUD_NEW_ACCOUNT_MAX_TRANSFER_MINOR=1000000000`), then `k6 run -e BASE_URL=http://localhost:8080 -e RATE=500 loadtest/transfers.js`.
+
+## Deployment ($0)
+
+```
+GitHub Actions ──▶ tests ─▶ native build ─▶ smoke test binary ─▶ push ghcr.io/developer-az/p2p-ledger ─▶ Render deploy hook
+Render (free web service, native image) ──▶ Supabase Postgres (free)
+                                        └──▶ AWS SQS FIFO (always-free tier, Terraform in infra/aws)
+```
+
+| Piece | Free option | Why this one |
+|---|---|---|
+| Compute | Render free web service | No card needed; runs a container image. 0.1 CPU and sleeps after idle, so the image is native. |
+| Database | Supabase free Postgres | No monthly compute-hour cap, so the outbox poller can't exhaust it. Connect through the session pooler (IPv4). |
+| Events | AWS SQS FIFO | 1M requests/month always free. FIFO gives per-transfer ordering and dedupes relay retries by event id. |
+| Infra as code | Terraform (`infra/aws`) | Queue, DLQ, least-privilege IAM user (send-only on one queue), and a $1 budget alarm. |
+| Keep-warm | GitHub Actions cron (`keep-warm.yml`) | Pings health every 10 min. One always-on service stays inside Render's 750 free hours. |
+
+Setup:
+1. **AWS:** `cd infra/aws && terraform apply -var alert_email=you@example.com`, then note `queue_url`, `publisher_access_key_id` and `terraform output -raw publisher_secret_access_key`.
+2. **Supabase:** create a project in us-east-1. Copy the session pooler host, user and password into `DATABASE_URL` (`jdbc:postgresql://<pooler-host>:5432/postgres?sslmode=require`), `DATABASE_USERNAME` and `DATABASE_PASSWORD`.
+3. **Render:** New → Blueprint → this repo (`render.yaml`), then fill in the secret env vars. Copy the service's deploy hook URL.
+4. **GitHub:** add the repo secret `RENDER_DEPLOY_HOOK_URL` and the variable `LEDGER_URL` (the Render URL). Make the `p2p-ledger` package public under the repo's Packages so Render can pull it.
 
 ## Tests
 
@@ -105,10 +161,13 @@ Highlights:
 - **Duplicate requests:** 12 threads send the same idempotency key at once, and exactly one transfer is created.
 - **Database invariants:** an unbalanced entry and an `UPDATE` on the ledger are both rejected by Postgres.
 - **Fraud rules:** every rule is tested at its boundary with a controllable clock.
+- **SQS:** events go through the real AWS SDK to ElasticMQ (SQS-compatible) and are checked for FIFO group ids.
+- **Load shedding:** saturated requests get `503` + `Retry-After`, and health checks are never shed.
+- **Native binary:** CI starts the compiled executable and runs [`scripts/smoke.sh`](ledger-service/scripts/smoke.sh) against it, because missing reflection metadata only fails at runtime.
 
 ## Roadmap
 
 - [x] Ledger core: double-entry schema, idempotent transfers, fraud rules, outbox to Kafka, CI
-- [ ] Deploy on free tiers (container host + managed Postgres, SQS as the free event sink), k6 load-test numbers here
+- [x] Free-tier deployment pipeline (native image → GHCR → Render, Supabase, SQS via Terraform) and load-test numbers
 - [ ] TypeScript assistant with LLM tool calling over this API, plus evals
 - [ ] Architecture diagram and demo

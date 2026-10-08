@@ -1,0 +1,11 @@
+# Runtime image for the GraalVM native executable (built in CI by .github/workflows/ledger-ci.yml):
+#   ./mvnw -Pnative -DskipTests native:compile
+#   docker build -f Dockerfile.native -t ledger-service:native .
+# Starts in ~3s and idles at ~75 MB even on a 0.1-CPU free-tier instance; the JVM image needs ~2.5 min there.
+# debian-slim rather than distroless/base: the binary links libz dynamically.
+FROM debian:12-slim
+RUN useradd --system --uid 10001 app
+USER app
+COPY target/ledger-service /app/ledger-service
+EXPOSE 8080
+ENTRYPOINT ["/app/ledger-service"]

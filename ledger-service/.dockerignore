@@ -1,3 +1,4 @@
-target
+target/*
+!target/ledger-service
 *.iml
 .idea

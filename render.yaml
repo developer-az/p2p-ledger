@@ -19,13 +19,7 @@ services:
         sync: false
       - key: DB_POOL_SIZE
         value: "5"
-      - key: EVENTS_SINK
-        value: sqs
-      - key: SQS_QUEUE_URL
-        sync: false
-      - key: AWS_REGION
-        value: us-east-1
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
+      - key: EVENTS_SINK      # log works with no AWS account; switch to sqs after `terraform apply` in infra/aws
+        value: log
+      # To publish to SQS, set EVENTS_SINK=sqs and add these in the Render dashboard:
+      # SQS_QUEUE_URL, AWS_REGION=us-east-1, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY

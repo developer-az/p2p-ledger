@@ -16,9 +16,10 @@ export function App() {
         <h1>Ledger Assistant</h1>
         <p className="sub">Ask questions about a payments account. The answers come from live ledger data through tool calls.</p>
       </header>
-      {account
-        ? <Chat account={account} onSwitch={() => setAccount(null)} />
-        : <AccountPicker onPick={setAccount} />}
+      <div hidden={account !== null}>
+        <AccountPicker onPick={setAccount} />
+      </div>
+      {account && <Chat account={account} onSwitch={() => setAccount(null)} />}
     </div>
   );
 }
@@ -71,7 +72,11 @@ function Chat({ account, onSwitch }: { account: AccountRef; onSwitch: () => void
   const [error, setError] = useState('');
   const end = useRef<HTMLDivElement>(null);
 
-  useEffect(() => end.current?.scrollIntoView({ behavior: 'smooth' }), [turns, busy]);
+  useEffect(() => {
+    // Chrome 150+ makes scrollIntoView() return a Promise. Returning that from an
+    // effect makes React call the Promise as cleanup, which throws "is not a function".
+    end.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [turns, busy]);
 
   async function send(text: string) {
     if (!text.trim() || busy) return;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { retryableStatus, retryDelayMs } from '../src/server/providers/retry.js';
+import { isNetworkError, retryableStatus, retryDelayMs } from '../src/server/providers/retry.js';
 
 describe('model retry', () => {
   it('waits at least as long as Gemini asks, plus a small buffer', () => {
@@ -17,5 +17,8 @@ describe('model retry', () => {
     expect(retryableStatus(Object.assign(new Error('quota'), { status: 429 }))).toBe(429);
     expect(retryableStatus(Object.assign(new Error('down'), { status: 503 }))).toBe(503);
     expect(retryableStatus(Object.assign(new Error('bad'), { status: 400 }))).toBeUndefined();
+    const timedOut = new TypeError('fetch failed', { cause: { code: 'UND_ERR_HEADERS_TIMEOUT' } });
+    expect(isNetworkError(timedOut)).toBe(true);
+    expect(retryableStatus(timedOut)).toBe(503);
   });
 });

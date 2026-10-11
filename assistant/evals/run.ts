@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { runAssistant, type AssistantReply } from '../src/server/agent.js';
 import { providerFromEnv } from '../src/server/providers/index.js';
+import { retryableStatus, retryDelayMs } from '../src/server/providers/retry.js';
 import { CASES } from './cases.js';
 import { FixtureLedger, ME, NOW } from './fixture.js';
 
@@ -15,14 +16,15 @@ const minPassRate = Number(process.env.EVAL_MIN_PASS_RATE ?? 0.9);
 const provider = providerFromEnv();
 const ledger = new FixtureLedger();
 
-async function withRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, attempts = 8): Promise<T> {
   for (let i = 1; ; i++) {
     try {
       return await fn();
     } catch (e) {
-      const status = (e as { status?: number }).status;
-      if (i >= attempts || (status !== 429 && (status ?? 0) < 500)) throw e;
-      await new Promise((r) => setTimeout(r, 2 ** i * 1000)); // free tiers rate-limit hard
+      // The free tier allows 5 requests a minute and says how long to wait. The old
+      // backoff gave up inside that window, so a 429 failed the whole eval run.
+      if (i >= attempts || retryableStatus(e) === undefined) throw e;
+      await new Promise((r) => setTimeout(r, retryDelayMs(e, i)));
     }
   }
 }

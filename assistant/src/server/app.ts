@@ -63,7 +63,14 @@ export function createApp(deps: { ledger: LedgerReader & LedgerWriter; provider:
       console.error(e);
       return c.json({ error: 'The assistant is not configured (missing LLM API key).' }, 503);
     }
-    return c.json(await runAssistant({ provider, ledger: deps.ledger, accountId, messages }));
+    try {
+      return c.json(await runAssistant({ provider, ledger: deps.ledger, accountId, messages }));
+    } catch (e) {
+      if ((e as { status?: number }).status === 429) {
+        return c.json({ error: 'The assistant is busy right now. Try again in a moment.' }, 429);
+      }
+      throw e;
+    }
   });
 
   app.onError((err, c) => {

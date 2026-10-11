@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { isNetworkError, retryableStatus, retryDelayMs } from '../src/server/providers/retry.js';
+import { geminiMinIntervalMs, isNetworkError, paceDelayMs, retryableStatus, retryDelayMs } from '../src/server/providers/retry.js';
 
 describe('model retry', () => {
+  it('spaces calls when a minimum interval is set', () => {
+    expect(paceDelayMs(1_000, 5_000, 13_000)).toBe(9_000);
+    expect(paceDelayMs(1_000, 20_000, 13_000)).toBe(0);
+    expect(paceDelayMs(1_000, 2_000, 0)).toBe(0);
+    expect(geminiMinIntervalMs({ GEMINI_MIN_INTERVAL_MS: '13000' })).toBe(13_000);
+    expect(geminiMinIntervalMs({})).toBe(0);
+  });
+
   it('waits at least as long as Gemini asks, plus a small buffer', () => {
     const error = new Error('Please retry in 17.5s. {"retryDelay":"17s"}');
     expect(retryDelayMs(error, 1)).toBe(19_000);

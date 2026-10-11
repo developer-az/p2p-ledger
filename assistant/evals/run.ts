@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { runAssistant, type AssistantReply } from '../src/server/agent.js';
 import { providerFromEnv } from '../src/server/providers/index.js';
-import { retryableStatus, retryDelayMs } from '../src/server/providers/retry.js';
+import { isNetworkError, retryableStatus, retryDelayMs } from '../src/server/providers/retry.js';
 import { CASES } from './cases.js';
 import { FixtureLedger, ME, NOW } from './fixture.js';
 
@@ -23,7 +23,8 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 8): Promise<T> {
     } catch (e) {
       // The free tier allows 5 requests a minute and says how long to wait. The old
       // backoff gave up inside that window, so a 429 failed the whole eval run.
-      if (i >= attempts || retryableStatus(e) === undefined) throw e;
+      const budget = isNetworkError(e) ? 3 : attempts;
+      if (i >= budget || retryableStatus(e) === undefined) throw e;
       await new Promise((r) => setTimeout(r, retryDelayMs(e, i)));
     }
   }
@@ -33,10 +34,20 @@ const rows: { id: string; trial: number; pass: boolean; failures: string[]; tool
 for (const testCase of CASES) {
   for (let trial = 1; trial <= trials; trial++) {
     const start = performance.now();
-    const reply: AssistantReply = await withRetry(() => runAssistant({
-      provider, ledger, accountId: ME, now: () => NOW,
-      messages: [{ role: 'user', text: testCase.question }],
-    }));
+    let reply: AssistantReply;
+    try {
+      reply = await withRetry(() => runAssistant({
+        provider, ledger, accountId: ME, now: () => NOW,
+        messages: [{ role: 'user', text: testCase.question }],
+      }));
+    } catch (e) {
+      rows.push({
+        id: testCase.id, trial, pass: false, failures: [(e as Error).message],
+        tools: [], answer: '', ms: Math.round(performance.now() - start),
+      });
+      process.stdout.write('E');
+      continue;
+    }
     const failures = testCase.graders.map((g) => g(reply)).filter((f): f is string => f !== null);
     rows.push({ id: testCase.id, trial, pass: failures.length === 0, failures,
       tools: reply.toolCalls.map((t) => t.tool), answer: reply.answer, ms: Math.round(performance.now() - start) });

@@ -1,5 +1,9 @@
 name: assistant CI
 
+concurrency:
+  group: assistant-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -34,6 +38,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      # gemini-flash-latest's free tier allows 5 requests a minute. 13s between
+      # calls stays under that cap; chat traffic leaves this unset and stays fast.
+      GEMINI_MIN_INTERVAL_MS: "13000"
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

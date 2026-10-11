@@ -1,10 +1,11 @@
 import { GoogleGenAI, type Content, type GenerateContentConfig } from '@google/genai';
-import { retryableStatus, retryDelayMs } from './retry.js';
+import { geminiMinIntervalMs, paceDelayMs, retryableStatus, retryDelayMs } from './retry.js';
 import { timedExecute, type AgentRequest, type AgentResult, type LlmProvider, type ToolCallRecord } from './types.js';
 
 export class GeminiProvider implements LlmProvider {
   readonly name = 'gemini';
   private readonly ai: GoogleGenAI;
+  private lastCallAt = 0;
 
   constructor(apiKey: string, readonly model = 'gemini-flash-latest') {
     this.ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: 45_000 } });
@@ -47,9 +48,16 @@ export class GeminiProvider implements LlmProvider {
     return { answer: '', toolCalls: calls, truncated: true };
   }
 
-  /** One retry covers a brief free-tier 429. The eval runner waits out a longer quota window. */
+  /**
+   * One retry covers a brief free-tier 429. CI sets GEMINI_MIN_INTERVAL_MS so the
+   * eval stays under the 5 requests/minute cap instead of tripping it.
+   */
   private async generate(contents: Content[], config: GenerateContentConfig) {
+    const minInterval = geminiMinIntervalMs();
     for (let attempt = 1; ; attempt++) {
+      const gap = paceDelayMs(this.lastCallAt, Date.now(), minInterval);
+      if (gap > 0) await new Promise((resolve) => setTimeout(resolve, gap));
+      this.lastCallAt = Date.now();
       try {
         return await this.ai.models.generateContent({ model: this.model, contents, config });
       } catch (error) {

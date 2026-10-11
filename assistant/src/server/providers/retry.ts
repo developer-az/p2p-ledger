@@ -1,3 +1,14 @@
+/** Milliseconds to wait so calls stay under a requests-per-minute cap. */
+export function paceDelayMs(lastCallAt: number, now: number, minIntervalMs: number): number {
+  if (minIntervalMs <= 0 || lastCallAt <= 0) return 0;
+  return Math.max(0, lastCallAt + minIntervalMs - now);
+}
+
+export function geminiMinIntervalMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = Number(env.GEMINI_MIN_INTERVAL_MS ?? 0);
+  return Number.isFinite(raw) && raw > 0 ? raw : 0;
+}
+
 /** How long to wait before retrying a rate-limited or unavailable model call. */
 export function retryDelayMs(error: unknown, attempt: number, capMs = 60_000): number {
   const message = error instanceof Error ? error.message : '';

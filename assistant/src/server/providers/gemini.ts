@@ -1,4 +1,5 @@
-import { GoogleGenAI, type Content } from '@google/genai';
+import { GoogleGenAI, type Content, type GenerateContentConfig } from '@google/genai';
+import { retryableStatus, retryDelayMs } from './retry.js';
 import { timedExecute, type AgentRequest, type AgentResult, type LlmProvider, type ToolCallRecord } from './types.js';
 
 export class GeminiProvider implements LlmProvider {
@@ -26,7 +27,7 @@ export class GeminiProvider implements LlmProvider {
     const calls: ToolCallRecord[] = [];
 
     for (let step = 0; step < req.maxSteps; step++) {
-      const res = await this.ai.models.generateContent({ model: this.model, contents, config });
+      const res = await this.generate(contents, config);
       const functionCalls = res.functionCalls ?? [];
       if (functionCalls.length === 0) {
         return { answer: res.text ?? '', toolCalls: calls, truncated: false };
@@ -44,5 +45,17 @@ export class GeminiProvider implements LlmProvider {
       contents.push({ role: 'user', parts: results });
     }
     return { answer: '', toolCalls: calls, truncated: true };
+  }
+
+  /** One retry covers a brief free-tier 429. The eval runner waits out a longer quota window. */
+  private async generate(contents: Content[], config: GenerateContentConfig) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.ai.models.generateContent({ model: this.model, contents, config });
+      } catch (error) {
+        if (attempt >= 2 || retryableStatus(error) === undefined) throw error;
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs(error, attempt, 20_000)));
+      }
+    }
   }
 }

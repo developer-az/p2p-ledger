@@ -31,6 +31,24 @@ describe('POST /api/chat', () => {
     expect((await chat({ accountId: '00000000-0000-7000-8000-000000000001', messages: [{ role: 'user', text: 'hi' }] })).status).toBe(404);
   });
 
+  it('asks the user to retry when the model is rate limited', async () => {
+    const limited = createApp({
+      ledger: Object.assign(new FixtureLedger(), writer),
+      provider: () => ({
+        name: 'scripted',
+        model: 'fake',
+        run: () => Promise.reject(Object.assign(new Error('quota'), { status: 429 })),
+      }),
+    });
+    const res = await limited.request('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ accountId: ME, messages: [{ role: 'user', text: 'hi' }] }),
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '8.8.8.8' },
+    });
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: 'The assistant is busy right now. Try again in a moment.' });
+  });
+
   it('rate-limits a single client', async () => {
     const statuses = [];
     for (let i = 0; i < 22; i++) statuses.push((await chat({ accountId: ME, messages: [{ role: 'user', text: 'hi' }] }, '9.9.9.9')).status);

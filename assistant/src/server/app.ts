@@ -4,6 +4,7 @@ import { runAssistant } from './agent.js';
 import { seedDemo } from './demo.js';
 import type { LedgerReader, LedgerWriter } from './ledger.js';
 import type { LlmProvider } from './providers/types.js';
+import { loadAccountView } from './tools.js';
 
 const chatBody = z.object({
   accountId: z.string().uuid(),
@@ -42,6 +43,14 @@ export function createApp(deps: { ledger: LedgerReader & LedgerWriter; provider:
     if (!owner) return c.json({ error: 'owner is required' }, 400);
     const accounts = await deps.ledger.accountsByOwner(owner);
     return c.json(accounts.map((a) => ({ id: a.id, owner: a.ownerId })));
+  });
+
+  app.get('/accounts/:id', async (c) => {
+    const id = c.req.param('id');
+    if (!z.string().uuid().safeParse(id).success) return c.json({ error: 'Account not found' }, 404);
+    const view = await loadAccountView(deps.ledger, id);
+    if (!view) return c.json({ error: 'Account not found' }, 404);
+    return c.json(view);
   });
 
   app.post('/demo', async (c) => {

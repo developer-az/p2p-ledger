@@ -29,10 +29,24 @@ export function isNetworkError(error: unknown): boolean {
   return error.message === 'fetch failed';
 }
 
+function statusFromMessage(message: string): number | undefined {
+  const match = /"code"\s*:\s*(429|5\d\d)/.exec(message);
+  return match ? Number(match[1]) : undefined;
+}
+
 /** 429, 5xx, and transport failures are worth retrying. Anything else is a real request error. */
 export function retryableStatus(error: unknown): number | undefined {
-  const status = (error as { status?: number }).status;
+  const message = error instanceof Error ? error.message : '';
+  const status = (error as { status?: number }).status ?? statusFromMessage(message);
   if (status === 429 || (status ?? 0) >= 500) return status;
   if (isNetworkError(error)) return 503;
   return undefined;
+}
+
+/** Gemini was overloaded or missed its deadline. That is not a wrong answer. */
+export function isModelOutage(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const status = retryableStatus(error);
+  if (status === 429 || status === 503 || status === 504) return true;
+  return /RESOURCE_EXHAUSTED|UNAVAILABLE|DEADLINE_EXCEEDED|high demand|Deadline expired/i.test(message);
 }

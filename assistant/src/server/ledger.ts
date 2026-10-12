@@ -55,7 +55,11 @@ export class LedgerError extends Error {
 }
 
 export class HttpLedgerClient implements LedgerReader, LedgerWriter {
-  constructor(private readonly baseUrl: string, private readonly timeoutMs = 10_000) {}
+  constructor(
+    private readonly baseUrl: string,
+    private readonly timeoutMs = 20_000,
+    private readonly retryDelayMs = 4_000,
+  ) {}
 
   getAccount(id: string) {
     return this.getOrNull<Account>(`/v1/accounts/${encodeURIComponent(id)}`);
@@ -104,16 +108,23 @@ export class HttpLedgerClient implements LedgerReader, LedgerWriter {
     const headers: Record<string, string> = {};
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
-    const res = await fetch(this.baseUrl + path, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: AbortSignal.timeout(this.timeoutMs),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => '');
-      throw new LedgerError(res.status, `Ledger ${method} ${path} failed: ${res.status} ${detail.slice(0, 200)}`);
+    for (let attempt = 1; ; attempt++) {
+      const res = await fetch(this.baseUrl + path, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+      // Render's gateway returns 502/503 while a sleeping free instance starts.
+      if ((res.status === 502 || res.status === 503 || res.status === 504) && attempt < 4) {
+        await new Promise((resolve) => setTimeout(resolve, this.retryDelayMs * attempt));
+        continue;
+      }
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        throw new LedgerError(res.status, `Ledger ${method} ${path} failed: ${res.status} ${detail.slice(0, 200)}`);
+      }
+      return (await res.json()) as T;
     }
-    return (await res.json()) as T;
   }
 }

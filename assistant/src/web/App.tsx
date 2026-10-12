@@ -30,13 +30,8 @@ export function App() {
   return (
     <div className="shell">
       <header className="top">
-        <div className="brand">
-          <span className="mark" aria-hidden="true">L</span>
-          <div>
-            <h1>Ledger</h1>
-            <p className="sub">Your payments, with answers from the ledger.</p>
-          </div>
-        </div>
+        <h1>Ledger</h1>
+        <p className="sub">Your payments, with answers from the ledger.</p>
       </header>
       <div hidden={account !== null}>
         <AccountPicker onPick={setAccount} />
@@ -60,16 +55,16 @@ function AccountPicker({ onPick }: { onPick: (a: AccountRef) => void }) {
   }
 
   return (
-    <section className="card">
+    <section className="opening">
       <h2>Choose an account</h2>
       <p className="sub">Open someone already on the ledger, or load a sample set of people and payments.</p>
-      <button className="secondary" disabled={busy} onClick={() => run(api.seedDemo, (r) => setSample(r.accounts))}>
+      <button className="text" disabled={busy} onClick={() => run(api.seedDemo, (r) => setSample(r.accounts))}>
         {busy && sample.length === 0 ? 'Loading…' : 'Load sample accounts'}
       </button>
       {sample.length > 0 && <AccountList accounts={sample} onPick={onPick} />}
       <form className="row" onSubmit={(e: FormEvent) => { e.preventDefault(); run(() => api.findAccounts(owner), setFound); }}>
         <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="Owner id" aria-label="Owner id" />
-        <button disabled={busy || !owner.trim()}>Find</button>
+        <button className="text" disabled={busy || !owner.trim()}>Find</button>
       </form>
       {found && (found.length === 0
         ? <p className="muted">No accounts for that owner.</p>
@@ -85,11 +80,8 @@ function AccountList({ accounts, onPick }: { accounts: AccountRef[]; onPick: (a:
       {accounts.map((a) => (
         <li key={a.id}>
           <button className="person" onClick={() => onPick(a)}>
-            <span className="avatar" aria-hidden="true">{personName(a.owner).charAt(0)}</span>
-            <span>
-              <strong>{personName(a.owner)}</strong>
-              <span className="muted">{a.owner}</span>
-            </span>
+            <strong>{personName(a.owner)}</strong>
+            <span className="muted">{a.owner}</span>
           </button>
         </li>
       ))}
@@ -121,22 +113,19 @@ function AccountScreen({ account, onSwitch }: { account: AccountRef; onSwitch: (
 
   return (
     <div className="workspace">
-      <section className="card home" aria-busy={busy}>
+      <section className="home" aria-busy={busy}>
         <div className="home-head">
-          <div className="who">
-            <span className="avatar" aria-hidden="true">{name.charAt(0)}</span>
-            <div>
-              <h2>{name}</h2>
-              <p className="muted">{view?.owner ?? account.owner}</p>
-            </div>
+          <div>
+            <h2>{name}</h2>
+            <p className="muted">{view?.owner ?? account.owner}</p>
           </div>
-          <button className="link" onClick={onSwitch}>Switch account</button>
+          <button className="text" onClick={onSwitch}>Switch account</button>
         </div>
         {busy && <div className="skeleton" aria-label="Loading balance" />}
         {!busy && error && (
           <div className="home-error">
             <p className="error" role="alert">{error}</p>
-            <button onClick={() => void load()}>Try again</button>
+            <button className="text" onClick={() => void load()}>Try again</button>
           </div>
         )}
         {!busy && view && (
@@ -150,10 +139,9 @@ function AccountScreen({ account, onSwitch }: { account: AccountRef; onSwitch: (
                 <ul className="activity">
                   {view.transfers.map((t) => (
                     <li key={t.transferId} className={t.status === 'REJECTED' ? 'declined' : ''}>
-                      <span className="avatar small" aria-hidden="true">{personName(t.counterparty).charAt(0)}</span>
                       <span className="activity-copy">
-                        <strong>{directionLabel(t.direction)} · {personName(t.counterparty)}</strong>
-                        <span className="muted">{t.memo || 'No memo'} · {when(t.createdAt)}</span>
+                        <strong>{t.memo || directionLabel(t.direction)}</strong>
+                        <span className="muted">{directionLabel(t.direction)} {personName(t.counterparty)} · {when(t.createdAt)}</span>
                       </span>
                       <span className={`amount ${t.direction}`}>
                         {t.status === 'REJECTED' ? 'Declined' : t.amount}
@@ -206,7 +194,7 @@ function Chat({ account, name }: { account: AccountRef; name: string }) {
   }
 
   return (
-    <section className="card chat" aria-label={`Assistant for ${name}`}>
+    <section className="chat" aria-label={`Assistant for ${name}`}>
       <div className="chat-head">
         <h2>Assistant</h2>
         <p className="muted">Answers come from {name}&apos;s ledger. It can look, not send.</p>
@@ -214,12 +202,12 @@ function Chat({ account, name }: { account: AccountRef; name: string }) {
       <div className="log">
         {turns.length === 0 && (
           <div className="suggestions">
-            {SUGGESTIONS.map((s) => <button key={s} className="chip" onClick={() => void send(s)}>{s}</button>)}
+            {SUGGESTIONS.map((s) => <button key={s} className="ask" onClick={() => void send(s)}>{s}</button>)}
           </div>
         )}
         {turns.map((t, i) => (
           <div key={i} className={`msg ${t.role}`}>
-            <div className="bubble">{t.text}</div>
+            <p className="line">{t.text}</p>
             {t.toolCalls && t.toolCalls.length > 0 && (
               <details className="trace">
                 <summary>Checked the ledger · {t.toolCalls.length} lookup{t.toolCalls.length > 1 ? 's' : ''}</summary>
@@ -233,13 +221,13 @@ function Chat({ account, name }: { account: AccountRef; name: string }) {
             )}
           </div>
         ))}
-        {busy && <div className="msg assistant"><div className="bubble muted">Looking through the ledger…</div></div>}
+        {busy && <p className="muted thinking">Looking through the ledger…</p>}
         {error && <p className="error in-log" role="alert">{error}</p>}
         <div ref={end} />
       </div>
       <form className="composer" onSubmit={(e) => { e.preventDefault(); void send(input); }}>
         <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={`Ask about ${name}'s account`} aria-label="Message" maxLength={2000} />
-        <button disabled={busy || !input.trim()}>Send</button>
+        <button className="text" disabled={busy || !input.trim()}>Send</button>
       </form>
     </section>
   );

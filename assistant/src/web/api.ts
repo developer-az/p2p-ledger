@@ -1,4 +1,24 @@
 export interface AccountRef { id: string; owner: string }
+
+export interface AccountActivity {
+  transferId: string;
+  direction: 'sent' | 'received' | 'deposit';
+  counterparty: string;
+  amount: string;
+  status: 'COMPLETED' | 'REJECTED';
+  declineReason: string | null;
+  memo: string | null;
+  createdAt: string;
+}
+
+export interface AccountView {
+  id: string;
+  owner: string;
+  balance: string;
+  currency: string;
+  openedAt: string;
+  transfers: AccountActivity[];
+}
 export interface ToolCall { tool: string; args: unknown; result: unknown; ms: number }
 export interface Turn { role: 'user' | 'assistant'; text: string; toolCalls?: ToolCall[]; model?: string }
 
@@ -12,6 +32,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   seedDemo: () => call<{ accounts: AccountRef[] }>('/api/demo', { method: 'POST' }),
   findAccounts: (owner: string) => call<AccountRef[]>(`/api/accounts?owner=${encodeURIComponent(owner)}`),
+  account: (id: string) => call<AccountView>(`/api/accounts/${encodeURIComponent(id)}`),
   chat: (accountId: string, messages: Turn[]) =>
     call<{ answer: string; toolCalls: ToolCall[]; provider: string; model: string }>('/api/chat', {
       method: 'POST',

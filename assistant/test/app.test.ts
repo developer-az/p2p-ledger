@@ -17,6 +17,23 @@ const chat = (body: unknown, ip = '1.1.1.1') => app.request('/api/chat', {
   method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json', 'x-forwarded-for': ip },
 });
 
+describe('GET /api/accounts/:id', () => {
+  it('returns the balance and recent activity for a user account', async () => {
+    const res = await app.request(`/api/accounts/${ME}`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { balance: string; owner: string; transfers: { direction: string; status: string }[] };
+    expect(body).toMatchObject({ owner: 'riley', balance: '$3,750.51' });
+    expect(body.transfers.length).toBeGreaterThan(0);
+    expect(body.transfers[0]).toMatchObject({ direction: 'received' });
+    expect(body.transfers.some((t) => t.status === 'REJECTED')).toBe(true);
+  });
+
+  it('hides unknown and system accounts', async () => {
+    expect((await app.request('/api/accounts/not-a-uuid')).status).toBe(404);
+    expect((await app.request('/api/accounts/00000000-0000-7000-8000-000000000001')).status).toBe(404);
+  });
+});
+
 describe('POST /api/chat', () => {
   it('answers for a valid account', async () => {
     const res = await chat({ accountId: ME, messages: [{ role: 'user', text: 'hi' }] });

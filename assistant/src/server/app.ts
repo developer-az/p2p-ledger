@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { runAssistant } from './agent.js';
 import { seedDemo } from './demo.js';
-import type { LedgerReader, LedgerWriter } from './ledger.js';
+import { LedgerError, type LedgerReader, type LedgerWriter } from './ledger.js';
 import type { LlmProvider } from './providers/types.js';
 import { loadAccountView } from './tools.js';
 
@@ -39,19 +39,16 @@ export function createApp(deps: { ledger: LedgerReader & LedgerWriter; provider:
   app.get('/health', (c) => c.json({ status: 'ok' }));
 
   app.get('/accounts', async (c) => {
+    const id = c.req.query('id');
+    if (id) return respondAccount(c, await accountView(deps.ledger, id));
     const owner = c.req.query('owner');
     if (!owner) return c.json({ error: 'owner is required' }, 400);
     const accounts = await deps.ledger.accountsByOwner(owner);
     return c.json(accounts.map((a) => ({ id: a.id, owner: a.ownerId })));
   });
 
-  app.get('/accounts/:id', async (c) => {
-    const id = c.req.param('id');
-    if (!z.string().uuid().safeParse(id).success) return c.json({ error: 'Account not found' }, 404);
-    const view = await loadAccountView(deps.ledger, id);
-    if (!view) return c.json({ error: 'Account not found' }, 404);
-    return c.json(view);
-  });
+  // Direct links. The UI uses ?id= so a host that 404s a second path segment still reaches this app.
+  app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, c.req.param('id'))));
 
   app.post('/demo', async (c) => {
     if (!allowSeed(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
@@ -84,8 +81,24 @@ export function createApp(deps: { ledger: LedgerReader & LedgerWriter; provider:
 
   app.onError((err, c) => {
     console.error(err);
+    if ((err as { status?: number }).status === 429 || /quota|RESOURCE_EXHAUSTED/i.test(err.message)) {
+      return c.json({ error: 'The assistant is busy right now. Try again in a moment.' }, 429);
+    }
+    if (err instanceof LedgerError && (err.status === 502 || err.status === 503 || err.status === 504)) {
+      return c.json({ error: 'The ledger is waking up. Try again in a moment.' }, 503);
+    }
     return c.json({ error: 'Something went wrong. Please try again.' }, 500);
   });
 
   return app;
+}
+
+async function accountView(ledger: LedgerReader, id: string) {
+  if (!z.string().uuid().safeParse(id).success) return null;
+  return loadAccountView(ledger, id);
+}
+
+function respondAccount(c: { json: (body: unknown, status?: number) => Response }, view: Awaited<ReturnType<typeof loadAccountView>>) {
+  if (!view) return c.json({ error: 'Account not found' }, 404);
+  return c.json(view);
 }

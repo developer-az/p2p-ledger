@@ -61,7 +61,9 @@ export class GeminiProvider implements LlmProvider {
       try {
         return await this.ai.models.generateContent({ model: this.model, contents, config });
       } catch (error) {
-        if (attempt >= 2 || retryableStatus(error) === undefined) throw error;
+        const status = retryableStatus(error);
+        const budget = status === 503 || status === 504 ? 4 : 2;
+        if (attempt >= budget || status === undefined) throw error;
         await new Promise((resolve) => setTimeout(resolve, retryDelayMs(error, attempt, 20_000)));
       }
     }

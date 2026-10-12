@@ -156,7 +156,34 @@ async function ownerNames(ctx: ToolContext, transfers: Transfer[]): Promise<Map<
   return names;
 }
 
-function describe(self: string, t: Transfer, names: Map<string, string>) {
+export interface AccountActivity {
+  transferId: string;
+  direction: 'sent' | 'received' | 'deposit';
+  counterparty: string;
+  amount: string;
+  status: Transfer['status'];
+  declineReason: string | null;
+  memo: string | null;
+  createdAt: string;
+}
+
+/** Balance and recent activity for the account home. Does not call a model. */
+export async function loadAccountView(ledger: LedgerReader, accountId: string, limit = 8) {
+  const account = await ledger.getAccount(accountId);
+  if (!account || account.type !== 'USER') return null;
+  const transfers = await ledger.transfersForAccount(accountId, limit);
+  const names = await ownerNames({ ledger, accountId, now: () => new Date() }, transfers);
+  return {
+    id: account.id,
+    owner: account.ownerId,
+    balance: formatMoney(account.balanceMinor, account.currency),
+    currency: account.currency,
+    openedAt: account.createdAt,
+    transfers: transfers.map((t) => describe(accountId, t, names)),
+  };
+}
+
+function describe(self: string, t: Transfer, names: Map<string, string>): AccountActivity {
   const direction = t.kind === 'DEPOSIT' ? 'deposit' : t.sourceAccountId === self ? 'sent' : 'received';
   const counterpartyId = t.sourceAccountId === self ? t.destinationAccountId : t.sourceAccountId;
   return {

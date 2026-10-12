@@ -25,14 +25,17 @@ export interface Turn { role: 'user' | 'assistant'; text: string; toolCalls?: To
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
+  if (!res.ok) {
+    const waking = res.status === 502 || res.status === 503 || res.status === 504;
+    throw new Error(body.error ?? (waking ? 'The ledger is waking up. Try again in a moment.' : `Request failed (${res.status})`));
+  }
   return body as T;
 }
 
 export const api = {
   seedDemo: () => call<{ accounts: AccountRef[] }>('/api/demo', { method: 'POST' }),
   findAccounts: (owner: string) => call<AccountRef[]>(`/api/accounts?owner=${encodeURIComponent(owner)}`),
-  account: (id: string) => call<AccountView>(`/api/accounts/${encodeURIComponent(id)}`),
+  account: (id: string) => call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}`),
   chat: (accountId: string, messages: Turn[]) =>
     call<{ answer: string; toolCalls: ToolCall[]; provider: string; model: string }>('/api/chat', {
       method: 'POST',

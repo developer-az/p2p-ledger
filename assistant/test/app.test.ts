@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/server/app.js';
-import type { LedgerWriter } from '../src/server/ledger.js';
+import { LedgerError, type LedgerWriter } from '../src/server/ledger.js';
 import { ScriptedProvider } from '../src/server/providers/scripted.js';
 import { FixtureLedger, ME } from '../evals/fixture.js';
 
@@ -19,13 +19,26 @@ const chat = (body: unknown, ip = '1.1.1.1') => app.request('/api/chat', {
 
 describe('GET /api/accounts/:id', () => {
   it('returns the balance and recent activity for a user account', async () => {
-    const res = await app.request(`/api/accounts/${ME}`);
+    const res = await app.request(`/api/accounts?id=${ME}`);
     expect(res.status).toBe(200);
     const body = await res.json() as { balance: string; owner: string; transfers: { direction: string; status: string }[] };
     expect(body).toMatchObject({ owner: 'riley', balance: '$3,750.51' });
     expect(body.transfers.length).toBeGreaterThan(0);
     expect(body.transfers[0]).toMatchObject({ direction: 'received' });
     expect(body.transfers.some((t) => t.status === 'REJECTED')).toBe(true);
+    expect((await app.request(`/api/accounts/${ME}`)).status).toBe(200);
+  });
+
+  it('says the ledger is waking when the upstream returns 502', async () => {
+    const asleep = createApp({
+      ledger: Object.assign(new FixtureLedger(), writer, {
+        getAccount: () => Promise.reject(new LedgerError(502, 'bad gateway')),
+      }),
+      provider: () => new ScriptedProvider([{ answer: 'Hello!' }]),
+    });
+    const res = await asleep.request(`/api/accounts?id=${ME}`);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'The ledger is waking up. Try again in a moment.' });
   });
 
   it('hides unknown and system accounts', async () => {

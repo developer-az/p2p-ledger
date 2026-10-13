@@ -1,9 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import type { LedgerWriter } from './ledger.js';
+import type { LedgerWriter, Transfer } from './ledger.js';
+import { formatMoney } from './money.js';
+
+export const RENT_MEMO = 'Rent share - October';
+export const RENT_AMOUNT_MINOR = 120_000;
 
 /**
- * Creates a small, realistic world for the demo: three people, some payments, and one
- * transfer that the fraud rules decline (a brand-new account sending more than $1,000).
+ * Creates a small, realistic world: three people, some payments, and a brand-new
+ * account sending $1,200, which the fraud rules decline. The rent result is returned
+ * so the product can show the stored decline instead of throwing it away.
  */
 export async function seedDemo(ledger: LedgerWriter) {
   const tag = randomUUID().slice(0, 6);
@@ -15,9 +20,23 @@ export async function seedDemo(ledger: LedgerWriter) {
   const send = (from: string, to: string, amountMinor: number, memo: string) =>
     ledger.transfer({ sourceAccountId: from, destinationAccountId: to, amountMinor, currency: 'USD', memo }, key());
   await send(alex.id, sam.id, 4_250, 'Pizza night 🍕');
-  await send(alex.id, jordan.id, 120_000, 'Rent share - October');
+  const rent = await send(alex.id, jordan.id, RENT_AMOUNT_MINOR, RENT_MEMO);
   await send(sam.id, alex.id, 1_800, 'Uber split');
   await send(alex.id, sam.id, 150_000, 'Concert tickets');
   await send(alex.id, jordan.id, 2_599, 'Groceries');
-  return { accounts: [alex, sam, jordan].map((a) => ({ id: a.id, owner: a.ownerId })) };
+  return {
+    accounts: [alex, sam, jordan].map((a) => ({ id: a.id, owner: a.ownerId })),
+    focusAccountId: alex.id,
+    stopped: stoppedPayment(rent),
+  };
+}
+
+function stoppedPayment(transfer: Transfer) {
+  return {
+    transferId: transfer.id,
+    status: transfer.status,
+    amount: formatMoney(transfer.amountMinor, transfer.currency),
+    memo: transfer.memo,
+    reason: transfer.rejectionReason,
+  };
 }

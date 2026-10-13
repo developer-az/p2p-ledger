@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, type AccountActivity, type AccountRef, type AccountView, type Turn } from './api.js';
 
 const SUGGESTIONS = [
-  "What's my balance?",
   'Why was my rent payment declined?',
+  "What's my balance?",
   'How much have I sent to each person this month?',
   'Send $50 to sam',
 ];
@@ -27,21 +27,29 @@ function directionLabel(direction: AccountActivity['direction']): string {
 
 export function App() {
   const [account, setAccount] = useState<AccountRef | null>(null);
+  const [stoppedTransferId, setStoppedTransferId] = useState<string | null>(null);
   return (
     <div className="shell">
       <header className="top">
         <p className="mark-name">Ledger</p>
-        <h1>Payments between people, checked before the money moves.</h1>
+        <h1>The customer and your support team see the same reason a payment stopped.</h1>
+        <p className="sub">A payments company runs this so a declined transfer is a record, not a guess. The assistant is only allowed to quote that record.</p>
       </header>
       <div hidden={account !== null}>
-        <AccountPicker onPick={setAccount} />
+        <AccountPicker onPick={(a, stoppedId) => { setStoppedTransferId(stoppedId ?? null); setAccount(a); }} />
       </div>
-      {account && <AccountScreen account={account} onSwitch={() => setAccount(null)} />}
+      {account && (
+        <AccountScreen
+          account={account}
+          stoppedTransferId={stoppedTransferId}
+          onSwitch={() => { setAccount(null); setStoppedTransferId(null); }}
+        />
+      )}
     </div>
   );
 }
 
-function AccountPicker({ onPick }: { onPick: (a: AccountRef) => void }) {
+function AccountPicker({ onPick }: { onPick: (a: AccountRef, stoppedTransferId?: string) => void }) {
   const [sample, setSample] = useState<AccountRef[]>([]);
   const [owner, setOwner] = useState('');
   const [found, setFound] = useState<AccountRef[] | null>(null);
@@ -54,13 +62,27 @@ function AccountPicker({ onPick }: { onPick: (a: AccountRef) => void }) {
     try { then(await fn()); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
 
+  async function watch() {
+    setBusy(true);
+    setError('');
+    try {
+      const seeded = await api.seedDemo();
+      setSample(seeded.accounts);
+      const sender = seeded.accounts.find((a) => a.id === seeded.focusAccountId) ?? seeded.accounts[0];
+      if (sender) onPick(sender, seeded.stopped.transferId);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="opening">
-      <h2>Open an account</h2>
-      <p className="sub">A live balance, the payments that cleared, and the rule that stopped the ones that did not.</p>
-      <button className="text" disabled={busy} onClick={() => run(api.seedDemo, (r) => setSample(r.accounts))}>
-        {busy && sample.length === 0 ? 'Loading…' : 'Load sample accounts'}
+      <button className="text" disabled={busy} onClick={() => void watch()}>
+        {busy && sample.length === 0 ? 'Opening a new account…' : 'Watch a payment get stopped'}
       </button>
+      <p className="sub">A new account tries to send $1,200 on its first day. The ledger declines it and writes down the rule.</p>
       {sample.length > 0 && <AccountList accounts={sample} onPick={onPick} />}
       <form className="row" onSubmit={(e: FormEvent) => { e.preventDefault(); run(() => api.findAccounts(owner), setFound); }}>
         <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="Owner id" aria-label="Owner id" />
@@ -89,7 +111,7 @@ function AccountList({ accounts, onPick }: { accounts: AccountRef[]; onPick: (a:
   );
 }
 
-function AccountScreen({ account, onSwitch }: { account: AccountRef; onSwitch: () => void }) {
+function AccountScreen({ account, stoppedTransferId, onSwitch }: { account: AccountRef; stoppedTransferId: string | null; onSwitch: () => void }) {
   const [view, setView] = useState<AccountView | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(true);
@@ -146,31 +168,63 @@ function AccountScreen({ account, onSwitch }: { account: AccountRef; onSwitch: (
                 <dd>{view.summary.stopped}</dd>
               </div>
             </dl>
-            <p className="model">The totals are summed in cents on the ledger. The assistant is only allowed to quote them.</p>
+            <p className="model">
+              {view.summary.declinedCount > 0
+                ? `This is the product. The books stopped ${view.summary.stopped}. The sentence on that payment is the rule that did it. Support does not get a different number or a different reason.`
+                : 'The totals are summed in cents on the ledger. The assistant is only allowed to quote them.'}
+            </p>
             <h3>Statement</h3>
             {view.transfers.length === 0
               ? <p className="muted">No payments yet.</p>
-              : (
-                <ul className="activity">
-                  {view.transfers.map((t) => (
-                    <li key={t.transferId} className={t.status === 'REJECTED' ? 'declined' : ''}>
-                      <span className="activity-copy">
-                        <strong>{t.memo || directionLabel(t.direction)}</strong>
-                        <span className="muted">{directionLabel(t.direction)} {personName(t.counterparty)} · {when(t.createdAt)}</span>
-                        {t.declineExplanation && <span className="reason">{t.declineExplanation}</span>}
-                      </span>
-                      <span className={`amount ${t.direction}`}>
-                        {t.status === 'REJECTED' ? 'Declined' : t.amount}
-                        {t.status === 'REJECTED' && <span className="muted">{t.amount}</span>}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              : <Statement transfers={orderStoppedFirst(view.transfers, stoppedTransferId)} />}
           </>
         )}
       </section>
       <Chat account={account} name={name} />
+    </div>
+  );
+}
+
+function orderStoppedFirst(transfers: AccountActivity[], stoppedTransferId: string | null): AccountActivity[] {
+  return [...transfers].sort((a, b) => rank(a, stoppedTransferId) - rank(b, stoppedTransferId));
+}
+
+function rank(transfer: AccountActivity, stoppedTransferId: string | null): number {
+  if (stoppedTransferId && transfer.transferId === stoppedTransferId) return 0;
+  if (transfer.status === 'REJECTED') return 1;
+  return 2;
+}
+
+function Statement({ transfers }: { transfers: AccountActivity[] }) {
+  const [stopped, ...rest] = transfers;
+  return (
+    <>
+      {stopped && <ActivityRow transfer={stopped} />}
+      {stopped?.status === 'REJECTED' && (
+        <div className="proof">
+          <p>The decline was stored with the transfer.</p>
+          <p>The assistant quotes that record. It does not invent an amount.</p>
+          <p>The assistant cannot send money.</p>
+          <p className="muted">Measured on a 512 MB container: at 500 req/s the JVM ran out of memory, so the service now returns 503 instead of dying. That figure is a measurement, not a customer’s dashboard.</p>
+        </div>
+      )}
+      {rest.map((t) => <ActivityRow key={t.transferId} transfer={t} />)}
+    </>
+  );
+}
+
+function ActivityRow({ transfer }: { transfer: AccountActivity }) {
+  return (
+    <div className={transfer.status === 'REJECTED' ? 'activity-row declined' : 'activity-row'}>
+      <span className="activity-copy">
+        <strong>{transfer.memo || directionLabel(transfer.direction)}</strong>
+        <span className="muted">{directionLabel(transfer.direction)} {personName(transfer.counterparty)} · {when(transfer.createdAt)}</span>
+        {transfer.declineExplanation && <span className="reason">{transfer.declineExplanation}</span>}
+      </span>
+      <span className={`amount ${transfer.direction}`}>
+        {transfer.status === 'REJECTED' ? 'Declined' : transfer.amount}
+        {transfer.status === 'REJECTED' && <span className="muted">{transfer.amount}</span>}
+      </span>
     </div>
   );
 }

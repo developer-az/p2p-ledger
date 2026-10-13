@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/server/app.js';
-import { LedgerError, type LedgerWriter } from '../src/server/ledger.js';
+import { LedgerError, type LedgerAuditor, type LedgerWriter } from '../src/server/ledger.js';
 import { ScriptedProvider } from '../src/server/providers/scripted.js';
 import { FixtureLedger, ME } from '../evals/fixture.js';
 
-const writer: LedgerWriter = {
-  openAccount: () => Promise.reject(new Error('read-only fixture')),
-  deposit: () => Promise.reject(new Error('read-only fixture')),
-  transfer: () => Promise.reject(new Error('read-only fixture')),
+const readOnly = () => Promise.reject(new Error('read-only fixture'));
+const writer: LedgerWriter & LedgerAuditor = {
+  openAccount: readOnly,
+  deposit: readOnly,
+  transfer: readOnly,
+  trail: readOnly,
+  integrity: readOnly,
+  tamperChecks: readOnly,
+  postTransfer: readOnly,
+  postDeposit: readOnly,
 };
 const app = createApp({
   ledger: Object.assign(new FixtureLedger(), writer),

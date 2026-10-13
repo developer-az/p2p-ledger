@@ -1,5 +1,5 @@
 import { GoogleGenAI, type Content, type GenerateContentConfig } from '@google/genai';
-import { geminiMinIntervalMs, paceDelayMs, retryableStatus, retryDelayMs } from './retry.js';
+import { geminiMinIntervalMs, isLongQuotaWait, paceDelayMs, retryableStatus, retryDelayMs } from './retry.js';
 import { timedExecute, type AgentRequest, type AgentResult, type LlmProvider, type ToolCallRecord } from './types.js';
 
 export class GeminiProvider implements LlmProvider {
@@ -63,7 +63,7 @@ export class GeminiProvider implements LlmProvider {
       } catch (error) {
         const status = retryableStatus(error);
         const budget = status === 503 || status === 504 ? 4 : 2;
-        if (attempt >= budget || status === undefined) throw error;
+        if (isLongQuotaWait(error) || attempt >= budget || status === undefined) throw error;
         await new Promise((resolve) => setTimeout(resolve, retryDelayMs(error, attempt, 20_000)));
       }
     }

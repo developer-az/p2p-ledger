@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { geminiMinIntervalMs, isModelOutage, isNetworkError, paceDelayMs, retryableStatus, retryDelayMs } from '../src/server/providers/retry.js';
+import { geminiMinIntervalMs, isLongQuotaWait, isModelOutage, isNetworkError, paceDelayMs, retryableStatus, retryDelayMs } from '../src/server/providers/retry.js';
 
 describe('model retry', () => {
   it('spaces calls when a minimum interval is set', () => {
@@ -26,6 +26,9 @@ describe('model retry', () => {
     expect(retryableStatus(Object.assign(new Error('down'), { status: 503 }))).toBe(503);
     expect(retryableStatus(Object.assign(new Error('bad'), { status: 400 }))).toBeUndefined();
     const timedOut = new TypeError('fetch failed', { cause: { code: 'UND_ERR_HEADERS_TIMEOUT' } });
+    const daily = new Error('Please retry in 21h57m43.8s. {"retryDelay":"79063s","code":429} Quota exceeded for metric GenerateRequestsPerDay');
+    expect(isLongQuotaWait(daily)).toBe(true);
+    expect(isLongQuotaWait(new Error('Please retry in 17.5s.'))).toBe(false);
     const overloaded = new Error('{"error":{"code":503,"message":"This model is currently experiencing high demand.","status":"UNAVAILABLE"}}');
     expect(retryableStatus(overloaded)).toBe(503);
     expect(isModelOutage(overloaded)).toBe(true);

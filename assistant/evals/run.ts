@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { runAssistant, type AssistantReply } from '../src/server/agent.js';
 import { providerFromEnv } from '../src/server/providers/index.js';
-import { isModelOutage, isNetworkError, retryableStatus, retryDelayMs } from '../src/server/providers/retry.js';
+import { isLongQuotaWait, isModelOutage, isNetworkError, retryableStatus, retryDelayMs } from '../src/server/providers/retry.js';
 import { CASES } from './cases.js';
 import { FixtureLedger, ME, NOW } from './fixture.js';
 
@@ -24,7 +24,7 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 2): Promise<T> {
       // One retry. Calls are already paced, and repeating a whole case many times
       // made a single stuck question run for more than ten minutes with no log line.
       const budget = isModelOutage(e) ? 4 : isNetworkError(e) ? 2 : attempts;
-      if (i >= budget || retryableStatus(e) === undefined) throw e;
+      if (isLongQuotaWait(e) || i >= budget || retryableStatus(e) === undefined) throw e;
       console.log(`  retry ${i}: ${(e as Error).message.slice(0, 180)}`);
       await new Promise((r) => setTimeout(r, retryDelayMs(e, i)));
     }
@@ -32,9 +32,18 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 2): Promise<T> {
 }
 
 const rows: { id: string; trial: number; pass: boolean; skipped: boolean; failures: string[]; tools: string[]; answer: string; ms: number }[] = [];
+let dailyQuotaClosed = false;
 for (const testCase of CASES) {
   for (let trial = 1; trial <= trials; trial++) {
     const start = performance.now();
+    if (dailyQuotaClosed) {
+      rows.push({
+        id: testCase.id, trial, pass: false, skipped: true,
+        failures: ['Daily Gemini quota already exhausted'], tools: [], answer: '', ms: 0,
+      });
+      console.log(`SKIP  ${testCase.id}  daily quota already exhausted`);
+      continue;
+    }
     console.log(`${testCase.id}: running`);
     let reply: AssistantReply;
     try {
@@ -46,6 +55,7 @@ for (const testCase of CASES) {
       const ms = Math.round(performance.now() - start);
       const message = (e as Error).message.split('\n')[0]?.slice(0, 300) ?? 'failed';
       const skipped = isModelOutage(e);
+      if (isLongQuotaWait(e)) dailyQuotaClosed = true;
       rows.push({ id: testCase.id, trial, pass: false, skipped, failures: [message], tools: [], answer: '', ms });
       console.log(`${skipped ? 'SKIP' : 'FAIL'}  ${testCase.id}  ${ms} ms`);
       console.log(`      ${message}`);

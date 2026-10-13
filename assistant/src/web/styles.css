@@ -26,7 +26,8 @@ button, input { font: inherit; color: inherit; background: none; border: 0; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .shell { max-width: 680px; margin: 0 auto; padding: 40px 24px 72px; }
 .mark-name { margin: 0; font-family: Fraunces, Georgia, serif; font-size: 1.15rem; letter-spacing: -0.03em; }
-h1 { margin: 10px 0 0; max-width: 18ch; font-family: Fraunces, Georgia, serif; font-size: clamp(1.8rem, 4vw, 2.4rem); font-weight: 560; letter-spacing: -0.03em; line-height: 1.15; }
+h1 { margin: 10px 0 0; max-width: 22ch; font-family: Fraunces, Georgia, serif; font-size: clamp(1.8rem, 4vw, 2.4rem); font-weight: 560; letter-spacing: -0.03em; line-height: 1.15; }
+.top .sub { max-width: 42rem; margin-top: 14px; }
 h2 { margin: 0; font-size: 1.05rem; font-weight: 600; }
 h3 { margin: 36px 0 0; font-size: .95rem; font-weight: 600; }
 .sub, .muted { color: var(--muted); }
@@ -59,11 +60,12 @@ input { flex: 1; min-width: 0; padding: 12px 0; background: transparent; }
 .reason { display: block; margin-top: 6px; max-width: 36rem; color: var(--error); font-size: .92rem; }
 .skeleton { margin-top: 28px; height: 1px; background: var(--line); }
 .home-error { margin-top: 20px; display: flex; gap: 16px; align-items: baseline; }
-.activity { list-style: none; padding: 0; margin: 8px 0 0; }
-.activity li {
+.activity-row {
   display: flex; justify-content: space-between; gap: 24px; align-items: baseline;
   padding: 16px 0; border-bottom: 1px solid var(--line);
 }
+.proof { margin: 8px 0 8px; max-width: 40rem; }
+.proof p { margin: 8px 0; }
 .activity-copy { display: flex; flex-direction: column; min-width: 0; }
 .amount { display: flex; flex-direction: column; align-items: flex-end; text-align: right; font-variant-numeric: tabular-nums; gap: 2px; }
 .declined .amount { color: var(--error); font-size: .92rem; }
@@ -93,6 +95,6 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .composer { display: flex; gap: 16px; align-items: baseline; border-bottom: 1px solid var(--line); margin-top: 8px; }
 @media (max-width: 640px) {
   .shell { padding: 28px 18px 56px; }
-  .activity li, .person, .home-head { gap: 12px; }
+  .activity-row, .person, .home-head { gap: 12px; }
   .figures { grid-template-columns: 1fr; gap: 14px; }
 }

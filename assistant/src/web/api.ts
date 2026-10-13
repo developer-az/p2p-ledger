@@ -42,8 +42,16 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+export interface StoppedPayment {
+  transferId: string;
+  status: 'COMPLETED' | 'REJECTED';
+  amount: string;
+  memo: string | null;
+  reason: string | null;
+}
+
 export const api = {
-  seedDemo: () => call<{ accounts: AccountRef[] }>('/api/demo', { method: 'POST' }),
+  seedDemo: () => call<{ accounts: AccountRef[]; focusAccountId: string; stopped: StoppedPayment }>('/api/demo', { method: 'POST' }),
   findAccounts: (owner: string) => call<AccountRef[]>(`/api/accounts?owner=${encodeURIComponent(owner)}`),
   account: (id: string) => call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}`),
   chat: (accountId: string, messages: Turn[]) =>

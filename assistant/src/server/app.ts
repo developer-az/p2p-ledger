@@ -2,7 +2,9 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { runAssistant } from './agent.js';
 import { seedDemo } from './demo.js';
+import { answerFromLedger } from './fallback.js';
 import { LedgerError, type LedgerReader, type LedgerWriter } from './ledger.js';
+import { isModelOutage } from './providers/retry.js';
 import type { LlmProvider } from './providers/types.js';
 import { loadAccountView } from './tools.js';
 
@@ -72,8 +74,10 @@ export function createApp(deps: { ledger: LedgerReader & LedgerWriter; provider:
     try {
       return c.json(await runAssistant({ provider, ledger: deps.ledger, accountId, messages }));
     } catch (e) {
-      if ((e as { status?: number }).status === 429) {
-        return c.json({ error: 'The assistant is busy right now. Try again in a moment.' }, 429);
+      // The free Gemini cap is 20 requests a day. The books can still answer.
+      if (isModelOutage(e)) {
+        const question = messages.at(-1)?.text ?? '';
+        return c.json(await answerFromLedger({ ledger: deps.ledger, accountId, question }));
       }
       throw e;
     }

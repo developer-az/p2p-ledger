@@ -21,11 +21,19 @@ describe('GET /api/accounts/:id', () => {
   it('returns the balance and recent activity for a user account', async () => {
     const res = await app.request(`/api/accounts?id=${ME}`);
     expect(res.status).toBe(200);
-    const body = await res.json() as { balance: string; owner: string; transfers: { direction: string; status: string }[] };
+    const body = await res.json() as {
+      balance: string; owner: string;
+      summary: { stopped: string; declinedCount: number };
+      transfers: { direction: string; status: string; declineExplanation: string | null }[];
+    };
     expect(body).toMatchObject({ owner: 'riley', balance: '$3,750.51' });
     expect(body.transfers.length).toBeGreaterThan(0);
     expect(body.transfers[0]).toMatchObject({ direction: 'received' });
     expect(body.transfers.some((t) => t.status === 'REJECTED')).toBe(true);
+    const stopped = body.transfers.find((t) => t.status === 'REJECTED');
+    expect(stopped?.declineExplanation).toMatch(/60-second|5 transfers/i);
+    expect(body.summary.stopped).toMatch(/^\$/);
+    expect(body.summary.declinedCount).toBeGreaterThan(0);
     expect((await app.request(`/api/accounts/${ME}`)).status).toBe(200);
   });
 

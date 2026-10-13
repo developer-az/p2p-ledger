@@ -9,12 +9,34 @@ export function geminiMinIntervalMs(env: NodeJS.ProcessEnv = process.env): numbe
   return Number.isFinite(raw) && raw > 0 ? raw : 0;
 }
 
+/** How long Gemini asked us to wait, including "21h57m43s" and retryDelay seconds. */
+export function suggestedRetryMs(error: unknown): number | undefined {
+  const message = error instanceof Error ? error.message : String(error);
+  const human = /retry in (?:(\d+)h)?(?:(\d+)m)?([\d.]+)s/.exec(message);
+  if (human) {
+    const hours = Number(human[1] ?? 0);
+    const minutes = Number(human[2] ?? 0);
+    const seconds = Number(human[3] ?? 0);
+    return ((hours * 60 + minutes) * 60 + seconds) * 1000;
+  }
+  const json = /retryDelay"\s*:\s*"([\d.]+)s/.exec(message);
+  return json ? Number(json[1]) * 1000 : undefined;
+}
+
+/**
+ * The free daily cap tells us to wait for hours. Sleeping 60s and calling again
+ * cannot succeed, and doing it for every question keeps CI busy for most of an hour.
+ */
+export function isLongQuotaWait(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/GenerateRequestsPerDay|per day/i.test(message)) return true;
+  const wait = suggestedRetryMs(error);
+  return wait !== undefined && wait > 120_000;
+}
+
 /** How long to wait before retrying a rate-limited or unavailable model call. */
 export function retryDelayMs(error: unknown, attempt: number, capMs = 60_000): number {
-  const message = error instanceof Error ? error.message : '';
-  const match = /retry in ([\d.]+)s|retryDelay"\s*:\s*"([\d.]+)s/.exec(message);
-  const suggestedSec = Number(match?.[1] ?? match?.[2] ?? 0);
-  const suggestedMs = Number.isFinite(suggestedSec) ? suggestedSec * 1000 : 0;
+  const suggestedMs = suggestedRetryMs(error) ?? 0;
   const backoffMs = 2 ** attempt * 1000;
   return Math.min(capMs, Math.max(suggestedMs + 1_500, backoffMs));
 }

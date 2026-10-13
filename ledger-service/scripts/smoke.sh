@@ -29,5 +29,9 @@ expect fraud-rule "$r" NEW_ACCOUNT_LARGE_TRANSFER
 expect validation "$(curl -s "${H[@]}" -d '{"ownerId":"","currency":"USD"}' "$U/v1/accounts" | jq -r .status)" 400
 expect balance "$(curl -fsS "$U/v1/accounts/$B" | jq -r .balanceMinor)" 2500
 expect statement "$(curl -fsS "$U/v1/accounts/$A/entries" | jq -c '[.[].amountMinor]')" '[-2500,500000]'
+TID=$(curl -fsS "$U/v1/transfers?accountId=$B" | jq -r '[.[] | select(.status == "COMPLETED")][0].id')
+expect trail "$(curl -fsS "$U/v1/transfers/$TID/trail" | jq -c '[.entries[].amountMinor]')" '[-2500,2500]'
+expect integrity "$(curl -fsS "$U/v1/ledger/integrity" | jq -r .balanced)" true
+expect tamper "$(curl -fsS -X POST "$U/v1/ledger/tamper-checks?transferId=$TID" | jq -c '[.attempts[].refused]')" '[true,true,true,true]'
 curl -fsS "$U/actuator/prometheus" | grep -q '^ledger_transfers_total' || fail "prometheus metrics missing"
 echo "ok  prometheus"

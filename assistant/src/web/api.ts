@@ -7,8 +7,17 @@ export interface AccountActivity {
   amount: string;
   status: 'COMPLETED' | 'REJECTED';
   declineReason: string | null;
+  declineExplanation: string | null;
   memo: string | null;
   createdAt: string;
+}
+
+export interface AccountSummary {
+  sent: string;
+  received: string;
+  deposited: string;
+  stopped: string;
+  declinedCount: number;
 }
 
 export interface AccountView {
@@ -17,6 +26,7 @@ export interface AccountView {
   balance: string;
   currency: string;
   openedAt: string;
+  summary: AccountSummary;
   transfers: AccountActivity[];
 }
 export interface ToolCall { tool: string; args: unknown; result: unknown; ms: number }

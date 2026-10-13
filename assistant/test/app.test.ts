@@ -69,7 +69,7 @@ describe('POST /api/chat', () => {
     expect((await chat({ accountId: '00000000-0000-7000-8000-000000000001', messages: [{ role: 'user', text: 'hi' }] })).status).toBe(404);
   });
 
-  it('asks the user to retry when the model is rate limited', async () => {
+  it('answers from the ledger when the model is out of quota', async () => {
     const limited = createApp({
       ledger: Object.assign(new FixtureLedger(), writer),
       provider: () => ({
@@ -80,11 +80,11 @@ describe('POST /api/chat', () => {
     });
     const res = await limited.request('/api/chat', {
       method: 'POST',
-      body: JSON.stringify({ accountId: ME, messages: [{ role: 'user', text: 'hi' }] }),
+      body: JSON.stringify({ accountId: ME, messages: [{ role: 'user', text: "What's my balance?" }] }),
       headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '8.8.8.8' },
     });
-    expect(res.status).toBe(429);
-    expect(await res.json()).toEqual({ error: 'The assistant is busy right now. Try again in a moment.' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ answer: 'Your balance is $3,750.51.', provider: 'ledger' });
   });
 
   it('rate-limits a single client', async () => {

@@ -163,23 +163,69 @@ export interface AccountActivity {
   amount: string;
   status: Transfer['status'];
   declineReason: string | null;
+  /** Plain-language rule, so a stopped payment is explained without calling a model. */
+  declineExplanation: string | null;
   memo: string | null;
   createdAt: string;
 }
 
-/** Balance and recent activity for the account home. Does not call a model. */
+export interface AccountSummary {
+  /** Completed money out, last 30 days. */
+  sent: string;
+  /** Completed money in from other people, last 30 days. */
+  received: string;
+  /** Completed funding, last 30 days. */
+  deposited: string;
+  /** Outgoing payments the fraud rules stopped, last 30 days. */
+  stopped: string;
+  declinedCount: number;
+}
+
+/** Balance, a 30-day summary, and recent activity. Arithmetic stays in integer cents. */
 export async function loadAccountView(ledger: LedgerReader, accountId: string, limit = 8) {
   const account = await ledger.getAccount(accountId);
   if (!account || account.type !== 'USER') return null;
-  const transfers = await ledger.transfersForAccount(accountId, limit);
-  const names = await ownerNames({ ledger, accountId, now: () => new Date() }, transfers);
+  const recent = await ledger.transfersForAccount(accountId, 50);
+  const names = await ownerNames({ ledger, accountId, now: () => new Date() }, recent);
+  const described = recent.map((t) => describe(accountId, t, names));
   return {
     id: account.id,
     owner: account.ownerId,
     balance: formatMoney(account.balanceMinor, account.currency),
     currency: account.currency,
     openedAt: account.createdAt,
-    transfers: transfers.map((t) => describe(accountId, t, names)),
+    summary: summarize(recent, accountId, account.currency),
+    transfers: described.slice(0, limit),
+  };
+}
+
+function summarize(transfers: Transfer[], accountId: string, currency: string): AccountSummary {
+  const since = Date.now() - 30 * 86_400_000;
+  let sent = 0;
+  let received = 0;
+  let deposited = 0;
+  let stopped = 0;
+  let declinedCount = 0;
+  for (const t of transfers) {
+    if (Date.parse(t.createdAt) < since) continue;
+    const outgoing = t.sourceAccountId === accountId;
+    if (t.status === 'REJECTED') {
+      if (outgoing) {
+        declinedCount += 1;
+        stopped += t.amountMinor;
+      }
+      continue;
+    }
+    if (t.kind === 'DEPOSIT') deposited += t.amountMinor;
+    else if (outgoing) sent += t.amountMinor;
+    else received += t.amountMinor;
+  }
+  return {
+    sent: formatMoney(sent, currency),
+    received: formatMoney(received, currency),
+    deposited: formatMoney(deposited, currency),
+    stopped: formatMoney(stopped, currency),
+    declinedCount,
   };
 }
 
@@ -193,6 +239,7 @@ function describe(self: string, t: Transfer, names: Map<string, string>): Accoun
     amount: formatMoney(t.amountMinor, t.currency),
     status: t.status,
     declineReason: t.rejectionReason,
+    declineExplanation: t.rejectionReason ? (DECLINE_REASONS[t.rejectionReason] ?? null) : null,
     memo: t.memo,
     createdAt: t.createdAt,
   };

@@ -25,7 +25,8 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 button, input { font: inherit; color: inherit; background: none; border: 0; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .shell { max-width: 680px; margin: 0 auto; padding: 40px 24px 72px; }
-h1 { margin: 0; font-family: Fraunces, Georgia, serif; font-size: 1.35rem; font-weight: 560; letter-spacing: -0.03em; }
+.mark-name { margin: 0; font-family: Fraunces, Georgia, serif; font-size: 1.15rem; letter-spacing: -0.03em; }
+h1 { margin: 10px 0 0; max-width: 18ch; font-family: Fraunces, Georgia, serif; font-size: clamp(1.8rem, 4vw, 2.4rem); font-weight: 560; letter-spacing: -0.03em; line-height: 1.15; }
 h2 { margin: 0; font-size: 1.05rem; font-weight: 600; }
 h3 { margin: 36px 0 0; font-size: .95rem; font-weight: 600; }
 .sub, .muted { color: var(--muted); }
@@ -50,6 +51,12 @@ input { flex: 1; min-width: 0; padding: 12px 0; background: transparent; }
   margin: 4px 0 0; font-family: Fraunces, Georgia, serif;
   font-size: clamp(2.8rem, 8vw, 4.2rem); letter-spacing: -0.04em; line-height: 1;
 }
+.figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin: 28px 0 0; }
+.figures div { border-top: 1px solid var(--line); padding-top: 12px; }
+.figures dt { color: var(--muted); font-size: .82rem; }
+.figures dd { margin: 4px 0 0; font-variant-numeric: tabular-nums; font-size: 1.15rem; }
+.model { margin: 18px 0 0; max-width: 42rem; color: var(--muted); font-size: .95rem; }
+.reason { display: block; margin-top: 6px; max-width: 36rem; color: var(--error); font-size: .92rem; }
 .skeleton { margin-top: 28px; height: 1px; background: var(--line); }
 .home-error { margin-top: 20px; display: flex; gap: 16px; align-items: baseline; }
 .activity { list-style: none; padding: 0; margin: 8px 0 0; }
@@ -87,4 +94,5 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 @media (max-width: 640px) {
   .shell { padding: 28px 18px 56px; }
   .activity li, .person, .home-head { gap: 12px; }
+  .figures { grid-template-columns: 1fr; gap: 14px; }
 }

@@ -30,8 +30,8 @@ export function App() {
   return (
     <div className="shell">
       <header className="top">
-        <h1>Ledger</h1>
-        <p className="sub">Your payments, with answers from the ledger.</p>
+        <p className="mark-name">Ledger</p>
+        <h1>Payments between people, checked before the money moves.</h1>
       </header>
       <div hidden={account !== null}>
         <AccountPicker onPick={setAccount} />
@@ -56,8 +56,8 @@ function AccountPicker({ onPick }: { onPick: (a: AccountRef) => void }) {
 
   return (
     <section className="opening">
-      <h2>Choose an account</h2>
-      <p className="sub">Open someone already on the ledger, or load a sample set of people and payments.</p>
+      <h2>Open an account</h2>
+      <p className="sub">A live balance, the payments that cleared, and the rule that stopped the ones that did not.</p>
       <button className="text" disabled={busy} onClick={() => run(api.seedDemo, (r) => setSample(r.accounts))}>
         {busy && sample.length === 0 ? 'Loading…' : 'Load sample accounts'}
       </button>
@@ -132,7 +132,22 @@ function AccountScreen({ account, onSwitch }: { account: AccountRef; onSwitch: (
           <>
             <p className="eyebrow">Available balance</p>
             <p className="balance">{view.balance}</p>
-            <h3>Recent activity</h3>
+            <dl className="figures">
+              <div>
+                <dt>Sent, 30 days</dt>
+                <dd>{view.summary.sent}</dd>
+              </div>
+              <div>
+                <dt>Received</dt>
+                <dd>{view.summary.received}</dd>
+              </div>
+              <div>
+                <dt>Stopped by checks</dt>
+                <dd>{view.summary.stopped}</dd>
+              </div>
+            </dl>
+            <p className="model">The totals are summed in cents on the ledger. The assistant is only allowed to quote them.</p>
+            <h3>Statement</h3>
             {view.transfers.length === 0
               ? <p className="muted">No payments yet.</p>
               : (
@@ -142,6 +157,7 @@ function AccountScreen({ account, onSwitch }: { account: AccountRef; onSwitch: (
                       <span className="activity-copy">
                         <strong>{t.memo || directionLabel(t.direction)}</strong>
                         <span className="muted">{directionLabel(t.direction)} {personName(t.counterparty)} · {when(t.createdAt)}</span>
+                        {t.declineExplanation && <span className="reason">{t.declineExplanation}</span>}
                       </span>
                       <span className={`amount ${t.direction}`}>
                         {t.status === 'REJECTED' ? 'Declined' : t.amount}
@@ -196,8 +212,8 @@ function Chat({ account, name }: { account: AccountRef; name: string }) {
   return (
     <section className="chat" aria-label={`Assistant for ${name}`}>
       <div className="chat-head">
-        <h2>Assistant</h2>
-        <p className="muted">Answers come from {name}&apos;s ledger. It can look, not send.</p>
+        <h2>Ask why</h2>
+        <p className="muted">Questions are answered from {name}&apos;s books. It cannot send money, and it cannot invent a number that is not already in the statement.</p>
       </div>
       <div className="log">
         {turns.length === 0 && (

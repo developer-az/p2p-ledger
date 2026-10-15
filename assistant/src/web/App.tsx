@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { parseDollarsToMinor } from '../server/money.js';
 import { api, type AccountActivity, type AccountRef, type AccountView, type BootstrapResponse, type Turn } from './api.js';
+import { OFFLINE_BOOTSTRAP } from './practice-fixture.js';
 
 const PRACTICE_PREFIX = '01111111-1111-7111-8111-';
 
@@ -89,13 +90,23 @@ export function App() {
 }
 
 function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string) => void }) {
-  const [boot, setBoot] = useState<BootstrapResponse | null>(null);
+  const [boot, setBoot] = useState<BootstrapResponse>(OFFLINE_BOOTSTRAP);
   const [err, setErr] = useState('');
   const [owner, setOwner] = useState('');
   const [busy, setBusy] = useState('');
+  const [apiUp, setApiUp] = useState(false);
 
   useEffect(() => {
-    void api.bootstrap().then(setBoot).catch((e) => setErr((e as Error).message));
+    void api.bootstrap()
+      .then((b) => {
+        setBoot(b);
+        setApiUp(true);
+        setErr('');
+      })
+      .catch((e) => {
+        setApiUp(false);
+        setErr((e as Error).message);
+      });
   }, []);
 
   const practice = boot?.practice;
@@ -139,7 +150,13 @@ function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string) => v
     <>
       <p className="status-line">
         ledger-service:{' '}
-        {boot?.live ? <span className="live">online (docker)</span> : <span className="off">offline — practice network only</span>}
+        {!apiUp ? (
+          <span className="off">API starting — practice accounts below work offline</span>
+        ) : boot.live ? (
+          <span className="live">ledger online</span>
+        ) : (
+          <span className="off">ledger offline — practice network</span>
+        )}
       </p>
 
       <div className="help">

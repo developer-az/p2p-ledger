@@ -4,11 +4,13 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/health.ts": { "maxDuration": 10 },
-    "api/bootstrap.ts": { "maxDuration": 10 },
-    "api/**/*.ts": { "maxDuration": 60 }
+    "api/index.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
   },
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

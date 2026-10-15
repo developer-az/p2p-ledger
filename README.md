@@ -217,7 +217,7 @@ npm test                                       # unit tests
 npm run eval                                   # real-model evals (needs API key)
 ```
 
-Deploy on Vercel's free tier: import the repo, set **Root Directory** to `assistant`, and add the env vars `LEDGER_URL` (the Render URL), `GEMINI_API_KEY` and optionally `LLM_PROVIDER`. The UI is static and `/api/*` runs as a serverless function ([`api/[[...route]].ts`](assistant/api/[[...route]].ts)).
+Deploy on Vercel's free tier: import the repo, set **Root Directory** to `assistant`, and add the env vars `LEDGER_URL` (the Render URL), `GEMINI_API_KEY` and optionally `LLM_PROVIDER`. The UI is static and `/api/*` runs as a serverless function ([`api/index.ts`](assistant/api/index.ts) with rewrites in `vercel.json`).
 
 ## Use of AI coding tools
 

@@ -2,17 +2,35 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { runAssistant, type AssistantReply } from '../src/server/agent.js';
 import { providerFromEnv } from '../src/server/providers/index.js';
 import { isLongQuotaWait, isModelOutage, isNetworkError, retryableStatus, retryDelayMs } from '../src/server/providers/retry.js';
-import { CASES } from './cases.js';
+import { CASES, type EvalCase } from './cases.js';
 import { FixtureLedger, ME, NOW } from './fixture.js';
 
 /**
  * Runs every case TRIALS times against the configured LLM and the fixture ledger.
  *   GEMINI_API_KEY=... npm run eval            (TRIALS=3 by default)
  *   LLM_PROVIDER=anthropic ANTHROPIC_API_KEY=... npm run eval
+ *   EVAL_CASE_IDS=balance,refuses-writes npm run eval   (subset)
  * Exits non-zero if the pass rate is below EVAL_MIN_PASS_RATE (default 0.9).
+ * With EVAL_REQUIRE_COMPLETE=1, any skipped run (quota/outage) fails the process.
  */
 const trials = Number(process.env.TRIALS ?? 3);
 const minPassRate = Number(process.env.EVAL_MIN_PASS_RATE ?? 0.9);
+const requireComplete = process.env.EVAL_REQUIRE_COMPLETE === '1';
+
+function casesToRun(): EvalCase[] {
+  const raw = process.env.EVAL_CASE_IDS?.split(',').map((s) => s.trim()).filter(Boolean);
+  if (!raw?.length) return CASES;
+  const picked = CASES.filter((c) => raw.includes(c.id));
+  const unknown = raw.filter((id) => !CASES.some((c) => c.id === id));
+  if (unknown.length > 0) {
+    console.error(`Unknown EVAL_CASE_IDS: ${unknown.join(', ')}`);
+    process.exit(1);
+  }
+  console.log(`Running ${picked.length} case(s): ${picked.map((c) => c.id).join(', ')}`);
+  return picked;
+}
+
+const evalCases = casesToRun();
 const provider = providerFromEnv();
 const ledger = new FixtureLedger();
 
@@ -33,7 +51,7 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 2): Promise<T> {
 
 const rows: { id: string; trial: number; pass: boolean; skipped: boolean; failures: string[]; tools: string[]; answer: string; ms: number }[] = [];
 let dailyQuotaClosed = false;
-for (const testCase of CASES) {
+for (const testCase of evalCases) {
   for (let trial = 1; trial <= trials; trial++) {
     const start = performance.now();
     if (dailyQuotaClosed) {
@@ -73,7 +91,7 @@ for (const testCase of CASES) {
 const graded = rows.filter((r) => !r.skipped);
 const passRate = graded.length === 0 ? 1 : graded.filter((r) => r.pass).length / graded.length;
 console.log(`\n\n${provider.name} / ${provider.model}: ${(passRate * 100).toFixed(1)}% of ${graded.length} graded runs passed\n`);
-for (const testCase of CASES) {
+for (const testCase of evalCases) {
   const mine = rows.filter((r) => r.id === testCase.id);
   const passed = mine.filter((r) => r.pass).length;
   const skipped = mine.length > 0 && mine.every((r) => r.skipped);
@@ -84,7 +102,19 @@ for (const testCase of CASES) {
 }
 
 mkdirSync('evals/results', { recursive: true });
+const skippedCount = rows.filter((r) => r.skipped).length;
+const expectedRuns = evalCases.length * trials;
 writeFileSync(`evals/results/${provider.name}-${provider.model}.json`,
-  JSON.stringify({ provider: provider.name, model: provider.model, trials, passRate, at: new Date().toISOString(), rows }, null, 2));
+  JSON.stringify({
+    provider: provider.name, model: provider.model, trials, passRate, caseIds: evalCases.map((c) => c.id),
+    skippedCount, expectedRuns, at: new Date().toISOString(), rows,
+  }, null, 2));
 if (graded.length === 0) console.log('No graded runs: the model was unavailable, so this is not a product failure.');
+if (requireComplete && skippedCount > 0) {
+  console.error(
+    `\nEval incomplete: ${skippedCount}/${expectedRuns} run(s) skipped (quota or outage). ` +
+    'Retry when quota resets, or run a smaller EVAL_CASE_IDS set locally.',
+  );
+  process.exit(1);
+}
 process.exit(passRate >= minPassRate ? 0 : 1);

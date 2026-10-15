@@ -1,7 +1,7 @@
 import { handle } from 'hono/vercel';
 import { createAssistantApi } from '../src/server/instance.js';
 
-// Single Vercel function; vercel.json rewrites all /api/* here (nested paths 404 on [[...route]].ts).
+// Vercel routes /api/* here. Do not add a /api → /api rewrite (it can loop until 504).
 const app = createAssistantApi();
 
 export default handle(app);

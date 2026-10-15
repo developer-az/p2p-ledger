@@ -312,13 +312,16 @@ export class CompositeLedger implements LedgerReader, LedgerWriter {
   }
 }
 
-export async function isLiveLedgerReachable(baseUrl: string, timeoutMs = 3_000): Promise<boolean> {
+export async function isLiveLedgerReachable(baseUrl: string, timeoutMs = 2_500): Promise<boolean> {
+  const url = `${baseUrl.replace(/\/$/, '')}/actuator/health`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/actuator/health`, {
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    const res = await fetch(url, { signal: controller.signal });
     return res.ok;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }

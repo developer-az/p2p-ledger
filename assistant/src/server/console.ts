@@ -21,6 +21,20 @@ async function scopedTrail(ledger: Ledger, accountId: string, transferId: string
   return trail && touches(trail.transfer, accountId) ? trail : null;
 }
 
+/**
+ * Rebuilds the legs from the account statements when the ledger build predates the trail
+ * endpoint. The idempotency key and events are not exposed there, so they come back empty.
+ */
+async function trailFromStatements(ledger: Ledger, accountId: string, transferId: string): Promise<TransferTrail | null> {
+  const transfer = await ledger.getTransfer(transferId);
+  if (!transfer || !touches(transfer, accountId)) return null;
+  const statements = await Promise.all(
+    [transfer.sourceAccountId, transfer.destinationAccountId].map((id) => ledger.entries(id, 200).catch(() => [])),
+  );
+  const entries = statements.flat().filter((e) => e.transferId === transferId).sort((a, b) => a.id - b.id);
+  return { transfer, idempotencyKey: '', requestHash: '', entries, events: [] };
+}
+
 function label(account: Account | null): string {
   if (!account) return 'unknown';
   return account.type === 'SYSTEM' ? 'Bank funding (system account)' : account.ownerId;
@@ -56,7 +70,8 @@ const deliveryMs = (createdAt: string, publishedAt: string | null) =>
   publishedAt === null ? null : Math.max(0, Date.parse(publishedAt) - Date.parse(createdAt));
 
 export async function paymentTrail(ledger: Ledger, accountId: string, transferId: string) {
-  const trail = await scopedTrail(ledger, accountId, transferId);
+  const full = await scopedTrail(ledger, accountId, transferId);
+  const trail = full ?? await trailFromStatements(ledger, accountId, transferId);
   if (!trail) return null;
   const t = trail.transfer;
   const ids = new Set([t.sourceAccountId, t.destinationAccountId, ...trail.entries.map((e) => e.accountId)]);
@@ -76,6 +91,8 @@ export async function paymentTrail(ledger: Ledger, accountId: string, transferId
     decline: t.rejectionReason
       ? { code: t.rejectionReason, explanation: DECLINE_REASONS[t.rejectionReason] ?? null }
       : null,
+    /** False when the ledger build has no trail endpoint: no key, no events, no replay or tamper checks. */
+    audited: full !== null,
     request: {
       method: 'POST',
       path: request.path,

@@ -137,6 +137,29 @@ describe('payment trail', () => {
   });
 });
 
+describe('against a ledger build without the audit endpoints', () => {
+  it('rebuilds the legs from statements and says it is not audited', async () => {
+    const { ledger, pizza } = await setup();
+    ledger.trail = async () => null;
+    const app = createApp({ ledger, provider: () => new ScriptedProvider([{ answer: 'ok' }]) });
+    const res = await app.request(`/api/trail?account=${ALEX}&transfer=${pizza.id}`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { audited: boolean; legs: { side: string }[]; legsSum: string; events: unknown[] };
+    expect(body).toMatchObject({ audited: false, legsSum: '$0.00', events: [] });
+    expect(body.legs.map((l) => l.side)).toEqual(['debit', 'credit']);
+  });
+
+  it('reports reconciliation as unavailable instead of failing', async () => {
+    const { ledger } = await setup();
+    const { LedgerError } = await import('../src/server/ledger.js');
+    ledger.integrity = () => Promise.reject(new LedgerError(404, 'not found'));
+    const app = createApp({ ledger, provider: () => new ScriptedProvider([{ answer: 'ok' }]) });
+    const res = await app.request('/api/integrity');
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ code: 'LEDGER_OUTDATED' });
+  });
+});
+
 describe('replay', () => {
   it('returns the stored result and posts nothing new', async () => {
     const { post, pizza, ledger } = await setup();

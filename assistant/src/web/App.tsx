@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   api,
   type AccountActivity,
@@ -21,6 +21,13 @@ const SUGGESTIONS = [
   'Send $50 to sam',
 ];
 
+const GUARANTEES = [
+  ['Double-entry, enforced by Postgres', 'Every payment posts a debit and a credit. A deferred trigger refuses any commit whose legs do not sum to zero.'],
+  ['Retries cannot charge twice', 'The idempotency key is a unique column. Identical requests in flight together resolve to one payment.'],
+  ['Posted money cannot be edited', 'Entries are append-only at the database level, so a bug in application code cannot rewrite history.'],
+  ['Every payment emits an event', 'A transactional outbox relays events to SQS or Kafka. Nothing is lost, and nothing is sent for a rolled-back payment.'],
+] as const;
+
 function personName(owner: string): string {
   if (owner.startsWith('Bank funding')) return 'Bank';
   const base = owner.split('-')[0] || owner;
@@ -39,10 +46,12 @@ function clock(iso: string): string {
   return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
 }
 
-function directionLabel(direction: AccountActivity['direction']): string {
-  if (direction === 'sent') return 'Sent to';
-  if (direction === 'received') return 'From';
-  return 'Deposit';
+function count(n: number, noun: string, plural = `${noun}s`): string {
+  return `${n.toLocaleString()} ${n === 1 ? noun : plural}`;
+}
+
+function shortId(id: string): string {
+  return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
 }
 
 function useAction<T>() {
@@ -63,101 +72,56 @@ function useAction<T>() {
   return { result, busy, error, run };
 }
 
+function Badge({ tone, children }: { tone: 'ok' | 'bad' | 'neutral'; children: ReactNode }) {
+  return <span className={`badge ${tone}`}>{children}</span>;
+}
+
 export function App() {
   const [account, setAccount] = useState<AccountRef | null>(null);
   const [stoppedTransferId, setStoppedTransferId] = useState<string | null>(null);
   const [booksVersion, setBooksVersion] = useState(0);
   return (
-    <div className="shell">
-      <header className="top">
-        <nav className="masthead">
-          <p className="mark-name">Ledger</p>
-          <a className="quiet" href={REPO} target="_blank" rel="noreferrer">Source</a>
-        </nav>
-        <h1>A payments ledger that can prove every number it shows.</h1>
-        <p className="sub">
-          Double-entry books in PostgreSQL behind a Java service. A retried payment cannot charge twice,
-          the database itself refuses edits to posted money, and every payment emits an event for the
-          systems downstream. Everything on this page runs against the live service.
-        </p>
-        <Books version={booksVersion} />
-      </header>
-      <div hidden={account !== null}>
-        <AccountPicker onPick={(a, stoppedId) => { setStoppedTransferId(stoppedId ?? null); setAccount(a); }} />
-      </div>
-      {account && (
-        <AccountScreen
-          account={account}
-          stoppedTransferId={stoppedTransferId}
-          onChanged={() => setBooksVersion((v) => v + 1)}
-          onSwitch={() => { setAccount(null); setStoppedTransferId(null); }}
-        />
-      )}
-      <Stack />
-    </div>
-  );
-}
-
-function Books({ version }: { version: number }) {
-  const [books, setBooks] = useState<Integrity | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  async function check() {
-    setBusy(true);
-    try {
-      setBooks(await api.integrity());
-      setFailed(false);
-    } catch {
-      setFailed(true);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  useEffect(() => { void check(); }, [version]);
-
-  if (failed && !books) {
-    return (
-      <p className="books muted">
-        Reconciliation is unavailable while the ledger wakes up.{' '}
-        <button className="text" onClick={() => void check()} disabled={busy}>Check again</button>
-      </p>
-    );
-  }
-  if (!books) return <p className="books muted">Reconciling the books…</p>;
-  const delivery = books.outbox.p95DeliveryMs;
-  return (
-    <div className="books" aria-busy={busy}>
-      <p className={books.balanced ? 'books-verdict ok' : 'books-verdict bad'}>
-        {books.balanced ? 'Books balanced' : 'Books out of balance'}
-        <span className="muted"> · recomputed from raw entries at {clock(books.checkedAt)}</span>
-      </p>
-      <dl className="books-figures">
-        <div><dt>All {books.entryCount.toLocaleString()} entries sum to</dt><dd>{books.entriesSum}</dd></div>
-        <div><dt>Accounts whose balance drifts from its entries</dt><dd>{books.accountsDrifted} of {books.accountCount.toLocaleString()}</dd></div>
-        <div><dt>Declined payments that moved money</dt><dd>{books.rejectedWithEntries}</dd></div>
-        <div>
-          <dt>Events delivered{delivery === null ? '' : ', p95 latency'}</dt>
-          <dd>
-            {(books.outbox.total - books.outbox.pending).toLocaleString()}
-            {delivery !== null && <span className="muted"> · {Math.round(delivery)} ms</span>}
-            {books.outbox.pending > 0 && <span className="muted"> · {books.outbox.pending} waiting</span>}
-          </dd>
+    <>
+      <header className="appbar">
+        <div className="appbar-inner">
+          <a className="brand" href="/" onClick={(e) => { e.preventDefault(); setAccount(null); setStoppedTransferId(null); }}>
+            <span className="brand-mark" aria-hidden>L</span>
+            Ledger
+          </a>
+          <nav className="nav">
+            <a href="#books">Reconciliation</a>
+            <a href="#workspace">Payments</a>
+            <a href="#architecture">Architecture</a>
+            <a href={REPO} target="_blank" rel="noreferrer">GitHub</a>
+          </nav>
         </div>
-      </dl>
-      <button className="text small" onClick={() => void check()} disabled={busy}>{busy ? 'Reconciling…' : 'Run reconciliation again'}</button>
-    </div>
+      </header>
+      <main className="shell">
+        {!account && (
+          <Hero onPick={(a, stoppedId) => { setStoppedTransferId(stoppedId ?? null); setAccount(a); }} />
+        )}
+        <Books version={booksVersion} />
+        {account && (
+          <AccountScreen
+            account={account}
+            stoppedTransferId={stoppedTransferId}
+            onChanged={() => setBooksVersion((v) => v + 1)}
+            onSwitch={() => { setAccount(null); setStoppedTransferId(null); }}
+          />
+        )}
+        <Architecture />
+      </main>
+    </>
   );
 }
 
-function AccountPicker({ onPick }: { onPick: (a: AccountRef, stoppedTransferId?: string) => void }) {
+function Hero({ onPick }: { onPick: (a: AccountRef, stoppedTransferId?: string) => void }) {
   const [owner, setOwner] = useState('');
   const [found, setFound] = useState<AccountRef[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  async function watch() {
+  async function demo() {
     setBusy(true);
     setError('');
     try {
@@ -185,35 +149,114 @@ function AccountPicker({ onPick }: { onPick: (a: AccountRef, stoppedTransferId?:
   }
 
   return (
-    <section className="opening">
-      <p className="eyebrow">Start here</p>
-      <button className="text big" disabled={busy} onClick={() => void watch()}>
-        {busy ? 'Opening three accounts on the live ledger…' : 'Open a customer and watch a payment get stopped →'}
-      </button>
-      <p className="sub">
-        Creates three real accounts, funds them, and sends a few payments. One of them is $1,200 from an
-        account opened seconds ago, which the fraud rules decline inside the same database transaction.
-      </p>
-      <form className="row" onSubmit={(e) => void find(e)}>
-        <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="Or look up an owner id" aria-label="Owner id" />
-        <button className="text" disabled={busy || !owner.trim()}>Find</button>
-      </form>
-      {found && (found.length === 0
-        ? <p className="muted">No accounts for that owner.</p>
-        : (
-          <ul className="accounts">
-            {found.map((a) => (
-              <li key={a.id}>
-                <button className="person" onClick={() => onPick(a)}>
-                  <strong>{personName(a.owner)}</strong>
-                  <span className="muted">{a.owner}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+    <section className="hero">
+      <div className="hero-copy">
+        <p className="kicker">Payments infrastructure</p>
+        <h1>A ledger that can prove every number it shows.</h1>
+        <p className="lede">
+          Double-entry books on PostgreSQL behind a Java service, with a support assistant that can only quote
+          what the ledger recorded. Everything on this page runs against the live system.
+        </p>
+        <div className="hero-actions">
+          <button className="btn primary" disabled={busy} onClick={() => void demo()}>
+            {busy ? 'Opening accounts…' : 'Run the live demo'}
+          </button>
+          <span className="muted small">Opens three accounts and sends six real payments. One is stopped by a fraud rule.</span>
+        </div>
+        <form className="lookup" onSubmit={(e) => void find(e)}>
+          <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="Look up an existing owner id" aria-label="Owner id" />
+          <button className="btn" disabled={busy || !owner.trim()}>Find</button>
+        </form>
+        {found && (found.length === 0
+          ? <p className="muted small">No accounts for that owner.</p>
+          : (
+            <ul className="found">
+              {found.map((a) => (
+                <li key={a.id}>
+                  <button onClick={() => onPick(a)}>
+                    <strong>{personName(a.owner)}</strong>
+                    <span className="mono muted">{a.owner}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ))}
+        {error && <p className="error" role="alert">{error}</p>}
+      </div>
+      <ol className="guarantees">
+        {GUARANTEES.map(([title, body], i) => (
+          <li key={title}>
+            <span className="index mono">0{i + 1}</span>
+            <div>
+              <strong>{title}</strong>
+              <p>{body}</p>
+            </div>
+          </li>
         ))}
-      {error && <p className="error" role="alert">{error}</p>}
+      </ol>
     </section>
+  );
+}
+
+function Books({ version }: { version: number }) {
+  const [books, setBooks] = useState<Integrity | null>(null);
+  const [problem, setProblem] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function check() {
+    setBusy(true);
+    try {
+      setBooks(await api.integrity());
+      setProblem('');
+    } catch (e) {
+      setProblem((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => { void check(); }, [version]);
+
+  const delivery = books?.outbox.p95DeliveryMs ?? null;
+  return (
+    <section className="books" id="books" aria-busy={busy}>
+      <div className="books-head">
+        <div className="books-title">
+          <h2>Reconciliation</h2>
+          {books && <Badge tone={books.balanced ? 'ok' : 'bad'}>{books.balanced ? 'Balanced' : 'Out of balance'}</Badge>}
+          {!books && problem && <Badge tone="neutral">Unavailable</Badge>}
+        </div>
+        <div className="books-meta">
+          <span className="muted small">
+            {books ? `Recomputed from raw entries at ${clock(books.checkedAt)}` : problem || 'Reconciling…'}
+          </span>
+          <button className="btn ghost small" onClick={() => void check()} disabled={busy}>{busy ? 'Running…' : 'Run again'}</button>
+        </div>
+      </div>
+      {books && (
+        <dl className="metrics">
+          <Metric label="Sum of all entries" value={books.entriesSum} note={count(books.entryCount, 'entry', 'entries')} />
+          <Metric label="Balance drift" value={`${books.accountsDrifted}`} note={`of ${count(books.accountCount, 'account')}`} />
+          <Metric label="Unbalanced payments" value={`${books.unbalancedTransfers}`} note={`of ${count(books.transferCount, 'payment')}`} />
+          <Metric label="Declines that moved money" value={`${books.rejectedWithEntries}`} note="must stay zero" />
+          <Metric
+            label="Events delivered"
+            value={(books.outbox.total - books.outbox.pending).toLocaleString()}
+            note={[delivery === null ? null : `p95 ${Math.round(delivery)} ms`, books.outbox.pending ? `${books.outbox.pending} queued` : null].filter(Boolean).join(' · ') || 'none yet'}
+          />
+        </dl>
+      )}
+    </section>
+  );
+}
+
+function Metric({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="metric">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+      {note && <span className="metric-note">{note}</span>}
+    </div>
   );
 }
 
@@ -252,49 +295,62 @@ function AccountScreen({ account, stoppedTransferId, onChanged, onSwitch }: {
     ?? people[0];
 
   return (
-    <div className="workspace">
-      <section className="home" aria-busy={busy}>
-        <div className="home-head">
+    <div className="workspace" id="workspace">
+      <div className="main-col" aria-busy={busy}>
+        <div className="account-head">
           <div>
-            <p className="eyebrow">Customer</p>
-            <h2>{name}</h2>
-            <p className="muted mono">{view?.owner ?? account.owner}</p>
+            <p className="kicker">Customer account</p>
+            <h2 className="account-name">{name}</h2>
+            <p className="mono muted small">{view?.owner ?? account.owner} · {shortId(account.id)}</p>
           </div>
-          <button className="text" onClick={onSwitch}>Switch customer</button>
+          <button className="btn" onClick={onSwitch}>Switch customer</button>
         </div>
-        {busy && <div className="skeleton" aria-label="Loading balance" />}
+
+        {busy && <div className="loading" aria-label="Loading account"><span /></div>}
         {!busy && error && !view && (
-          <div className="home-error">
+          <div className="inline-error">
             <p className="error" role="alert">{error}</p>
-            <button className="text" onClick={() => void load()}>Try again</button>
+            <button className="btn small" onClick={() => void load()}>Try again</button>
           </div>
         )}
         {!busy && view && (
           <>
-            <p className="eyebrow">Available balance</p>
-            <p className="balance">{view.balance}</p>
-            <dl className="figures">
-              <div><dt>Sent, 30 days</dt><dd>{view.summary.sent}</dd></div>
-              <div><dt>Received</dt><dd>{view.summary.received}</dd></div>
-              <div><dt>Stopped by checks</dt><dd>{view.summary.stopped}</dd></div>
+            <dl className="kpis">
+              <div className="kpi lead"><dt>Available balance</dt><dd>{view.balance}</dd></div>
+              <div className="kpi"><dt>Sent · 30 days</dt><dd>{view.summary.sent}</dd></div>
+              <div className="kpi"><dt>Received · 30 days</dt><dd>{view.summary.received}</dd></div>
+              <div className="kpi"><dt>Stopped by rules</dt><dd className={view.summary.declinedCount ? 'bad-text' : ''}>{view.summary.stopped}</dd></div>
             </dl>
 
-            <h3>Payments</h3>
-            <p className="muted hint">Open any payment to see what the database holds for it.</p>
+            <div className="section-head">
+              <h3>Payments</h3>
+              <span className="muted small">Select a payment to inspect what the database holds for it.</span>
+            </div>
             {transfers.length === 0
               ? <p className="muted">No payments yet.</p>
-              : transfers.map((t) => (
-                <div key={t.transferId} className="payment">
-                  <ActivityRow transfer={t} open={open === t.transferId} onToggle={() => setOpen(open === t.transferId ? null : t.transferId)} />
-                  {open === t.transferId && (
-                    <PaymentDetail
-                      accountId={account.id}
-                      transferId={t.transferId}
-                      onChanged={() => { void load(true); onChanged(); }}
-                    />
-                  )}
+              : (
+                <div className="table" role="table" aria-label="Payments">
+                  <div className="thead" role="row">
+                    <span role="columnheader">Description</span>
+                    <span role="columnheader">Counterparty</span>
+                    <span role="columnheader">Date</span>
+                    <span role="columnheader">Status</span>
+                    <span role="columnheader" className="num">Amount</span>
+                  </div>
+                  {transfers.map((t) => (
+                    <div key={t.transferId} className={open === t.transferId ? 'tgroup open' : 'tgroup'}>
+                      <PaymentRow transfer={t} open={open === t.transferId} onToggle={() => setOpen(open === t.transferId ? null : t.transferId)} />
+                      {open === t.transferId && (
+                        <PaymentDetail
+                          accountId={account.id}
+                          transferId={t.transferId}
+                          onChanged={() => { void load(true); onChanged(); }}
+                        />
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
 
             {payer && (
               <RetryStorm
@@ -306,7 +362,7 @@ function AccountScreen({ account, stoppedTransferId, onChanged, onSwitch }: {
             )}
           </>
         )}
-      </section>
+      </div>
       <Chat account={account} name={name} />
     </div>
   );
@@ -317,23 +373,39 @@ function orderStoppedFirst(transfers: AccountActivity[], stoppedTransferId: stri
   return [...transfers].sort((a, b) => Number(b.transferId === stoppedTransferId) - Number(a.transferId === stoppedTransferId));
 }
 
-function ActivityRow({ transfer, open, onToggle }: { transfer: AccountActivity; open: boolean; onToggle: () => void }) {
+function PaymentRow({ transfer, open, onToggle }: { transfer: AccountActivity; open: boolean; onToggle: () => void }) {
   const declined = transfer.status === 'REJECTED';
+  const sign = transfer.direction === 'sent' ? '−' : '+';
   return (
-    <button className={declined ? 'activity-row declined' : 'activity-row'} onClick={onToggle} aria-expanded={open}>
-      <span className="activity-copy">
+    <button className="trow" role="row" onClick={onToggle} aria-expanded={open}>
+      <span className="cell desc" role="cell">
         <strong>{transfer.memo || (transfer.direction === 'deposit' ? 'Bank deposit' : 'Payment')}</strong>
-        <span className="muted">
-          {transfer.direction === 'deposit' ? 'Deposit' : `${directionLabel(transfer.direction)} ${personName(transfer.counterparty)}`} · {when(transfer.createdAt)}
-        </span>
         {declined && transfer.declineExplanation && <span className="reason">{transfer.declineExplanation}</span>}
       </span>
-      <span className={`amount ${transfer.direction}`}>
-        {declined ? 'Declined' : `${transfer.direction === 'sent' ? '−' : '+'}${transfer.amount}`}
-        {declined && <span className="muted">{transfer.amount}</span>}
-        <span className="chevron muted" aria-hidden>{open ? 'Close' : 'Open'}</span>
+      <span className="cell" role="cell">
+        <span className="muted">{transfer.direction === 'sent' ? 'To ' : transfer.direction === 'received' ? 'From ' : ''}</span>
+        {transfer.direction === 'deposit' ? 'Bank funding' : personName(transfer.counterparty)}
+      </span>
+      <span className="cell muted" role="cell">{when(transfer.createdAt)}</span>
+      <span className="cell" role="cell">
+        <Badge tone={declined ? 'bad' : 'ok'}>{declined ? 'Declined' : 'Completed'}</Badge>
+      </span>
+      <span className={`cell num amount ${declined ? 'struck' : transfer.direction}`} role="cell">
+        {declined ? transfer.amount : `${sign}${transfer.amount}`}
       </span>
     </button>
+  );
+}
+
+function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
+  return (
+    <li className="step">
+      <span className="step-n mono">{n}</span>
+      <div className="step-body">
+        <h4>{title}</h4>
+        {children}
+      </div>
+    </li>
   );
 }
 
@@ -353,121 +425,136 @@ function PaymentDetail({ accountId, transferId, onChanged }: { accountId: string
     return () => { live = false; };
   }, [accountId, transferId]);
 
-  if (error) return <p className="error detail">{error}</p>;
-  if (!trail) return <p className="muted detail">Reading this payment from Postgres…</p>;
+  if (error) return <div className="detail"><p className="error">{error}</p></div>;
+  if (!trail) return <div className="detail"><div className="loading"><span /></div></div>;
 
   const declined = trail.status === 'REJECTED';
   const event = trail.events[0];
-  const curl = [
+  const request = [
     `${trail.request.method} ${trail.request.path}`,
-    `Idempotency-Key: ${trail.request.idempotencyKey}`,
+    trail.audited ? `Idempotency-Key: ${trail.request.idempotencyKey}` : 'Idempotency-Key: <stored with the transfer>',
+    'Content-Type: application/json',
     '',
     JSON.stringify(trail.request.body, null, 2),
   ].join('\n');
 
   return (
     <div className="detail">
-      <section>
-        <p className="step">1 · Decision</p>
-        {declined ? (
-          <p>
-            Declined by <code>{trail.decline?.code}</code>. {trail.decline?.explanation}
-            <span className="muted"> The rule ran while both account rows were locked, so a burst of parallel requests cannot slip past it together.</span>
-          </p>
-        ) : (
-          <p>
-            Completed. {trail.amount} moved from {personName(trail.from)} to {personName(trail.to)}.
-            <span className="muted"> Both account rows were locked in id order first, so two people paying each other at the same moment cannot deadlock.</span>
-          </p>
-        )}
-      </section>
-
-      <section>
-        <p className="step">2 · Double-entry</p>
-        {trail.legs.length === 0 ? (
-          <p>
-            No entries. A declined payment moves no money, so nothing was posted to either account.
-            <span className="muted"> The reconciliation above counts any declined payment with entries; it stays at zero.</span>
-          </p>
-        ) : (
-          <>
-            <table className="legs">
-              <thead><tr><th>Entry</th><th>Account</th><th className="num">Debit</th><th className="num">Credit</th><th className="num">Balance after</th></tr></thead>
-              <tbody>
-                {trail.legs.map((l) => (
-                  <tr key={l.entryId}>
-                    <td className="mono muted">#{l.entryId}</td>
-                    <td>{personName(l.account)}</td>
-                    <td className="num">{l.side === 'debit' ? l.amount : ''}</td>
-                    <td className="num">{l.side === 'credit' ? l.amount : ''}</td>
-                    <td className="num muted">{l.balanceAfter}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot><tr><td /><td>Sum of legs</td><td colSpan={3} className="num">{trail.legsSum}</td></tr></tfoot>
-            </table>
-            <p className="muted small">A deferred Postgres trigger refuses to commit any payment whose legs do not sum to zero.</p>
-          </>
-        )}
-      </section>
-
-      <section>
-        <p className="step">3 · Event</p>
-        {event ? (
-          <p>
-            <code>{event.type}</code> was written to the outbox in the same transaction as the money,
-            {event.publishedAt
-              ? <> and the relay delivered it to the queue {event.deliveryMs} ms later.</>
-              : <> and is waiting for the relay.</>}
-            <span className="muted"> If the commit had failed, no event would exist; if the broker had been down, it would be retried, never lost.</span>
-          </p>
-        ) : <p className="muted">No event recorded.</p>}
-      </section>
-
-      <section>
-        <p className="step">4 · The request</p>
-        <pre className="request">{curl}</pre>
-        <p className="muted small mono">SHA-256 of the body: {trail.request.requestHash.slice(0, 16)}… · same key with a different body returns 422</p>
-        <button className="text" disabled={replay.busy} onClick={() => void replay.run(async () => {
-          const r = await api.replay(accountId, transferId);
-          onChanged();
-          return r;
-        })}>
-          {replay.busy ? 'Sending…' : 'Send this exact request again'}
-        </button>
-        {replay.error && <p className="error">{replay.error}</p>}
-        {replay.result && (
-          <p className="outcome">
-            <span className={replay.result.replayed && replay.result.sameTransfer ? 'ok' : 'bad'}>
-              {replay.result.httpStatus} · Idempotent-Replayed: {String(replay.result.replayed)}
-            </span>
-            {' '}Same transfer returned{declined ? ', same decline, not re-evaluated' : ''}. Entries {replay.result.entriesBefore} → {replay.result.entriesAfter},
-            balance {replay.result.balanceBefore} → {replay.result.balanceAfter}.
-          </p>
-        )}
-      </section>
-
-      {!declined && (
-        <section>
-          <p className="step">5 · Try to change the books</p>
-          <p className="muted">Runs four forbidden writes against these entries in transactions that are always rolled back. What you see is Postgres refusing, not the Java code.</p>
-          <button className="text" disabled={tamper.busy} onClick={() => void tamper.run(() => api.tamper(accountId, transferId))}>
-            {tamper.busy ? 'Trying…' : 'Attempt the writes'}
-          </button>
-          {tamper.error && <p className="error">{tamper.error}</p>}
-          {tamper.result && (
-            <ul className="attempts">
-              {tamper.result.attempts.map((a) => (
-                <li key={a.attempt}>
-                  <strong>{a.attempt}</strong>
-                  <code className="sql">{a.sql}</code>
-                  <span className={a.refused ? 'ok' : 'bad'}>{a.refused ? 'Refused: ' : 'Not refused: '}{a.databaseSaid}</span>
-                </li>
-              ))}
-            </ul>
+      <div className="detail-head">
+        <span className="mono muted small">Transfer {trail.transferId}</span>
+        {!trail.audited && <Badge tone="neutral">Partial view · ledger update pending deploy</Badge>}
+      </div>
+      <ol className="steps">
+        <Step n={1} title="Decision">
+          {declined ? (
+            <p>
+              Declined by <code>{trail.decline?.code}</code>. {trail.decline?.explanation}{' '}
+              <span className="muted">The rule ran while both account rows were locked, so parallel requests cannot slip past a limit together.</span>
+            </p>
+          ) : (
+            <p>
+              {trail.amount} moved from {personName(trail.from)} to {personName(trail.to)}.{' '}
+              <span className="muted">Both rows were locked in id order first, so two people paying each other at the same instant cannot deadlock.</span>
+            </p>
           )}
-        </section>
-      )}
+        </Step>
+
+        <Step n={2} title="Ledger entries">
+          {trail.legs.length === 0 ? (
+            <p>
+              None posted. A declined payment moves no money.{' '}
+              <span className="muted">Reconciliation counts any decline with entries, and that count stays at zero.</span>
+            </p>
+          ) : (
+            <>
+              <table className="grid">
+                <thead><tr><th>Entry</th><th>Account</th><th className="num">Debit</th><th className="num">Credit</th><th className="num">Balance after</th></tr></thead>
+                <tbody>
+                  {trail.legs.map((l) => (
+                    <tr key={l.entryId}>
+                      <td className="mono muted">#{l.entryId}</td>
+                      <td>{personName(l.account)}</td>
+                      <td className="num">{l.side === 'debit' ? l.amount : '—'}</td>
+                      <td className="num">{l.side === 'credit' ? l.amount : '—'}</td>
+                      <td className="num muted">{l.balanceAfter}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot><tr><td /><td>Net</td><td colSpan={3} className="num"><Badge tone="ok">{trail.legsSum}</Badge></td></tr></tfoot>
+              </table>
+              <p className="muted small">A deferred Postgres trigger refuses to commit any payment whose entries do not net to zero.</p>
+            </>
+          )}
+        </Step>
+
+        <Step n={3} title="Event">
+          {event ? (
+            <p>
+              <code>{event.type}</code> was written to the outbox in the same transaction as the money
+              {event.publishedAt ? <>, then delivered to the queue <strong>{event.deliveryMs} ms</strong> later.</> : <>, and is queued for the relay.</>}{' '}
+              <span className="muted">A failed commit leaves no event. A broker outage delays delivery but cannot lose it.</span>
+            </p>
+          ) : (
+            <p className="muted">{trail.audited ? 'No event recorded.' : 'Shown once the updated ledger build is deployed.'}</p>
+          )}
+        </Step>
+
+        <Step n={4} title="Request">
+          <pre className="code">{request}</pre>
+          {trail.audited ? (
+            <>
+              <div className="actions">
+                <button className="btn" disabled={replay.busy} onClick={() => void replay.run(async () => {
+                  const r = await api.replay(accountId, transferId);
+                  onChanged();
+                  return r;
+                })}>
+                  {replay.busy ? 'Sending…' : 'Send this exact request again'}
+                </button>
+                <span className="muted small mono">body SHA-256 {trail.request.requestHash.slice(0, 12)}… · same key, different body → 422</span>
+              </div>
+              {replay.error && <p className="error">{replay.error}</p>}
+              {replay.result && (
+                <div className="result">
+                  <Badge tone={replay.result.replayed && replay.result.sameTransfer ? 'ok' : 'bad'}>
+                    {replay.result.httpStatus} · Idempotent-Replayed: {String(replay.result.replayed)}
+                  </Badge>
+                  <span>
+                    Stored result returned{declined ? ', same decline, not re-evaluated' : ''}. Entries {replay.result.entriesBefore} → {replay.result.entriesAfter} ·
+                    balance {replay.result.balanceBefore} → {replay.result.balanceAfter}
+                  </span>
+                </div>
+              )}
+            </>
+          ) : <p className="muted small">Replay is enabled once the updated ledger build is deployed.</p>}
+        </Step>
+
+        {!declined && trail.audited && (
+          <Step n={5} title="Try to change the books">
+            <p className="muted">Four forbidden writes against these entries, each in a transaction that is always rolled back. The refusals come from Postgres, not the Java code.</p>
+            <div className="actions">
+              <button className="btn" disabled={tamper.busy} onClick={() => void tamper.run(() => api.tamper(accountId, transferId))}>
+                {tamper.busy ? 'Attempting…' : 'Attempt the writes'}
+              </button>
+            </div>
+            {tamper.error && <p className="error">{tamper.error}</p>}
+            {tamper.result && (
+              <ul className="attempts">
+                {tamper.result.attempts.map((a) => (
+                  <li key={a.attempt}>
+                    <div className="attempt-head">
+                      <strong>{a.attempt}</strong>
+                      <Badge tone={a.refused ? 'ok' : 'bad'}>{a.refused ? 'Refused' : 'Not refused'}</Badge>
+                    </div>
+                    <code className="sql">{a.sql}</code>
+                    <span className="db-said mono">{a.databaseSaid}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Step>
+        )}
+      </ol>
     </div>
   );
 }
@@ -482,69 +569,85 @@ function RetryStorm({ accountId, fromAccountId, fromName, onDone }: {
   const r = race.result;
   return (
     <section className="storm">
-      <h3>Retry storm</h3>
-      <p>
-        {fromName}&apos;s phone loses signal mid-payment and the app fires the same $5.00 request five times at once.
-        Each copy carries the same idempotency key. Postgres lets one through and makes the other four wait, then hand back the stored result.
+      <div className="section-head">
+        <h3>Retry storm</h3>
+        <span className="muted small">Concurrency test against the live database</span>
+      </div>
+      <p className="storm-copy">
+        {fromName}&apos;s phone drops signal mid-payment and the app fires the same $5.00 request five times at once,
+        all with one idempotency key. Postgres admits one and makes the others wait, then return the stored result.
       </p>
-      <button className="text" disabled={race.busy} onClick={() => void race.run(async () => {
-        const result = await api.race(accountId, fromAccountId);
-        onDone(result.transferId);
-        return result;
-      })}>
-        {race.busy ? 'Sending five copies…' : `Send ${fromName}'s payment five times at once`}
-      </button>
+      <div className="actions">
+        <button className="btn primary" disabled={race.busy} onClick={() => void race.run(async () => {
+          const result = await api.race(accountId, fromAccountId);
+          onDone(result.transferId);
+          return result;
+        })}>
+          {race.busy ? 'Sending five copies…' : 'Send five identical requests'}
+        </button>
+      </div>
       {race.error && <p className="error">{race.error}</p>}
       {r && (
         <>
-          <ol className="copies">
-            {r.attempts.map((a, i) => (
-              <li key={i}>
-                <span className="mono">{a.httpStatus}</span>
-                <span>{a.replayed ? 'returned the stored payment' : a.status === 'REJECTED' ? 'processed: declined' : 'processed: money moved'}</span>
-                <span className="muted mono">{a.ms} ms</span>
-              </li>
-            ))}
-          </ol>
-          <p className="outcome">
-            <span className={r.distinctTransfers === 1 ? 'ok' : 'bad'}>
-              {r.copies} requests, {r.distinctTransfers} payment{r.distinctTransfers === 1 ? '' : 's'}
+          <table className="grid copies">
+            <thead><tr><th>Copy</th><th>HTTP</th><th>Outcome</th><th className="num">Latency</th></tr></thead>
+            <tbody>
+              {r.attempts.map((a, i) => (
+                <tr key={i}>
+                  <td className="mono muted">#{i + 1}</td>
+                  <td className="mono">{a.httpStatus}</td>
+                  <td>{a.replayed ? 'Returned the stored payment' : a.status === 'REJECTED' ? 'Processed · declined' : 'Processed · money moved'}</td>
+                  <td className="num mono muted">{a.ms} ms</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="result">
+            <Badge tone={r.distinctTransfers === 1 ? 'ok' : 'bad'}>
+              {r.copies} requests → {r.distinctTransfers} payment{r.distinctTransfers === 1 ? '' : 's'}
+            </Badge>
+            <span>
+              {r.entriesPosted !== null && <>{r.entriesPosted} ledger entries posted.</>}
+              {r.declineExplanation && <> Declined: {r.declineExplanation}</>}
             </span>
-            {r.entriesPosted !== null && <>, {r.entriesPosted} ledger entries.</>}
-            {r.declineExplanation && <> It was declined: {r.declineExplanation}</>}
-          </p>
+          </div>
         </>
       )}
     </section>
   );
 }
 
-function Stack() {
+function Architecture() {
   return (
-    <footer className="stack">
-      <h3>How it is built</h3>
-      <dl className="stack-list">
-        <div><dt>Ledger service</dt><dd>Java 21, Spring Boot, plain SQL over JDBC, compiled to a GraalVM native image. Deployed as a container on Render.</dd></div>
-        <div><dt>Database</dt><dd>PostgreSQL. Append-only entries, a deferred balance trigger, non-negative balance constraint, idempotency key as a unique column.</dd></div>
-        <div><dt>Events</dt><dd>Transactional outbox relayed to AWS SQS FIFO (Kafka locally) with at-least-once delivery and per-transfer ordering. Queue, DLQ and IAM in Terraform.</dd></div>
-        <div><dt>This app</dt><dd>React and TypeScript, served with a Hono API on Vercel. The assistant calls read-only tools scoped to the open account, and evals check its amounts against the ledger.</dd></div>
+    <footer className="architecture" id="architecture">
+      <div className="section-head">
+        <h3>Architecture</h3>
+        <a className="link small" href={REPO} target="_blank" rel="noreferrer">Design notes on GitHub →</a>
+      </div>
+      <dl className="stack">
+        <div><dt>Ledger service</dt><dd>Java 21 and Spring Boot with plain SQL over JDBC, compiled to a GraalVM native image and deployed as a container on Render.</dd></div>
+        <div><dt>Database</dt><dd>PostgreSQL. Append-only entries, a deferred balance trigger, a non-negative balance constraint, and the idempotency key as a unique column.</dd></div>
+        <div><dt>Events</dt><dd>Transactional outbox relayed to AWS SQS FIFO (Kafka locally). At-least-once with per-transfer ordering. Queue, DLQ and IAM in Terraform.</dd></div>
+        <div><dt>Web and assistant</dt><dd>React and TypeScript with a Hono API on Vercel. The assistant uses read-only tools scoped to the open account, with evals checking every amount.</dd></div>
       </dl>
-      <h3>Measured under load</h3>
-      <p className="muted small">k6, open-model arrival rate, 10% replayed keys, one container limited to 1 CPU and 512 MB. Totals summed to exactly zero after every run.</p>
-      <table className="legs perf">
-        <thead><tr><th>Run</th><th className="num">p50</th><th className="num">p99</th><th className="num">Errors</th><th className="num">Memory</th></tr></thead>
+
+      <div className="section-head">
+        <h3>Measured under load</h3>
+        <span className="muted small">k6 · open-model arrival · 10% replayed keys · 1 CPU / 512 MB container</span>
+      </div>
+      <table className="grid perf">
+        <thead><tr><th>Build and rate</th><th className="num">p50</th><th className="num">p99</th><th className="num">Errors</th><th className="num">Memory</th></tr></thead>
         <tbody>
-          <tr><td>Native, 500 req/s</td><td className="num">4.5 ms</td><td className="num">30 ms</td><td className="num">0%</td><td className="num">54 MB</td></tr>
-          <tr><td>Native, 800 req/s</td><td className="num">6.3 ms</td><td className="num">109 ms</td><td className="num">0%</td><td className="num">80 MB</td></tr>
-          <tr><td>Native, 1,000 req/s</td><td className="num">224 ms</td><td className="num">518 ms</td><td className="num">10.9% shed as 503</td><td className="num">181 MB</td></tr>
+          <tr><td>Native · 500 req/s</td><td className="num">4.5 ms</td><td className="num">30 ms</td><td className="num">0%</td><td className="num">54 MB</td></tr>
+          <tr><td>Native · 800 req/s</td><td className="num">6.3 ms</td><td className="num">109 ms</td><td className="num">0%</td><td className="num">80 MB</td></tr>
+          <tr><td>Native · 1,000 req/s</td><td className="num">224 ms</td><td className="num">518 ms</td><td className="num">10.9% shed as 503</td><td className="num">181 MB</td></tr>
         </tbody>
       </table>
-      <p className="muted small">
-        The first JVM build was killed for running out of memory at 500 req/s: virtual threads queued every request on the heap.
-        The service now caps in-flight requests and answers the overflow with a fast 503 and Retry-After, which is safe to retry because every write is idempotent.
-        Native startup is 3.6 s against 144 s for the JVM on a 0.1 CPU instance.
+      <p className="muted small footnote">
+        The first JVM build was killed for running out of memory at 500 req/s because virtual threads queued every request on the heap.
+        The service now caps in-flight requests and answers overflow with a fast 503 and Retry-After, which is safe because every write is idempotent.
+        Totals summed to exactly zero after every run.
       </p>
-      <p className="small"><a className="quiet" href={REPO} target="_blank" rel="noreferrer">Read the code and the design notes on GitHub</a></p>
     </footer>
   );
 }
@@ -584,16 +687,18 @@ function Chat({ account, name }: { account: AccountRef; name: string }) {
   }
 
   return (
-    <section className="chat" aria-label={`Assistant for ${name}`}>
+    <aside className="chat" aria-label={`Assistant for ${name}`}>
       <div className="chat-head">
-        <p className="eyebrow">Support assistant</p>
-        <h2>Ask why</h2>
-        <p className="muted">Answers come from {name}&apos;s records through read-only lookups scoped to this account. It cannot send money or read anyone else&apos;s payments, and a memo cannot instruct it.</p>
+        <h2>Support assistant</h2>
+        <p className="muted small">
+          Answers from {name}&apos;s records through read-only lookups scoped to this account. It cannot move money,
+          read other customers, or take instructions from a memo.
+        </p>
       </div>
       <div className="log">
         {turns.length === 0 && (
           <div className="suggestions">
-            {SUGGESTIONS.map((s) => <button key={s} className="ask" onClick={() => void send(s)}>{s}</button>)}
+            {SUGGESTIONS.map((s) => <button key={s} className="chip" onClick={() => void send(s)}>{s}</button>)}
           </div>
         )}
         {turns.map((t, i) => (
@@ -612,14 +717,14 @@ function Chat({ account, name }: { account: AccountRef; name: string }) {
             )}
           </div>
         ))}
-        {busy && <p className="muted thinking">Looking through the ledger…</p>}
-        {error && <p className="error in-log" role="alert">{error}</p>}
+        {busy && <p className="muted small thinking">Looking through the ledger…</p>}
+        {error && <p className="error" role="alert">{error}</p>}
         <div ref={end} />
       </div>
       <form className="composer" onSubmit={(e) => { e.preventDefault(); void send(input); }}>
         <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={`Ask about ${name}'s account`} aria-label="Message" maxLength={2000} />
-        <button className="text" disabled={busy || !input.trim()}>Send</button>
+        <button className="btn primary small" disabled={busy || !input.trim()}>Send</button>
       </form>
-    </section>
+    </aside>
   );
 }

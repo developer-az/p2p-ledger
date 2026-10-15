@@ -4,7 +4,8 @@ import { CompositeLedger, isLiveLedgerReachable, PracticeLedger } from './practi
 /** Shared API app for Node server, Vercel, and Vite dev middleware. */
 export function createAssistantApi() {
   const ledgerUrl = process.env.LEDGER_URL ?? 'http://localhost:8080';
-  const liveLedger = new HttpLedgerClient(ledgerUrl);
+  const timeoutMs = process.env.VERCEL === '1' ? 8_000 : 20_000;
+  const liveLedger = new HttpLedgerClient(ledgerUrl, timeoutMs);
   const practice = new PracticeLedger();
   const isLiveLedgerUp = () => isLiveLedgerReachable(ledgerUrl);
   const ledger = new CompositeLedger(liveLedger, practice, isLiveLedgerUp);

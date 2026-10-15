@@ -1,0 +1,84 @@
+openapi: 3.1.0
+info:
+  title: p2p-ledger assistant API
+  description: App integration layer over ledger-service (P2P UI + support chat).
+  version: 0.2.0
+servers:
+  - url: /api
+paths:
+  /health:
+    get:
+      summary: Health check
+  /bootstrap:
+    get:
+      summary: Live ledger status and practice fixture accounts
+  /accounts:
+    get:
+      summary: Get account view by id or list by owner
+      parameters:
+        - in: query
+          name: id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: owner
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 30 }
+    post:
+      summary: Create account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ownerId]
+              properties:
+                ownerId: { type: string }
+                currency: { type: string, default: USD }
+  /peers:
+    get:
+      summary: List peer accounts for transfers
+      parameters:
+        - in: query
+          name: accountId
+          required: true
+          schema: { type: string, format: uuid }
+  /accounts/{id}/deposits:
+    post:
+      summary: Deposit funds
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amountMinor]
+              properties:
+                amountMinor: { type: integer }
+  /transfers:
+    post:
+      summary: Send P2P transfer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceAccountId, destinationAccountId, amountMinor]
+              properties:
+                sourceAccountId: { type: string, format: uuid }
+                destinationAccountId: { type: string, format: uuid }
+                amountMinor: { type: integer }
+                currency: { type: string }
+                memo: { type: string }
+  /demo:
+    post:
+      summary: Seed demo accounts on live ledger
+  /chat:
+    post:
+      summary: Support chat (LLM + ledger tools)

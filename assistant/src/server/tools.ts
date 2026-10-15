@@ -176,13 +176,15 @@ export interface AccountSummary {
   received: string;
   /** Completed funding, last 30 days. */
   deposited: string;
+  /** Deposits + peer payments in, last 30 days. */
+  inflow: string;
   /** Outgoing payments the fraud rules stopped, last 30 days. */
   stopped: string;
   declinedCount: number;
 }
 
 /** Balance, a 30-day summary, and recent activity. Arithmetic stays in integer cents. */
-export async function loadAccountView(ledger: LedgerReader, accountId: string, limit = 8) {
+export async function loadAccountView(ledger: LedgerReader, accountId: string, limit = 30) {
   const account = await ledger.getAccount(accountId);
   if (!account || account.type !== 'USER') return null;
   const recent = await ledger.transfersForAccount(accountId, 50);
@@ -224,6 +226,7 @@ function summarize(transfers: Transfer[], accountId: string, currency: string): 
     sent: formatMoney(sent, currency),
     received: formatMoney(received, currency),
     deposited: formatMoney(deposited, currency),
+    inflow: formatMoney(deposited + received, currency),
     stopped: formatMoney(stopped, currency),
     declinedCount,
   };

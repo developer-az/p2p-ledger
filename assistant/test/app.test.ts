@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/server/app.js';
 import { LedgerError, type LedgerWriter } from '../src/server/ledger.js';
+import { CompositeLedger, PracticeLedger } from '../src/server/practice-ledger.js';
 import { ScriptedProvider } from '../src/server/providers/scripted.js';
 import { FixtureLedger, ME } from '../evals/fixture.js';
+
+const practice = new PracticeLedger();
 
 const writer: LedgerWriter = {
   openAccount: () => Promise.reject(new Error('read-only fixture')),
@@ -10,7 +13,8 @@ const writer: LedgerWriter = {
   transfer: () => Promise.reject(new Error('read-only fixture')),
 };
 const app = createApp({
-  ledger: Object.assign(new FixtureLedger(), writer),
+  ledger: new CompositeLedger(Object.assign(new FixtureLedger(), writer), practice, async () => false),
+  practice,
   provider: () => new ScriptedProvider([{ answer: 'Hello!' }]),
 });
 const chat = (body: unknown, ip = '1.1.1.1') => app.request('/api/chat', {
@@ -38,10 +42,12 @@ describe('GET /api/accounts/:id', () => {
   });
 
   it('says the ledger is waking when the upstream returns 502', async () => {
+    const asleepLive = Object.assign(new FixtureLedger(), writer, {
+      getAccount: () => Promise.reject(new LedgerError(502, 'bad gateway')),
+    });
     const asleep = createApp({
-      ledger: Object.assign(new FixtureLedger(), writer, {
-        getAccount: () => Promise.reject(new LedgerError(502, 'bad gateway')),
-      }),
+      ledger: new CompositeLedger(asleepLive, practice, async () => false),
+      practice,
       provider: () => new ScriptedProvider([{ answer: 'Hello!' }]),
     });
     const res = await asleep.request(`/api/accounts?id=${ME}`);
@@ -71,7 +77,8 @@ describe('POST /api/chat', () => {
 
   it('answers from the ledger when the model is out of quota', async () => {
     const limited = createApp({
-      ledger: Object.assign(new FixtureLedger(), writer),
+      ledger: new CompositeLedger(Object.assign(new FixtureLedger(), writer), practice, async () => false),
+      practice,
       provider: () => ({
         name: 'scripted',
         model: 'fake',

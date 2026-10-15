@@ -16,6 +16,7 @@ export interface AccountSummary {
   sent: string;
   received: string;
   deposited: string;
+  inflow: string;
   stopped: string;
   declinedCount: number;
 }
@@ -29,16 +30,46 @@ export interface AccountView {
   summary: AccountSummary;
   transfers: AccountActivity[];
 }
+
+export interface TransferResult {
+  id: string;
+  status: 'COMPLETED' | 'REJECTED';
+  rejectionReason: string | null;
+  amountMinor: number;
+  memo: string | null;
+}
+
 export interface ToolCall { tool: string; args: unknown; result: unknown; ms: number }
 export interface Turn { role: 'user' | 'assistant'; text: string; toolCalls?: ToolCall[]; model?: string }
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const waking = res.status === 502 || res.status === 503 || res.status === 504;
-    throw new Error(body.error ?? (waking ? 'The ledger is waking up. Try again in a moment.' : `Request failed (${res.status})`));
+const API_DOWN =
+  'Cannot reach the assistant API. Run: npm run dev (or npm run dev:stack with Docker).';
+
+function requestError(status: number, path: string, body: { error?: string }): string {
+  if (body.error) return body.error;
+  if (status === 502 || status === 504) return API_DOWN;
+  if (status === 503) {
+    if (path.includes('/demo')) {
+      return 'Live ledger not running. Start: npm run dev:stack — or use practice accounts offline.';
+    }
+    return body.error ?? 'Service unavailable.';
   }
+  return `Request failed (${status})`;
+}
+
+function idempotencyKey(): string {
+  return crypto.randomUUID();
+}
+
+async function call<T>(path: string, init?: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
+  } catch {
+    throw new Error(API_DOWN);
+  }
+  const body = await res.json().catch(() => ({})) as { error?: string };
+  if (!res.ok) throw new Error(requestError(res.status, path, body));
   return body as T;
 }
 
@@ -50,10 +81,45 @@ export interface StoppedPayment {
   reason: string | null;
 }
 
+export interface PracticeBootstrap {
+  mode: 'practice';
+  accounts: AccountRef[];
+  focusAccountId: string;
+  stoppedTransferId: string;
+  hint: string;
+}
+
+export interface BootstrapResponse {
+  live: boolean;
+  practice: PracticeBootstrap;
+}
+
 export const api = {
+  bootstrap: () => call<BootstrapResponse>('/api/bootstrap'),
   seedDemo: () => call<{ accounts: AccountRef[]; focusAccountId: string; stopped: StoppedPayment }>('/api/demo', { method: 'POST' }),
+  openAccount: (ownerId: string) =>
+    call<AccountRef>('/api/accounts', { method: 'POST', body: JSON.stringify({ ownerId, currency: 'USD' }) }),
   findAccounts: (owner: string) => call<AccountRef[]>(`/api/accounts?owner=${encodeURIComponent(owner)}`),
-  account: (id: string) => call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}`),
+  peers: (accountId: string) => call<AccountRef[]>(`/api/peers?accountId=${encodeURIComponent(accountId)}`),
+  account: (id: string, limit = 50) =>
+    call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}&limit=${limit}`),
+  deposit: (accountId: string, amountMinor: number) =>
+    call<TransferResult>(`/api/accounts/${encodeURIComponent(accountId)}/deposits`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey() },
+      body: JSON.stringify({ amountMinor }),
+    }),
+  transfer: (req: {
+    sourceAccountId: string;
+    destinationAccountId: string;
+    amountMinor: number;
+    memo?: string;
+  }) =>
+    call<TransferResult>('/api/transfers', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey() },
+      body: JSON.stringify({ ...req, currency: 'USD' }),
+    }),
   chat: (accountId: string, messages: Turn[]) =>
     call<{ answer: string; toolCalls: ToolCall[]; provider: string; model: string }>('/api/chat', {
       method: 'POST',

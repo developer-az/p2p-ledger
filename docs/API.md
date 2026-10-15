@@ -47,7 +47,7 @@ Implementation:
 - Ledger client: `assistant/src/server/ledger.ts`
 - Practice / composite ledger: `assistant/src/server/practice-ledger.ts`
 - Tool schemas + account math: `assistant/src/server/tools.ts`
-- Vercel entry: `assistant/api/[...path].ts` (native `/api/*` routing; SPA fallback only for non-API paths)
+- Vercel entry: `assistant/api/index.ts` (one function; `vercel.json` rewrites `/api/*` → `/api/index`)
 
 ### Practice vs live
 

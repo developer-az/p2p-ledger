@@ -2,9 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/server/app.js';
 import { CompositeLedger, PRACTICE_ALEX, PRACTICE_RENT_TRANSFER, PRACTICE_SAM, PracticeLedger } from '../src/server/practice-ledger.js';
 import { ScriptedProvider } from '../src/server/providers/scripted.js';
-import type { LedgerWriter } from '../src/server/ledger.js';
+import type { LedgerReader, LedgerWriter } from '../src/server/ledger.js';
 
-const rejectWriter: LedgerWriter = {
+const rejectLive: LedgerReader & LedgerWriter = {
+  getAccount: () => Promise.reject(new Error('live down')),
+  accountsByOwner: () => Promise.resolve([]),
+  getTransfer: () => Promise.reject(new Error('live down')),
+  transfersForAccount: () => Promise.resolve([]),
+  entries: () => Promise.resolve([]),
   openAccount: () => Promise.reject(new Error('live down')),
   deposit: () => Promise.reject(new Error('live down')),
   transfer: () => Promise.reject(new Error('live down')),
@@ -12,7 +17,7 @@ const rejectWriter: LedgerWriter = {
 
 describe('practice ledger', () => {
   const practice = new PracticeLedger();
-  const ledger = new CompositeLedger(rejectWriter, practice, async () => false);
+  const ledger = new CompositeLedger(rejectLive, practice, async () => false);
   const app = createApp({
     ledger,
     practice,

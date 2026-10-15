@@ -57,6 +57,17 @@ export async function answerFromLedger(opts: {
       : `Your balance is ${balance}. I don't see a recent payment from someone else.`);
   }
 
+  if (/income|money in|earned|paycheck|inflow|how much.*(made|brought)|deposited/.test(q)) {
+    const days = /month/.test(q) ? 30 : daysIn(q);
+    const sum = await call('summarize_activity', { days });
+    const dep = String(sum.totalDeposited);
+    const recv = String(sum.totalReceived);
+    const sent = String(sum.totalSent);
+    return finish(
+      `In the last ${String(sum.windowDays)} days you received ${dep} in deposits and ${recv} from people (${sent} sent out).`,
+    );
+  }
+
   if (/each person|sent to [a-z]|total amount|how much .*sent|\bi sent\b/.test(q)) {
     const days = /month/.test(q) ? 30 : daysIn(q);
     const sum = await call('summarize_activity', { days });
@@ -86,7 +97,14 @@ export async function answerFromLedger(opts: {
     return finish(`Your balance is ${String(overview.balance)}.`);
   }
 
-  return finish("I don't have that. I can read the balance, recent payments, and why a payment was declined.");
+  const days = 30;
+  const sum = await call('summarize_activity', { days });
+  const overview = await call('get_account_overview', {});
+  return finish(
+    `Balance ${String(overview.balance)}. Last ${days}d: ${String(sum.totalDeposited)} deposited, ` +
+    `${String(sum.totalReceived)} received, ${String(sum.totalSent)} sent. ` +
+    `Ask about income, spending, declines, or a specific payment.`,
+  );
 }
 
 function daysIn(q: string): number {

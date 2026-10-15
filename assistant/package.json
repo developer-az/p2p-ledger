@@ -7,7 +7,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "concurrently -k -n api,web \"tsx watch --env-file-if-exists=.env.local src/server/main.ts\" \"vite\"",
+    "dev": "vite",
+    "dev:stack": "concurrently -k -n ledger,ui -c blue,green \"docker compose -f ../docker-compose.yml up\" \"vite\"",
+    "dev:server": "tsx watch --env-file-if-exists=.env.local src/server/main.ts",
     "build": "tsc --noEmit && vite build",
     "start": "node --import tsx src/server/main.ts",
     "test": "vitest run",

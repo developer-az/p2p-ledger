@@ -44,3 +44,13 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       kafka: { condition: service_healthy }
+
+  # Full stack: UI + /api on :8787, proxies to ledger. For dev-only UI on :5173 use `cd assistant && npm run dev:stack`.
+  assistant:
+    build: ./assistant
+    environment:
+      LEDGER_URL: http://ledger:8080
+      PORT: 8787
+    ports: ["8787:8787"]
+    depends_on:
+      - ledger

@@ -7,9 +7,9 @@ concurrency:
 on:
   push:
     branches: [main]
-    paths: ["assistant/**", ".github/workflows/assistant-ci.yml"]
+    paths: ["assistant/**", "docs/API.md", "docs/GITHUB.md", ".github/workflows/assistant-ci.yml"]
   pull_request:
-    paths: ["assistant/**", ".github/workflows/assistant-ci.yml"]
+    paths: ["assistant/**", "docs/API.md", "docs/GITHUB.md", ".github/workflows/assistant-ci.yml"]
   workflow_dispatch:
 
 defaults:

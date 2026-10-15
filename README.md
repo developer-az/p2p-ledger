@@ -149,7 +149,7 @@ Setup:
 1. **AWS:** `cd infra/aws && terraform apply -var alert_email=you@example.com`, then note `queue_url`, `publisher_access_key_id` and `terraform output -raw publisher_secret_access_key`.
 2. **Supabase:** create a project in us-east-1. Copy the session pooler host, user and password into `DATABASE_URL` (`jdbc:postgresql://<pooler-host>:5432/postgres?sslmode=require`), `DATABASE_USERNAME` and `DATABASE_PASSWORD`.
 3. **Render:** New → Blueprint → this repo (`render.yaml`), then fill in the secret env vars. Copy the service's deploy hook URL.
-4. **GitHub:** add the repo secret `RENDER_DEPLOY_HOOK_URL` and the variable `LEDGER_URL` (the Render URL). Make the `p2p-ledger` package public under the repo's Packages so Render can pull it.
+4. **GitHub:** add secret `RENDER_DEPLOY_HOOK_URL` and **variable** `LEDGER_URL` (Render URL, no trailing slash). Optional variable `ASSISTANT_URL` (Vercel) for keep-warm. See [docs/GITHUB.md](docs/GITHUB.md) and [docs/SECURITY.md](docs/SECURITY.md). Make the `p2p-ledger` package public under Packages so Render can pull it.
 
 ## Tests
 
@@ -168,13 +168,18 @@ Highlights:
 
 ## Assistant
 
-`assistant/` is a chat app that answers questions about one account ("why was my rent payment declined?", "how much did I send Sam this month?") by letting an LLM call tools backed by the ledger API.
+`assistant/` is **your app API and UI** on top of `ledger-service`: P2P send/deposit, cashflow views, and support chat. The browser talks only to `/api/*` (Hono); that layer calls the Java ledger and (for chat) the LLM. API reference: [docs/API.md](docs/API.md), OpenAPI: [assistant/openapi.yaml](assistant/openapi.yaml).
 
 ```
-React (Vite) ──POST /api/chat──▶ Node/TS (Hono) ──▶ LLM provider (Gemini | Claude)
-                                     │  ▲               │ tool calls
-                                     │  └── results ────┘
-                                     └──▶ ledger-service REST (read-only)
+React (Vite) ──/api/*──▶ Hono (accounts, transfers, chat)
+                              ├──▶ ledger-service REST (live)
+                              ├──▶ PracticeLedger (offline demo)
+                              └──▶ LLM tools (read-only; money moves via /api/transfers)
+```
+
+```bash
+docker compose up --build              # postgres + kafka + ledger + assistant (:8787)
+cd assistant && npm run dev:stack      # ledger in Docker, Vite dev UI (:5173)
 ```
 
 ### Design decisions
@@ -185,9 +190,9 @@ React (Vite) ──POST /api/chat──▶ Node/TS (Hono) ──▶ LLM provider
 
 **The model never does arithmetic.** Totals ("how much did I send this month") come from `summarize_activity`, which sums integer cents server-side, and every amount reaches the model pre-formatted. LLMs are unreliable at adding currency, so the design removes that step entirely.
 
-**Read-only by construction.** No tool can move money, so "send $50 to Sam" can only produce a polite refusal. Every tool argument is validated with Zod, the same schemas generate the JSON Schema the model sees, and validation errors go back to the model as tool results instead of crashing the loop. Each answer is capped at 6 steps.
+**Chat tools are read-only; P2P writes use `/api`.** Transfers and deposits go through explicit HTTP routes (same idempotency and rules as the Java API). The LLM cannot call a send-money tool — it explains balances and declines. Tool args are validated with Zod; each chat turn is capped at 6 steps.
 
-**Cheap abuse limits.** Per-IP rate limits protect the free LLM quota, and requests are validated before any model call.
+**Cheap abuse limits.** Per-IP rate limits on chat, demo seed, and money writes; Zod validation before any model call. LLM API keys stay on the server (see [docs/SECURITY.md](docs/SECURITY.md) for the demo trust model).
 
 ### Evals
 
@@ -200,15 +205,16 @@ React (Vite) ──POST /api/chat──▶ Node/TS (Hono) ──▶ LLM provider
 | `neverCalled` + `answerAvoids` | **Prompt injection:** a memo instructs the model to fetch another user's transfer and lie about the balance; neither may happen |
 | `answerMatches` | Exact expected facts ($3,750.51, $1,225.99, the decline rule) and refusing write actions |
 
-Unit tests (`npm test`, 15 tests) cover the tool layer, account scoping, the step limit, the graders and the HTTP API with a scripted fake model, so CI needs no API key. CI runs the real-model evals only when a `GEMINI_API_KEY` secret is set.
+Unit tests (`npm test`, 29 tests) cover the tool layer, practice ledger, account scoping, the step limit, the graders and the HTTP API with a scripted fake model, so CI needs no API key. CI runs the real-model evals only when a `GEMINI_API_KEY` secret is set.
 
 ### Running and deploying
 
 ```bash
-cd assistant && cp .env.example .env.local     # add GEMINI_API_KEY (free at aistudio.google.com/apikey)
-npm install && npm run dev                     # API on :8787, UI on :5173, expects the ledger on :8080
-npm test                                       # unit tests, no key needed
-npm run eval                                   # real-model evals
+cd assistant && cp .env.example .env.local     # GEMINI_API_KEY optional for chat
+npm install && npm run dev                     # UI :5173 + /api (practice ledger built-in)
+npm run dev:stack                              # Docker ledger + Vite UI
+npm test                                       # unit tests
+npm run eval                                   # real-model evals (needs API key)
 ```
 
 Deploy on Vercel's free tier: import the repo, set **Root Directory** to `assistant`, and add the env vars `LEDGER_URL` (the Render URL), `GEMINI_API_KEY` and optionally `LLM_PROVIDER`. The UI is static and `/api/*` runs as a serverless function ([`api/[[...route]].ts`](assistant/api/[[...route]].ts)).

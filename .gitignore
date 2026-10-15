@@ -5,11 +5,17 @@ dist/
 *.iml
 .vscode/
 .DS_Store
+Thumbs.db
 .env
 .env.*
 !.env.example
+*.pem
+*.p12
+credentials.json
+**/secrets.json
 .terraform/
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
 evals/results/
+assistant/evals/results/

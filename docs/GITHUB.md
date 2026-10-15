@@ -14,7 +14,7 @@ This repo is designed to run as **your** stack: Java ledger (source of truth) + 
 | Name | Type | Purpose |
 |------|------|---------|
 | `ASSISTANT_URL` | **Variable** | Vercel (or other) deployment of `assistant/`. Keep-warm pings `/api/health`. |
-| `GEMINI_API_KEY` | **Secret** | Enables real-model evals in assistant CI on `main`. |
+| `GEMINI_API_KEY` | **Secret** | Vercel chat + optional **assistant eval (Gemini)** workflow (manual only; not run on every push). |
 
 ### Set `LEDGER_URL`
 
@@ -33,9 +33,17 @@ If keep-warm was **skipped** before, it was because this variable was empty. The
 | Workflow | Triggers | What it does |
 |----------|----------|----------------|
 | `ledger-ci.yml` | `ledger-service/`, `infra/` | Tests, Terraform validate, native build, GHCR push, Render deploy |
-| `assistant-ci.yml` | `assistant/` | Typecheck, unit tests, Vite build, optional Gemini evals |
+| `assistant-ci.yml` | `assistant/` | Typecheck, unit tests, Vite build |
+| `assistant-eval.yml` | Manual | Real-model evals when Gemini quota allows (workflow_dispatch) |
 | `keep-warm.yml` | Cron every 10 min | `GET {LEDGER_URL}/actuator/health`, optional assistant health |
 
 ## Forks
 
-Forks without secrets skip Render deploy and evals by design. Keep-warm still needs `LEDGER_URL` if you want cron pings for **your** deployment.
+Forks without secrets skip Render deploy by design. Keep-warm still needs `LEDGER_URL` if you want cron pings for **your** deployment.
+
+### Run Gemini evals (free tier)
+
+Push/PR **assistant CI** does not call Gemini (daily quota is too small to burn on every commit). When quota has reset:
+
+1. **Actions** → **assistant eval (Gemini)** → **Run workflow**
+2. Leave `case_ids` empty for the default 4-case smoke, or run all 8 locally: `cd assistant && TRIALS=1 npm run eval`

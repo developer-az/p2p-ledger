@@ -4,6 +4,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
+    "api/health.ts": { "maxDuration": 10 },
     "api/**/*.ts": { "maxDuration": 60 }
   },
   "rewrites": [

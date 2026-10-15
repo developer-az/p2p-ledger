@@ -63,8 +63,15 @@ export function createApp(deps: {
   app.get('/health', (c) => c.json({ status: 'ok' }));
 
   app.get('/bootstrap', async (c) => {
-    const live = deps.isLiveLedgerUp ? await deps.isLiveLedgerUp() : false;
-    return c.json({ live, practice: deps.practice.bootstrap() });
+    const practice = deps.practice.bootstrap();
+    let live = false;
+    if (deps.isLiveLedgerUp) {
+      live = await Promise.race([
+        deps.isLiveLedgerUp(),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2_000)),
+      ]);
+    }
+    return c.json({ live, practice });
   });
 
   app.get('/accounts', async (c) => {

@@ -1,16 +1,63 @@
-# Render's free tier spins an idle service down after ~15 minutes, and the next visitor
-# waits for it to come back. A ping every 10 minutes keeps the demo instant; one service
-# running all month stays within Render's 750 free instance-hours.
+# Keeps the Render ledger (and optional Vercel assistant) awake on the free tier.
+# Configure repository Variables (Settings → Actions → Variables):
+#   LEDGER_URL     — e.g. https://p2p-ledger.onrender.com (no trailing slash)
+#   ASSISTANT_URL  — optional, e.g. https://your-app.vercel.app
 name: keep-warm
 
 on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch:
+    inputs:
+      ledger_url:
+        description: "Override ledger base URL for this run (optional)"
+        required: false
+        type: string
+      assistant_url:
+        description: "Override assistant base URL for this run (optional)"
+        required: false
+        type: string
 
 jobs:
   ping:
     runs-on: ubuntu-latest
-    if: vars.LEDGER_URL != ''
     steps:
-      - run: curl -fsS --max-time 60 "${{ vars.LEDGER_URL }}/actuator/health"
+      - name: Resolve endpoints
+        id: endpoints
+        env:
+          VAR_LEDGER: ${{ vars.LEDGER_URL }}
+          VAR_ASSISTANT: ${{ vars.ASSISTANT_URL }}
+          INPUT_LEDGER: ${{ inputs.ledger_url }}
+          INPUT_ASSISTANT: ${{ inputs.assistant_url }}
+        run: |
+          LEDGER="${INPUT_LEDGER:-$VAR_LEDGER}"
+          ASSISTANT="${INPUT_ASSISTANT:-$VAR_ASSISTANT}"
+          if [ -z "$LEDGER" ]; then
+            echo "::error title=Keep-warm not configured::Set repository variable LEDGER_URL to your Render ledger URL (see docs/GITHUB.md)."
+            exit 1
+          fi
+          echo "ledger=$LEDGER" >> "$GITHUB_OUTPUT"
+          echo "assistant=$ASSISTANT" >> "$GITHUB_OUTPUT"
+          echo "Using ledger: $LEDGER"
+          [ -n "$ASSISTANT" ] && echo "Using assistant: $ASSISTANT"
+
+      - name: Ping ledger-service
+        run: |
+          curl -fsS --retry 3 --retry-delay 5 --max-time 90 \
+            "${{ steps.endpoints.outputs.ledger }}/actuator/health"
+          echo "ledger OK"
+
+      - name: Ping assistant API
+        if: steps.endpoints.outputs.assistant != ''
+        run: |
+          curl -fsS --retry 2 --retry-delay 3 --max-time 60 \
+            "${{ steps.endpoints.outputs.assistant }}/api/health"
+          echo "assistant OK"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Keep-warm"
+            echo "- Ledger: ${{ steps.endpoints.outputs.ledger }}"
+            echo "- Assistant: ${{ steps.endpoints.outputs.assistant || 'not configured' }}"
+          } >> "$GITHUB_STEP_SUMMARY"

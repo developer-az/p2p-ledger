@@ -51,7 +51,8 @@ export function createApp(deps: {
   practice: PracticeLedger;
   liveLedger?: LedgerWriter;
   isLiveLedgerUp?: () => Promise<boolean>;
-  provider: () => LlmProvider;
+  /** Tests inject a fake model; production loads Gemini/Claude on first chat only. */
+  provider?: () => LlmProvider;
 }) {
   const app = new Hono().basePath('/api');
   const allowChat = rateLimiter(20, 60_000);
@@ -152,7 +153,12 @@ export function createApp(deps: {
     if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
     let provider: LlmProvider;
     try {
-      provider = deps.provider();
+      if (deps.provider) {
+        provider = deps.provider();
+      } else {
+        const { providerFromEnv } = await import('./providers/index.js');
+        provider = providerFromEnv();
+      }
     } catch (e) {
       console.error(e);
       const question = messages.at(-1)?.text ?? '';

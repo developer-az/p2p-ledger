@@ -24,6 +24,7 @@ export interface PaymentTrail {
   from: string;
   to: string;
   decline: { code: string; explanation: string | null } | null;
+  audited: boolean;
   request: { method: string; path: string; idempotencyKey: string; requestHash: string; body: Record<string, unknown> };
   legs: { entryId: number; account: string; side: 'debit' | 'credit'; amount: string; balanceAfter: string }[];
   legsSum: string;

@@ -69,7 +69,16 @@ export function createApp(deps: { ledger: LedgerReader & LedgerWriter & LedgerAu
     return trail ? c.json(trail) : c.json({ error: 'Payment not found' }, 404);
   });
 
-  app.get('/integrity', async (c) => c.json(await booksCheck(deps.ledger)));
+  app.get('/integrity', async (c) => {
+    try {
+      return c.json(await booksCheck(deps.ledger));
+    } catch (e) {
+      if (e instanceof LedgerError && e.status === 404) {
+        return c.json({ error: 'Reconciliation is not on the deployed ledger build yet.', code: 'LEDGER_OUTDATED' }, 503);
+      }
+      throw e;
+    }
+  });
 
   app.post('/replay', async (c) => {
     if (!allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);

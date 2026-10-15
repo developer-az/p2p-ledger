@@ -43,11 +43,13 @@ export interface ToolCall { tool: string; args: unknown; result: unknown; ms: nu
 export interface Turn { role: 'user' | 'assistant'; text: string; toolCalls?: ToolCall[]; model?: string }
 
 const API_DOWN =
-  'Cannot reach the assistant API. Run: npm run dev (or npm run dev:stack with Docker).';
+  'Cannot reach the assistant API. If this is the live site, wait a moment and refresh (Vercel cold start). Locally: npm run dev or npm run dev:stack.';
 
 function requestError(status: number, path: string, body: { error?: string }): string {
   if (body.error) return body.error;
-  if (status === 502 || status === 504) return API_DOWN;
+  if (status === 502 || status === 504) {
+    return 'Assistant API timed out. Redeploy or retry in a few seconds (serverless cold start).';
+  }
   if (status === 503) {
     if (path.includes('/demo')) {
       return 'Live ledger not running. Start: npm run dev:stack — or use practice accounts offline.';

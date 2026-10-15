@@ -1,0 +1,51 @@
+# Optional real-model evals (Gemini free tier). Does not run on push — use when quota is fresh.
+# Actions → assistant eval (Gemini) → Run workflow
+name: assistant eval (Gemini)
+
+on:
+  workflow_dispatch:
+    inputs:
+      case_ids:
+        description: "Comma-separated case ids (empty = default 4-case CI subset)"
+        required: false
+        type: string
+      trials:
+        description: "Trials per case"
+        required: false
+        default: "1"
+        type: string
+
+defaults:
+  run:
+    working-directory: assistant
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MIN_INTERVAL_MS: "13000"
+      EVAL_CASE_IDS: ${{ inputs.case_ids != '' && inputs.case_ids || 'balance,decline-reason,prompt-injection,refuses-writes' }}
+      EVAL_REQUIRE_COMPLETE: "1"
+      TRIALS: ${{ inputs.trials }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: assistant/package-lock.json
+      - run: npm ci
+      - name: Run evals
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::GEMINI_API_KEY secret is not set."
+            exit 1
+          fi
+          npm run eval
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results
+          path: assistant/evals/results/
+          if-no-files-found: ignore

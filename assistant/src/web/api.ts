@@ -10,13 +10,76 @@ export interface AccountActivity {
   declineExplanation: string | null;
   memo: string | null;
   createdAt: string;
+  counterpartyAccountId: string;
+  kind: 'TRANSFER' | 'DEPOSIT';
+}
+
+export interface PaymentTrail {
+  transferId: string;
+  kind: 'TRANSFER' | 'DEPOSIT';
+  status: 'COMPLETED' | 'REJECTED';
+  amount: string;
+  memo: string | null;
+  createdAt: string;
+  from: string;
+  to: string;
+  decline: { code: string; explanation: string | null } | null;
+  audited: boolean;
+  request: { method: string; path: string; idempotencyKey: string; requestHash: string; body: Record<string, unknown> };
+  legs: { entryId: number; account: string; side: 'debit' | 'credit'; amount: string; balanceAfter: string }[];
+  legsSum: string;
+  events: { eventId: string; type: string; createdAt: string; publishedAt: string | null; deliveryMs: number | null }[];
+}
+
+export interface ReplayResult {
+  idempotencyKey: string;
+  httpStatus: number;
+  replayed: boolean;
+  sameTransfer: boolean;
+  status: 'COMPLETED' | 'REJECTED';
+  entriesBefore: number;
+  entriesAfter: number;
+  balanceBefore: string;
+  balanceAfter: string;
+}
+
+export interface RaceResult {
+  idempotencyKey: string;
+  from: string;
+  amount: string;
+  copies: number;
+  attempts: { httpStatus: number; replayed: boolean; transferId: string; status: string; ms: number }[];
+  distinctTransfers: number;
+  transferId: string | null;
+  status: 'COMPLETED' | 'REJECTED' | null;
+  entriesPosted: number | null;
+  declineExplanation: string | null;
+}
+
+export interface TamperReport {
+  transferId: string;
+  attempts: { attempt: string; sql: string; refused: boolean; databaseSaid: string }[];
+}
+
+export interface Integrity {
+  checkedAt: string;
+  entryCount: number;
+  entriesSum: string;
+  transferCount: number;
+  unbalancedTransfers: number;
+  rejectedWithEntries: number;
+  accountCount: number;
+  accountsDrifted: number;
+  outbox: { total: number; pending: number; oldestPendingAt: string | null; p95DeliveryMs: number | null };
+  balanced: boolean;
+  source?: 'live' | 'practice';
 }
 
 export interface AccountSummary {
   sent: string;
   received: string;
   deposited: string;
-  inflow: string;
+  inflow?: string;
   stopped: string;
   declinedCount: number;
 }
@@ -31,31 +94,39 @@ export interface AccountView {
   transfers: AccountActivity[];
 }
 
-export interface RaceAttempt {
-  copy: number;
-  httpStatus: number;
+export interface LedgerEntryRow {
+  id: number;
   transferId: string;
-  status: 'COMPLETED' | 'REJECTED';
-  ms: number;
-  outcome: 'admitted' | 'deduplicated';
-}
-
-export interface RaceResult {
-  copies: number;
-  distinctTransfers: number;
-  transferId: string | null;
-  amount: string;
-  from: string;
-  attempts: RaceAttempt[];
-  wallMs: number;
-}
-
-export interface TransferResult {
-  id: string;
-  status: 'COMPLETED' | 'REJECTED';
-  rejectionReason: string | null;
+  accountId: string;
   amountMinor: number;
-  memo: string | null;
+  balanceAfterMinor: number;
+  createdAt: string;
+}
+
+export interface PracticeBootstrapAccount extends AccountRef {
+  role: string;
+  blurb: string;
+}
+
+export interface PracticeBootstrap {
+  mode: 'practice';
+  accounts: PracticeBootstrapAccount[];
+  focusAccountId: string;
+  stoppedTransferId: string;
+  hint: string;
+}
+
+export interface BootstrapResponse {
+  live: boolean;
+  practice: PracticeBootstrap;
+  ledger?: {
+    engine: string;
+    apiVersion: string;
+    capabilities: string[];
+    persistence?: string;
+    auditCapabilities?: boolean;
+  };
+  chat?: { provider: string; configured: boolean };
 }
 
 export interface ToolCall { tool: string; args: unknown; result: unknown; ms: number }
@@ -70,10 +141,13 @@ export interface Turn {
 const API_DOWN =
   'Cannot reach the assistant API. If this is the live site, wait a moment and refresh (Vercel cold start). Locally: npm run dev or npm run dev:stack.';
 
-function requestError(status: number, path: string, body: { error?: string }): string {
+function requestError(status: number, path: string, body: { error?: string; code?: string }): string {
   if (body.error) return body.error;
   if (status === 502 || status === 504) {
     return 'Assistant API timed out. Redeploy or retry in a few seconds (serverless cold start).';
+  }
+  if (status === 503 && body.code === 'LEDGER_OUTDATED') {
+    return body.error ?? 'Ledger on Render needs redeploy from this branch for full audit APIs.';
   }
   if (status === 503) {
     if (path.includes('/demo')) {
@@ -95,7 +169,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     throw new Error(API_DOWN);
   }
-  const body = await res.json().catch(() => ({})) as { error?: string };
+  const body = await res.json().catch(() => ({})) as { error?: string; code?: string };
   if (!res.ok) throw new Error(requestError(res.status, path, body));
   return body as T;
 }
@@ -108,78 +182,27 @@ export interface StoppedPayment {
   reason: string | null;
 }
 
-export interface PracticeBootstrapAccount extends AccountRef {
-  role: string;
-  blurb: string;
-}
-
-export interface PracticeBootstrap {
-  mode: 'practice';
-  accounts: PracticeBootstrapAccount[];
-  focusAccountId: string;
-  stoppedTransferId: string;
-  hint: string;
-}
-
-export interface LedgerMeta {
-  engine: string;
-  apiVersion: string;
-  capabilities: string[];
-}
-
-export interface LedgerEntryRow {
-  id: number;
-  transferId: string;
-  accountId: string;
-  amountMinor: number;
-  balanceAfterMinor: number;
-  createdAt: string;
-}
-
-export interface BootstrapResponse {
-  live: boolean;
-  practice: PracticeBootstrap;
-  ledger?: LedgerMeta & { persistence?: string };
-  chat?: { provider: string; configured: boolean };
-}
-
 export const api = {
   bootstrap: () => call<BootstrapResponse>('/api/bootstrap'),
   seedDemo: () => call<{ accounts: AccountRef[]; focusAccountId: string; stopped: StoppedPayment }>('/api/demo', { method: 'POST' }),
+  findAccounts: (owner: string) => call<AccountRef[]>(`/api/accounts?owner=${encodeURIComponent(owner)}`),
   openAccount: (ownerId: string) =>
     call<AccountRef>('/api/accounts', { method: 'POST', body: JSON.stringify({ ownerId, currency: 'USD' }) }),
-  findAccounts: (owner: string) => call<AccountRef[]>(`/api/accounts?owner=${encodeURIComponent(owner)}`),
-  peers: (accountId: string) => call<AccountRef[]>(`/api/peers?accountId=${encodeURIComponent(accountId)}`),
   account: (id: string, limit = 50) =>
     call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}&limit=${limit}`),
   entries: (accountId: string, limit = 50) =>
     call<{ accountId: string; currency: string; entries: LedgerEntryRow[] }>(
       `/api/accounts/${encodeURIComponent(accountId)}/entries?limit=${limit}`,
     ),
-  statementDownloadUrl: (accountId: string) =>
-    `/api/accounts/${encodeURIComponent(accountId)}/statement.txt`,
-  deposit: (accountId: string, amountMinor: number) =>
-    call<TransferResult>(`/api/accounts/${encodeURIComponent(accountId)}/deposits`, {
-      method: 'POST',
-      headers: { 'Idempotency-Key': idempotencyKey() },
-      body: JSON.stringify({ amountMinor }),
-    }),
+  trail: (accountId: string, transferId: string) =>
+    call<PaymentTrail>(`/api/trail?account=${encodeURIComponent(accountId)}&transfer=${encodeURIComponent(transferId)}`),
+  integrity: () => call<Integrity>('/api/integrity'),
+  replay: (accountId: string, transferId: string) =>
+    call<ReplayResult>('/api/replay', { method: 'POST', body: JSON.stringify({ accountId, transferId }) }),
   race: (accountId: string, fromAccountId: string) =>
-    call<RaceResult>('/api/race', {
-      method: 'POST',
-      body: JSON.stringify({ accountId, fromAccountId }),
-    }),
-  transfer: (req: {
-    sourceAccountId: string;
-    destinationAccountId: string;
-    amountMinor: number;
-    memo?: string;
-  }) =>
-    call<TransferResult>('/api/transfers', {
-      method: 'POST',
-      headers: { 'Idempotency-Key': idempotencyKey() },
-      body: JSON.stringify({ ...req, currency: 'USD' }),
-    }),
+    call<RaceResult>('/api/race', { method: 'POST', body: JSON.stringify({ accountId, fromAccountId }) }),
+  tamper: (accountId: string, transferId: string) =>
+    call<TamperReport>('/api/tamper', { method: 'POST', body: JSON.stringify({ accountId, transferId }) }),
   chat: (accountId: string, messages: Turn[]) =>
     call<{ answer: string; toolCalls: ToolCall[]; provider: string; model: string }>('/api/chat', {
       method: 'POST',

@@ -63,7 +63,7 @@ export function TerminalAssistant({
   }
 
   return (
-    <aside className="pane terminal-aside" aria-label="Support terminal">
+    <aside className="chat pane terminal-aside" aria-label="Support terminal">
       <div className="pane-hd">
         <strong>support@ledger</strong> · read-only · {owner}
         <span className="route-pill">

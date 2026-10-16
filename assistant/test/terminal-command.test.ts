@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseTerminalInput } from '../src/web/terminal-command.js';
+import { parseTerminalInput, splitAmountsMinor } from '../src/web/terminal-command.js';
 
 describe('parseTerminalInput', () => {
   it('maps function keys and help', () => {
@@ -27,8 +27,31 @@ describe('parseTerminalInput', () => {
     expect(parseTerminalInput(':deposit 50')).toEqual({ kind: 'deposit', amount: '50' });
   });
 
-  it('maps peer focus and split bill pay', () => {
+  it('maps peer focus', () => {
     expect(parseTerminalInput('peer sam')).toEqual({ kind: 'peer', owner: 'sam' });
-    expect(parseTerminalInput('split 50 sam dinner')).toEqual({ kind: 'pay', args: 'sam 25.00 dinner' });
+  });
+
+  it('maps split bill across one peer', () => {
+    expect(parseTerminalInput('split 50 sam dinner')).toEqual({
+      kind: 'split',
+      totalMinor: 5000,
+      peers: ['sam'],
+      memo: 'dinner',
+    });
+  });
+
+  it('maps split with dollar sign and multiple peers', () => {
+    expect(parseTerminalInput('split $60 sam jordan lunch')).toEqual({
+      kind: 'split',
+      totalMinor: 6000,
+      peers: ['sam', 'jordan'],
+      memo: 'lunch',
+    });
+  });
+});
+
+describe('splitAmountsMinor', () => {
+  it('distributes remainder to last peer', () => {
+    expect(splitAmountsMinor(100, 3)).toEqual([33, 33, 34]);
   });
 });

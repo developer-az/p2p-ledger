@@ -7,7 +7,7 @@ export type TerminalAction =
   | { kind: 'race' }
   | { kind: 'deposit'; amount: string }
   | { kind: 'pay'; args: string }
-  | { kind: 'split'; total: string; args: string }
+  | { kind: 'split'; totalMinor: number; peers: string[]; memo: string }
   | { kind: 'peer'; owner: string }
   | { kind: 'peers' }
   | { kind: 'bank-in' }
@@ -47,17 +47,32 @@ export function parseTerminalInput(raw: string): TerminalAction {
   if (lower.startsWith(':peer ')) return { kind: 'peer', owner: line.slice(6).trim() };
   if (lower.startsWith('peer ')) return { kind: 'peer', owner: line.slice(5).trim() };
 
-  const split = /^split\s+(\S+)\s+(\S+)(?:\s+(.+))?$/i.exec(line);
-  const splitTotal = split?.[1];
-  const splitPeer = split?.[2];
-  if (splitTotal && splitPeer) {
-    const half = Number(splitTotal.replace(/[$,]/g, ''));
-    if (Number.isFinite(half) && half > 0) {
-      const each = (half / 2).toFixed(2);
-      const memo = split[3]?.trim() || 'split';
-      return { kind: 'pay', args: `${splitPeer} ${each} ${memo}` };
+  const splitLine = /^split\s+(\S+)\s+(.+)$/i.exec(line);
+  if (splitLine) {
+    const total = Number(splitLine[1].replace(/[$,]/g, ''));
+    if (Number.isFinite(total) && total > 0) {
+      const tokens = splitLine[2].trim().split(/\s+/).filter(Boolean);
+      if (tokens.length >= 1) {
+        const memo = tokens.length > 1 ? tokens[tokens.length - 1]! : 'split';
+        const peerTokens = tokens.length > 1 ? tokens.slice(0, -1) : tokens;
+        const peers = peerTokens.map((t) => t.toLowerCase()).slice(0, 8);
+        return {
+          kind: 'split',
+          totalMinor: Math.round(total * 100),
+          peers,
+          memo,
+        };
+      }
     }
   }
 
   return { kind: 'chat', text: line };
+}
+
+/** Split total cents across N peers (last peer gets rounding remainder). */
+export function splitAmountsMinor(totalMinor: number, peerCount: number): number[] {
+  if (peerCount <= 0) return [];
+  const base = Math.floor(totalMinor / peerCount);
+  const remainder = totalMinor - base * peerCount;
+  return Array.from({ length: peerCount }, (_, i) => base + (i === peerCount - 1 ? remainder : 0));
 }

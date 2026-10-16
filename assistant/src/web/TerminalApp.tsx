@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useRef,
@@ -24,6 +25,17 @@ import {
 import { OFFLINE_BOOTSTRAP } from './practice-fixture.js';
 import { PeerPanel } from './PeerPanel.js';
 import { parseTerminalInput } from './terminal-command.js';
+import {
+  deleteConfirmSkipped,
+  loadHiddenTransfers,
+  saveHiddenTransfers,
+  setDeleteConfirmSkip,
+} from './blotter-store.js';
+import {
+  downloadStatementTxt,
+  integrityLegend,
+  printStatementPdf,
+} from './integrity-display.js';
 import { loadSavedWallets, rememberWallet } from './wallet-store.js';
 
 const REPO = 'https://github.com/developer-az/p2p-ledger';
@@ -72,6 +84,9 @@ export function TerminalApp() {
   const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [clock, setClock] = useState(() => new Date());
+  const [hiddenTransferIds, setHiddenTransferIds] = useState<Set<string>>(() => new Set());
+  const [pendingHideId, setPendingHideId] = useState<string | null>(null);
+  const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false);
 
   const append = useCallback((line: string) => {
     const ts = new Date().toISOString().slice(11, 19);
@@ -90,6 +105,10 @@ export function TerminalApp() {
       append(`BOOT live=${b.live} audit=${b.ledger?.auditCapabilities ? 'POSTGRES' : 'PENDING'}`);
     }).catch(() => setBoot(OFFLINE_BOOTSTRAP));
   }, [append]);
+
+  useEffect(() => {
+    if (account) setHiddenTransferIds(loadHiddenTransfers(account.id));
+  }, [account?.id]);
 
   const chatMeta = boot.chat ?? { provider: 'gemini', configured: false };
 
@@ -500,13 +519,44 @@ export function TerminalApp() {
   const saved = loadSavedWallets().filter((w) => w.live);
   const selectedPeer = peers.find((p) => p.id === selectedPeerId) ?? null;
   const allTransfers = view ? orderStoppedFirst(view.transfers, stoppedTransferId) : [];
-  const transfers = selectedPeer
+  const transfers = (selectedPeer
     ? allTransfers.filter((t) =>
       t.counterpartyAccountId === selectedPeer.id
       || t.counterparty === selectedPeer.owner
       || t.counterparty.startsWith(selectedPeer.owner.split('-')[0] ?? ''),
     )
-    : allTransfers;
+    : allTransfers).filter((t) => !hiddenTransferIds.has(t.transferId));
+
+  function hideTransferFromBlotter(transferId: string) {
+    if (!account) return;
+    const next = new Set(hiddenTransferIds);
+    next.add(transferId);
+    setHiddenTransferIds(next);
+    saveHiddenTransfers(account.id, next);
+    if (selectedPay === transferId) {
+      setSelectedPay(null);
+      setTrail(null);
+      setReplay(null);
+      setTamper(null);
+    }
+    setPendingHideId(null);
+    append(`HIDE ${shortId(transferId)} (demo view only — real ledger stays append-only)`);
+  }
+
+  function requestHideTransfer(transferId: string) {
+    if (deleteConfirmSkipped()) {
+      hideTransferFromBlotter(transferId);
+      return;
+    }
+    setPendingHideId(transferId);
+    setSkipDeleteConfirm(false);
+  }
+
+  function confirmHideTransfer() {
+    if (!pendingHideId) return;
+    if (skipDeleteConfirm) setDeleteConfirmSkip(1);
+    hideTransferFromBlotter(pendingHideId);
+  }
   const bilateral = selectedPeer ? transfers : [];
   const liveTag = boot.live ? 'LIVE' : 'OFFLINE';
   const auditTag = boot.ledger?.auditCapabilities ? 'AUDIT OK' : 'AUDIT PENDING';
@@ -570,6 +620,13 @@ export function TerminalApp() {
                 <tr><td className="bb-k">STOPPED</td><td>{view.summary.stopped}</td></tr>
               </tbody>
             </table>
+            <div className="bb-actions">
+              <BbLink onClick={() => downloadStatementTxt(account.id)} disabled={busy !== ''}>DL TXT</BbLink>
+              <BbLink onClick={() => void printStatementPdf(account.id).catch((e) => append(`ERR ${(e as Error).message}`))} disabled={busy !== ''}>
+                PRINT PDF
+              </BbLink>
+              <BbLink onClick={() => void loadAccount(account.id)} disabled={busy !== ''}>REFRESH</BbLink>
+            </div>
             <h3 className="bb-subhd">PEERS · P2P WALLETS</h3>
             {peers.length === 0
               ? <p className="bb-dim">None yet — ONBOARD or receive a payment.</p>
@@ -624,59 +681,86 @@ export function TerminalApp() {
                   <tr><td colSpan={5} className="bb-dim">No movements — :deposit 500 or F2 ONBOARD</td></tr>
                 )}
                 {transfers.map((t) => (
-                  <tr
-                    key={t.transferId}
-                    className={selectedPay === t.transferId ? 'bb-row-on' : undefined}
-                    onClick={() => void pickPayment(t.transferId)}
-                  >
-                    <td>{when(t.createdAt)}</td>
-                    <td>{t.memo || '—'}</td>
-                    <td>{t.direction === 'deposit' ? 'BANK' : personName(t.counterparty)}</td>
-                    <td title={t.declineExplanation ?? undefined}>
-                      {t.status === 'REJECTED' ? `REJ${t.declineReason ? `·${t.declineReason.slice(0, 12)}` : ''}` : 'OK'}
-                    </td>
-                    <td className="bb-r">{t.amount}</td>
-                  </tr>
+                  <Fragment key={t.transferId}>
+                    <tr
+                      className={selectedPay === t.transferId ? 'bb-row-on' : undefined}
+                      onClick={() => void pickPayment(t.transferId)}
+                    >
+                      <td>{when(t.createdAt)}</td>
+                      <td>{t.memo || '—'}</td>
+                      <td>{t.direction === 'deposit' ? 'BANK' : personName(t.counterparty)}</td>
+                      <td title={t.declineExplanation ?? t.declineReason ?? undefined}>
+                        {t.status === 'REJECTED' ? `REJ${t.declineReason ? `·${t.declineReason.slice(0, 12)}` : ''}` : 'OK'}
+                      </td>
+                      <td className="bb-r">{t.amount}</td>
+                    </tr>
+                    {selectedPay === t.transferId && trail && (
+                      <tr className="bb-detail-row">
+                        <td colSpan={5}>
+                          <div className="bb-detail bb-detail-inline">
+                            <p className="bb-mono">{trail.from} → {trail.to} · {trail.amount} · {trail.status}</p>
+                            {trail.status === 'REJECTED' && trail.decline && (
+                              <p className="bb-warn">
+                                {trail.decline.code}: {trail.decline.explanation ?? 'Declined by fraud rules.'}
+                              </p>
+                            )}
+                            {trail.status === 'REJECTED' && trail.legs.length === 0 && (
+                              <p className="bb-dim">No ledger entries — the rule ran before any money moved.</p>
+                            )}
+                            <pre className="bb-pre">{trail.legs.map((l) =>
+                              `#${l.entryId} ${l.account} ${l.side} ${l.amount}`,
+                            ).join('\n') || (trail.status === 'REJECTED' ? '' : '(no entries)')}</pre>
+                            <p className="bb-actions">
+                              {trail.audited && (
+                                <>
+                                  <BbLink onClick={() => account && void api.replay(account.id, t.transferId).then((r) => {
+                                    setReplay(r);
+                                    append(`REPLAY ${r.httpStatus}`);
+                                  })} disabled={busy !== ''}>REPLAY</BbLink>
+                                  {trail.status === 'COMPLETED' && (
+                                    <>
+                                      {' · '}
+                                      <BbLink onClick={() => account && void api.tamper(account.id, t.transferId).then((r) => {
+                                        setTamper(r);
+                                        append('TAMPER checks');
+                                      })} disabled={busy !== ''}>TAMPER</BbLink>
+                                    </>
+                                  )}
+                                  {' · '}
+                                </>
+                              )}
+                              <BbLink onClick={() => requestHideTransfer(t.transferId)} disabled={busy !== ''}>HIDE</BbLink>
+                            </p>
+                            {pendingHideId === t.transferId && (
+                              <div className="bb-confirm">
+                                <p>Hide this line from your blotter? On a real ledger you could never delete money — only append corrections.</p>
+                                <label className="bb-check">
+                                  <input
+                                    type="checkbox"
+                                    checked={skipDeleteConfirm}
+                                    onChange={(e) => setSkipDeleteConfirm(e.target.checked)}
+                                  />
+                                  Don&apos;t ask again for 1 minute
+                                </label>
+                                <p className="bb-actions">
+                                  <BbLink onClick={confirmHideTransfer}>Yes, hide</BbLink>
+                                  {' · '}
+                                  <BbLink onClick={() => setPendingHideId(null)}>Cancel</BbLink>
+                                </p>
+                              </div>
+                            )}
+                            {replay && <p className="bb-dim">Replay {replay.httpStatus} replayed={replay.replayed}</p>}
+                            {tamper && (
+                              <pre className="bb-pre">{tamper.attempts.map((a) => `${a.attempt}: ${a.refused ? 'REFUSED' : 'FAIL'}`).join('\n')}</pre>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
-            {selectedPay && trail && (
-              <div className="bb-detail">
-                <p className="bb-mono">{trail.from} → {trail.to} · {trail.amount} · {trail.status}</p>
-                {trail.status === 'REJECTED' && trail.decline && (
-                  <p className="bb-warn">
-                    {trail.decline.code}: {trail.decline.explanation ?? 'Declined by fraud rules.'}
-                  </p>
-                )}
-                {trail.status === 'REJECTED' && trail.legs.length === 0 && (
-                  <p className="bb-dim">No ledger entries — the rule ran before any money moved.</p>
-                )}
-                <pre className="bb-pre">{trail.legs.map((l) =>
-                  `#${l.entryId} ${l.account} ${l.side} ${l.amount}`,
-                ).join('\n') || (trail.status === 'REJECTED' ? '' : '(no entries)')}</pre>
-                {trail.audited && (
-                  <p>
-                    <BbLink onClick={() => account && void api.replay(account.id, selectedPay).then((r) => {
-                      setReplay(r);
-                      append(`REPLAY ${r.httpStatus}`);
-                    })} disabled={busy !== ''}>REPLAY</BbLink>
-                    {trail.status === 'COMPLETED' && (
-                      <>
-                        {' · '}
-                        <BbLink onClick={() => account && void api.tamper(account.id, selectedPay).then((r) => {
-                          setTamper(r);
-                          append('TAMPER checks');
-                        })} disabled={busy !== ''}>TAMPER</BbLink>
-                      </>
-                    )}
-                  </p>
-                )}
-                {replay && <p className="bb-dim">Replay {replay.httpStatus} replayed={replay.replayed}</p>}
-                {tamper && (
-                  <pre className="bb-pre">{tamper.attempts.map((a) => `${a.attempt}: ${a.refused ? 'REFUSED' : 'FAIL'}`).join('\n')}</pre>
-                )}
-              </div>
-            )}
           </section>
 
           <section className="bb-panel bb-audit">
@@ -687,15 +771,10 @@ export function TerminalApp() {
                 {integrity.source === 'audit-unavailable' || integrity.auditAvailable === false ? (
                   <p className="bb-warn">{integrity.message ?? 'Audit API not deployed on ledger host.'}</p>
                 ) : (
-                  <pre className="bb-pre">
-                    {[
-                      `BALANCED  ${integrity.balanced}`,
-                      `ENTRIES   ${integrity.entryCount}`,
-                      `SUM       ${integrity.entriesSum}`,
-                      `DRIFT     ${integrity.accountsDrifted}`,
-                      `OUTBOX    ${integrity.outbox.p95DeliveryMs ?? '—'} ms p95`,
-                    ].join('\n')}
-                  </pre>
+                  <>
+                    <pre className="bb-pre">{integrityLegend(integrity).join('\n')}</pre>
+                    <p className="bb-dim">Company-wide check on PostgreSQL — your wallet blotter is only your slice.</p>
+                  </>
                 )}
               </div>
             )}

@@ -2,6 +2,7 @@ import { AnthropicProvider } from './anthropic.js';
 import { FallbackChainProvider } from './fallback-chain.js';
 import { GeminiProvider } from './gemini.js';
 import { OpenRouterProvider } from './openrouter.js';
+import { normalizeProviderId } from '../env-normalize.js';
 import type { LlmProvider } from './types.js';
 
 const DEFAULT_OPENROUTER_MODEL = 'google/gemini-2.0-flash-001';
@@ -20,7 +21,7 @@ function geminiModelId(env: NodeJS.ProcessEnv): string | undefined {
  * - OPENROUTER_MODEL for OpenRouter; LLM_MODEL for Gemini/Anthropic only (not OpenRouter slugs)
  */
 export function providerFromEnv(env: NodeJS.ProcessEnv = process.env): LlmProvider {
-  const which = (env.LLM_PROVIDER ?? 'gemini').toLowerCase();
+  const which = normalizeProviderId(env.LLM_PROVIDER);
   const openRouterKey = env.OPENROUTER_API_KEY?.trim();
   const openRouterModel = env.OPENROUTER_MODEL?.trim() || DEFAULT_OPENROUTER_MODEL;
 

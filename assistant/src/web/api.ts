@@ -32,10 +32,12 @@ export interface AccountView {
 }
 
 export interface RaceAttempt {
+  copy: number;
   httpStatus: number;
   transferId: string;
   status: 'COMPLETED' | 'REJECTED';
   ms: number;
+  outcome: 'admitted' | 'deduplicated';
 }
 
 export interface RaceResult {
@@ -57,7 +59,13 @@ export interface TransferResult {
 }
 
 export interface ToolCall { tool: string; args: unknown; result: unknown; ms: number }
-export interface Turn { role: 'user' | 'assistant'; text: string; toolCalls?: ToolCall[]; model?: string }
+export interface Turn {
+  role: 'user' | 'assistant';
+  text: string;
+  toolCalls?: ToolCall[];
+  model?: string;
+  provider?: string;
+}
 
 const API_DOWN =
   'Cannot reach the assistant API. If this is the live site, wait a moment and refresh (Vercel cold start). Locally: npm run dev or npm run dev:stack.';

@@ -11,6 +11,7 @@ import type { LlmProvider } from './providers/types.js';
 import type { CompositeLedger, PracticeLedger } from './practice-ledger.js';
 import { LEDGER_CAPABILITIES } from './personas.js';
 import { formatLedgerStatement } from './statement-export.js';
+import { peerLedgerView } from './peer-ledger.js';
 import { loadAccountView } from './tools.js';
 import { providerFromEnv } from './providers/index.js';
 import { MAX_MINOR_UI } from './money.js';
@@ -145,6 +146,17 @@ export function createApp(deps: {
     }
     const peers = await listPeers(deps.ledger, accountId);
     return c.json(peers);
+  });
+
+  app.get('/peer-ledger', async (c) => {
+    const accountId = c.req.query('accountId');
+    const peerId = c.req.query('peerId');
+    if (!accountId || !peerId || !z.string().uuid().safeParse(accountId).success || !z.string().uuid().safeParse(peerId).success) {
+      return c.json({ error: 'accountId and peerId are required' }, 400);
+    }
+    const days = Math.min(Number(c.req.query('days') ?? '30'), 365);
+    const view = await peerLedgerView(deps.ledger, accountId, peerId, days, 40);
+    return view ? c.json(view) : c.json({ error: 'Peer not found' }, 404);
   });
 
   app.post('/accounts/:id/deposits', async (c) => {
@@ -287,7 +299,14 @@ export function createApp(deps: {
       });
     }
     try {
-      return c.json(await runAssistant({ provider, ledger: deps.ledger, accountId, messages }));
+      const peers = await listPeers(deps.ledger, accountId);
+      return c.json(await runAssistant({
+        provider,
+        ledger: deps.ledger,
+        accountId,
+        messages,
+        peers,
+      }));
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
       const errStatus = (e as { status?: number }).status;

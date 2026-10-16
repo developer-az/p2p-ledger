@@ -7,6 +7,9 @@ export type TerminalAction =
   | { kind: 'race' }
   | { kind: 'deposit'; amount: string }
   | { kind: 'pay'; args: string }
+  | { kind: 'split'; total: string; args: string }
+  | { kind: 'peer'; owner: string }
+  | { kind: 'peers' }
   | { kind: 'open'; owner: string }
   | { kind: 'signout' }
   | { kind: 'refresh' }
@@ -35,6 +38,22 @@ export function parseTerminalInput(raw: string): TerminalAction {
 
   if (lower.startsWith(':open ')) return { kind: 'open', owner: line.slice(6).trim() };
   if (lower.startsWith('open ')) return { kind: 'open', owner: line.slice(5).trim() };
+
+  if (lower === ':peers' || lower === 'peers') return { kind: 'peers' };
+  if (lower.startsWith(':peer ')) return { kind: 'peer', owner: line.slice(6).trim() };
+  if (lower.startsWith('peer ')) return { kind: 'peer', owner: line.slice(5).trim() };
+
+  const split = /^split\s+(\S+)\s+(\S+)(?:\s+(.+))?$/i.exec(line);
+  const splitTotal = split?.[1];
+  const splitPeer = split?.[2];
+  if (splitTotal && splitPeer) {
+    const half = Number(splitTotal.replace(/[$,]/g, ''));
+    if (Number.isFinite(half) && half > 0) {
+      const each = (half / 2).toFixed(2);
+      const memo = split[3]?.trim() || 'split';
+      return { kind: 'pay', args: `${splitPeer} ${each} ${memo}` };
+    }
+  }
 
   return { kind: 'chat', text: line };
 }

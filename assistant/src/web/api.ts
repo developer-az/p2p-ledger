@@ -96,6 +96,25 @@ export interface AccountView {
   transfers: AccountActivity[];
 }
 
+export interface PeerLedgerView {
+  peer: AccountRef;
+  windowDays: number;
+  sentToPeer: string;
+  receivedFromPeer: string;
+  netFromPeer: string;
+  completedCount: number;
+  declinedCount: number;
+  transfers: {
+    transferId: string;
+    direction: 'sent' | 'received';
+    amount: string;
+    status: 'COMPLETED' | 'REJECTED';
+    memo: string | null;
+    declineReason: string | null;
+    createdAt: string;
+  }[];
+}
+
 export interface LedgerEntryRow {
   id: number;
   transferId: string;
@@ -219,6 +238,9 @@ export const api = {
     }),
   peers: (accountId: string) =>
     call<AccountRef[]>(`/api/peers?accountId=${encodeURIComponent(accountId)}`),
+
+  peerLedger: (accountId: string, peerId: string, days = 30) =>
+    call<PeerLedgerView>(`/api/peer-ledger?accountId=${encodeURIComponent(accountId)}&peerId=${encodeURIComponent(peerId)}&days=${days}`),
   account: (id: string, limit = 50) =>
     call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}&limit=${limit}`),
   entries: (accountId: string, limit = 50) =>

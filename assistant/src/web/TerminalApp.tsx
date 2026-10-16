@@ -22,6 +22,7 @@ import {
   type Turn,
 } from './api.js';
 import { OFFLINE_BOOTSTRAP } from './practice-fixture.js';
+import { PeerPanel } from './PeerPanel.js';
 import { parseTerminalInput } from './terminal-command.js';
 import { loadSavedWallets, rememberWallet } from './wallet-store.js';
 
@@ -70,6 +71,7 @@ export function TerminalApp() {
   const [replay, setReplay] = useState<ReplayResult | null>(null);
   const [tamper, setTamper] = useState<TamperReport | null>(null);
   const [raceResult, setRaceResult] = useState<RaceResult | null>(null);
+  const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [clock, setClock] = useState(() => new Date());
 
@@ -296,8 +298,47 @@ export function TerminalApp() {
     if (account) void loadTrail(account.id, transferId);
   }
 
+  function resolvePeer(ownerTok: string): AccountRef | undefined {
+    const tok = ownerTok.trim().toLowerCase();
+    return peers.find((p) => p.id === ownerTok || p.owner === tok || p.owner.startsWith(tok));
+  }
+
+  function selectPeer(ownerTok: string) {
+    const p = resolvePeer(ownerTok);
+    if (!p) {
+      append(`ERR no peer matching ${ownerTok}`);
+      return;
+    }
+    setSelectedPeerId(p.id);
+    append(`PEER focus ${p.owner}`);
+  }
+
+  async function runRaceFromPeer(peerId: string) {
+    if (!account) return;
+    setBusy('RACE');
+    append('POST /api/race · peer as sender');
+    try {
+      const r = await api.race(account.id, peerId);
+      setRaceResult(r);
+      append(`RACE ${r.distinctTransfers} payment(s) from ${r.from}`);
+      await loadAccount(account.id);
+      if (r.transferId) {
+        setSelectedPay(r.transferId);
+        void loadTrail(account.id, r.transferId);
+      }
+    } catch (e) {
+      append(`ERR ${(e as Error).message}`);
+    } finally {
+      setBusy('');
+    }
+  }
+
   async function runRace() {
     if (!account) return;
+    if (selectedPeerId) {
+      void runRaceFromPeer(selectedPeerId);
+      return;
+    }
     let fromId: string | null = null;
     if (view) {
       const fromTx = view.transfers.find((t) => t.kind === 'TRANSFER' && t.direction === 'received' && t.status === 'COMPLETED');
@@ -356,7 +397,14 @@ export function TerminalApp() {
     const action = parseTerminalInput(raw);
     switch (action.kind) {
       case 'help':
-        append('CMD F1 help | F2 onboard | F3 audit | F4 race | pay sam 10 lunch | deposit 100 | :open name');
+        append('CMD F1 help | F2 onboard | F3 audit | F4 race | peer sam | pay sam 10 lunch | split 50 sam dinner | peers');
+        return;
+      case 'peer':
+        selectPeer(action.owner);
+        return;
+      case 'peers':
+        if (peers.length === 0) append('PEERS none — ONBOARD first');
+        else append(`PEERS ${peers.map((p) => p.owner).join(', ')} · peer <name> to focus`);
         return;
       case 'onboard':
         void onboard();
@@ -404,7 +452,16 @@ export function TerminalApp() {
   }
 
   const saved = loadSavedWallets().filter((w) => w.live);
-  const transfers = view ? orderStoppedFirst(view.transfers, stoppedTransferId) : [];
+  const selectedPeer = peers.find((p) => p.id === selectedPeerId) ?? null;
+  const allTransfers = view ? orderStoppedFirst(view.transfers, stoppedTransferId) : [];
+  const transfers = selectedPeer
+    ? allTransfers.filter((t) =>
+      t.counterpartyAccountId === selectedPeer.id
+      || t.counterparty === selectedPeer.owner
+      || t.counterparty.startsWith(selectedPeer.owner.split('-')[0] ?? ''),
+    )
+    : allTransfers;
+  const bilateral = selectedPeer ? transfers : [];
   const liveTag = boot.live ? 'LIVE' : 'OFFLINE';
   const auditTag = boot.ledger?.auditCapabilities ? 'AUDIT OK' : 'AUDIT PENDING';
 
@@ -467,14 +524,14 @@ export function TerminalApp() {
                 <tr><td className="bb-k">STOPPED</td><td>{view.summary.stopped}</td></tr>
               </tbody>
             </table>
-            <h3 className="bb-subhd">PEERS</h3>
+            <h3 className="bb-subhd">PEERS · P2P WALLETS</h3>
             {peers.length === 0
               ? <p className="bb-dim">None yet — ONBOARD or receive a payment.</p>
               : (
                 <ul className="bb-list">
                   {peers.map((p) => (
-                    <li key={p.id}>
-                      <BbLink onClick={() => runCommand(`:pay ${p.owner} 5 tip`)} disabled={busy !== ''}>
+                    <li key={p.id} className={selectedPeerId === p.id ? 'bb-peer-on' : undefined}>
+                      <BbLink onClick={() => selectPeer(p.owner)} disabled={busy !== ''}>
                         {personName(p.owner)}
                       </BbLink>
                       <span className="bb-dim"> {shortId(p.id)}</span>
@@ -482,6 +539,17 @@ export function TerminalApp() {
                   ))}
                 </ul>
               )}
+            {account && selectedPeer && (
+              <PeerPanel
+                accountId={account.id}
+                peer={selectedPeer}
+                bilateral={bilateral}
+                busy={busy !== ''}
+                onPay={(amount, memo) => void runPay(`${selectedPeer.owner} ${amount} ${memo}`)}
+                onRaceFromPeer={() => void runRaceFromPeer(selectedPeer.id)}
+                onSelectTransfer={(id) => void pickPayment(id)}
+              />
+            )}
             <div className="bb-actions">
               <BbLink onClick={() => void runDeposit('100')} disabled={busy !== ''}>+DEP $100</BbLink>
               <BbLink onClick={() => void runRace()} disabled={busy !== ''}>RACE</BbLink>
@@ -490,7 +558,7 @@ export function TerminalApp() {
           </section>
 
           <section className="bb-panel bb-blotter">
-            <h2 className="bb-hd">BLOTTER</h2>
+            <h2 className="bb-hd">BLOTTER{selectedPeer ? ` · ${personName(selectedPeer.owner)}` : ''}</h2>
             <table className="bb-tbl bb-blotter-tbl">
               <thead>
                 <tr>

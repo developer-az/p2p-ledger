@@ -26,4 +26,9 @@ describe('parseTerminalInput', () => {
     expect(parseTerminalInput('deposit 50').kind).toBe('deposit');
     expect(parseTerminalInput(':deposit 50')).toEqual({ kind: 'deposit', amount: '50' });
   });
+
+  it('maps peer focus and split bill pay', () => {
+    expect(parseTerminalInput('peer sam')).toEqual({ kind: 'peer', owner: 'sam' });
+    expect(parseTerminalInput('split 50 sam dinner')).toEqual({ kind: 'pay', args: 'sam 25.00 dinner' });
+  });
 });

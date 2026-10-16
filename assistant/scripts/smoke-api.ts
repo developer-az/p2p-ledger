@@ -124,6 +124,15 @@ const checks: Check[] = [
     },
   },
   {
+    name: 'GET /api/accounts/:id/entries',
+    run: async () => {
+      const { res, json } = await fetchJson(`/api/accounts/${PRACTICE_ALEX}/entries?limit=10`);
+      if (res.status !== 200) throw new Error(`status ${res.status}`);
+      const entries = (json as { entries?: unknown[] }).entries;
+      if (!entries?.length) throw new Error('expected statement lines');
+    },
+  },
+  {
     name: 'POST /api/accounts/:id/deposits',
     run: async () => {
       const { res, json } = await fetchJson(`/api/accounts/${PRACTICE_ALEX}/deposits`, {

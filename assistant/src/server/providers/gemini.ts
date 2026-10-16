@@ -7,7 +7,7 @@ export class GeminiProvider implements LlmProvider {
   private readonly ai: GoogleGenAI;
   private lastCallAt = 0;
 
-  constructor(apiKey: string, readonly model = 'gemini-flash-latest') {
+  constructor(apiKey: string, readonly model = 'gemini-2.0-flash-lite') {
     this.ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: 45_000 } });
   }
 

@@ -15,6 +15,12 @@ This repo is designed to run as **your** stack: Java ledger (source of truth) + 
 |------|------|---------|
 | `ASSISTANT_URL` | **Variable** | Vercel (or other) deployment of `assistant/`. Keep-warm pings `/api/health`; **assistant CI** runs `npm run smoke:api` when this is set. |
 | `GEMINI_API_KEY` | **Secret** | Vercel chat + optional **assistant eval (Gemini)** workflow (manual only; not run on every push). |
+| `LLM_MODEL` | **Variable** (Vercel) | Optional; default in code is **`gemini-2.0-flash-lite`** (lighter free-tier usage than `flash-latest`). |
+| `OPENROUTER_API_KEY` | **Secret** (Vercel) | Optional backup when Gemini returns 429 (auto-failover if both keys set). |
+
+**Quota note:** `assistant-ci.yml` does **not** call Gemini. Daily limits are usually Vercel traffic or manually running **assistant eval (Gemini)** — keep eval manual and use `gemini-2.0-flash-lite` or OpenRouter.
+
+**F3 integrity:** After merging `ledger-service` changes to `main`, `ledger-ci` rebuilds the native image and hits **Render** — then `GET /v1/ledger/integrity` works for the assistant F3 panel.
 
 ### Set `LEDGER_URL`
 

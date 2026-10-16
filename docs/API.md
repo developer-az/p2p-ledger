@@ -16,6 +16,7 @@ Base URL: `LEDGER_URL` (local default `http://localhost:8080`).
 | POST | `/v1/transfers` | P2P transfer (requires `Idempotency-Key`) |
 | GET | `/v1/transfers/{id}` | Transfer detail |
 | GET | `/v1/transfers?accountId=` | History |
+| GET | `/v1/ledger/integrity` | Company-wide reconciliation (entry sum, balance drift, outbox) |
 | GET | `/actuator/health` | Health (used by keep-warm) |
 
 Money is **integer cents** (`amountMinor`). Idempotency and fraud rules are enforced in Postgres.

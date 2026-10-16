@@ -133,6 +133,16 @@ const checks: Check[] = [
     },
   },
   {
+    name: 'GET /api/accounts/:id/statement.txt',
+    run: async () => {
+      const res = await fetch(`${base}/api/accounts/${PRACTICE_ALEX}/statement.txt`, { signal: AbortSignal.timeout(timeoutMs) });
+      const text = await res.text();
+      assertNotVercelEdge404(res, text);
+      if (res.status !== 200) throw new Error(`status ${res.status}`);
+      if (!text.includes('LEDGER ENTRIES')) throw new Error('missing statement body');
+    },
+  },
+  {
     name: 'POST /api/accounts/:id/deposits',
     run: async () => {
       const { res, json } = await fetchJson(`/api/accounts/${PRACTICE_ALEX}/deposits`, {

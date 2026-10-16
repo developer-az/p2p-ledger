@@ -13,6 +13,7 @@ import { formatLedgerStatement } from './statement-export.js';
 import { loadAccountView } from './tools.js';
 import { providerFromEnv } from './providers/index.js';
 import { MAX_MINOR_UI } from './money.js';
+import { racePayment } from './race.js';
 
 const openAccountBody = z.object({
   ownerId: z.string().min(1).max(64),
@@ -27,6 +28,8 @@ const transferBody = z.object({
   currency: z.string().length(3).default('USD'),
   memo: z.string().max(200).optional(),
 });
+
+const raceBody = z.object({ accountId: z.string().uuid(), fromAccountId: z.string().uuid() });
 
 const chatBody = z.object({
   accountId: z.string().uuid(),
@@ -63,6 +66,7 @@ export function createApp(deps: {
   const allowChat = rateLimiter(20, 60_000);
   const allowSeed = rateLimiter(3, 60_000);
   const allowWrite = rateLimiter(40, 60_000);
+  const allowRace = rateLimiter(8, 60_000);
   const clientIp = (c: { req: { header(name: string): string | undefined } }) =>
     c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
 
@@ -183,6 +187,16 @@ export function createApp(deps: {
         'Content-Disposition': `attachment; filename="statement-${id.slice(0, 8)}.txt"`,
       },
     });
+  });
+
+  app.post('/race', async (c) => {
+    if (!allowRace(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = raceBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    const result = await racePayment(deps.ledger, parsed.data.accountId, parsed.data.fromAccountId);
+    if (!result) return c.json({ error: 'Account not found' }, 404);
+    if ('error' in result) return c.json({ error: result.error }, 400);
+    return c.json(result);
   });
 
   app.post('/demo', async (c) => {

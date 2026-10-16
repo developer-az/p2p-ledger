@@ -25,6 +25,10 @@ export interface AssistantReply {
   toolCalls: ToolCallRecord[];
   provider: string;
   model: string;
+  /** How the BFF routed this answer (UI + debugging). */
+  route?: 'gemini' | 'anthropic' | 'ledger-fallback';
+  /** Set when route is ledger-fallback. */
+  fallbackReason?: string;
 }
 
 export async function runAssistant(opts: {
@@ -46,5 +50,12 @@ export async function runAssistant(opts: {
   const answer = result.truncated || !result.answer.trim()
     ? "Sorry, I couldn't finish answering that. Try asking a narrower question."
     : result.answer.trim();
-  return { answer, toolCalls: result.toolCalls, provider: opts.provider.name, model: opts.provider.model };
+  const route = opts.provider.name === 'gemini' ? 'gemini' : opts.provider.name === 'anthropic' ? 'anthropic' : undefined;
+  return {
+    answer,
+    toolCalls: result.toolCalls,
+    provider: opts.provider.name,
+    model: opts.provider.model,
+    route,
+  };
 }

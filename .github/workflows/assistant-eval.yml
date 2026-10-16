@@ -23,6 +23,7 @@ jobs:
   eval:
     runs-on: ubuntu-latest
     env:
+      ALLOW_LIVE_LLM_EVAL: "1"
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       LLM_MODEL: gemini-2.0-flash-lite
       GEMINI_MIN_INTERVAL_MS: "13000"

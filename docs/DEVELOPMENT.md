@@ -108,7 +108,7 @@ docker compose up --build    # includes assistant on :8787 when enabled in compo
 ## Tests & quality
 
 ```bash
-# Assistant (68 tests, no API key)
+# Assistant (74 tests — **no live LLM**; vitest clears API keys in test/setup.ts)
 cd assistant && npm test && npm run build
 
 # Ledger (needs Docker for integration tests)
@@ -121,10 +121,10 @@ Smoke the BFF against a running ledger:
 cd assistant && npm run smoke:api
 ```
 
-Eval suite (optional, uses Gemini quota):
+Eval suite (**opt-in only** — consumes real API quota; never run in CI on push):
 
 ```bash
-cd assistant && npm run eval
+cd assistant && ALLOW_LIVE_LLM_EVAL=1 npm run eval
 ```
 
 ## Capturing README screenshots

@@ -394,12 +394,18 @@ function SendPayment({
         <form className="pane-bd" onSubmit={(e) => void pay(e)}>
           <div className="field">
             <label htmlFor="to">to</label>
-            <select id="to" value={to} onChange={(e) => setTo(e.target.value)}>
-              {peers.length === 0 && <option value="">no peers yet</option>}
+            <select id="to" value={to} onChange={(e) => setTo(e.target.value)} disabled={peers.length === 0}>
+              {peers.length === 0 && <option value="">no recipients yet</option>}
               {peers.map((p) => (
                 <option key={p.id} value={p.id}>{displayName(p.owner)} ({p.owner})</option>
               ))}
             </select>
+            {peers.length === 0 && (
+              <p className="dim" style={{ fontSize: '11px', margin: '6px 0 0' }}>
+                Live wallets only pay people you have paid before, or use [1][2][3] practice accounts on sign-in.
+                Run demo seed on sign-in to create a live network with peers.
+              </p>
+            )}
           </div>
           <div className="field">
             <label htmlFor="amt">amount (USD)</label>

@@ -83,17 +83,38 @@ export interface StoppedPayment {
   reason: string | null;
 }
 
+export interface PracticeBootstrapAccount extends AccountRef {
+  role: string;
+  blurb: string;
+}
+
 export interface PracticeBootstrap {
   mode: 'practice';
-  accounts: AccountRef[];
+  accounts: PracticeBootstrapAccount[];
   focusAccountId: string;
   stoppedTransferId: string;
   hint: string;
 }
 
+export interface LedgerMeta {
+  engine: string;
+  apiVersion: string;
+  capabilities: string[];
+}
+
+export interface LedgerEntryRow {
+  id: number;
+  transferId: string;
+  accountId: string;
+  amountMinor: number;
+  balanceAfterMinor: number;
+  createdAt: string;
+}
+
 export interface BootstrapResponse {
   live: boolean;
   practice: PracticeBootstrap;
+  ledger?: LedgerMeta;
 }
 
 export const api = {
@@ -105,6 +126,10 @@ export const api = {
   peers: (accountId: string) => call<AccountRef[]>(`/api/peers?accountId=${encodeURIComponent(accountId)}`),
   account: (id: string, limit = 50) =>
     call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}&limit=${limit}`),
+  entries: (accountId: string, limit = 50) =>
+    call<{ accountId: string; currency: string; entries: LedgerEntryRow[] }>(
+      `/api/accounts/${encodeURIComponent(accountId)}/entries?limit=${limit}`,
+    ),
   deposit: (accountId: string, amountMinor: number) =>
     call<TransferResult>(`/api/accounts/${encodeURIComponent(accountId)}/deposits`, {
       method: 'POST',

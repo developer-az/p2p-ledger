@@ -8,6 +8,7 @@ import { LedgerError, type LedgerReader, type LedgerWriter } from './ledger.js';
 import { isModelOutage } from './providers/retry.js';
 import type { LlmProvider } from './providers/types.js';
 import type { CompositeLedger, PracticeLedger } from './practice-ledger.js';
+import { LEDGER_CAPABILITIES } from './personas.js';
 import { loadAccountView } from './tools.js';
 
 const openAccountBody = z.object({
@@ -72,7 +73,15 @@ export function createApp(deps: {
         new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2_000)),
       ]);
     }
-    return c.json({ live, practice });
+    return c.json({
+      live,
+      practice,
+      ledger: {
+        engine: 'ledger-service',
+        apiVersion: 'v1',
+        capabilities: [...LEDGER_CAPABILITIES],
+      },
+    });
   });
 
   app.get('/accounts', async (c) => {
@@ -132,6 +141,16 @@ export function createApp(deps: {
 
   // Direct links. The UI uses ?id= so a host that 404s a second path segment still reaches this app.
   app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, c.req.param('id'))));
+
+  app.get('/accounts/:id/entries', async (c) => {
+    const id = c.req.param('id');
+    if (!z.string().uuid().safeParse(id).success) return c.json({ error: 'Invalid account id' }, 400);
+    const limit = Math.min(Number(c.req.query('limit') ?? '50'), 200);
+    const account = await deps.ledger.getAccount(id);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const entries = await deps.ledger.entries(id, limit);
+    return c.json({ accountId: id, currency: account.currency, entries });
+  });
 
   app.post('/demo', async (c) => {
     if (!allowSeed(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);

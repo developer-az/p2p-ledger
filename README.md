@@ -21,7 +21,7 @@
 
 **Problem.** Moving money between people needs a single source of truth: balances that stay correct under concurrency, safe retries, auditable history, and explainable declines — not ad hoc balances in an app server.
 
-**Approach.** `ledger-service` implements that core as a Spring Boot service on PostgreSQL (idempotent transfers, row-level locking, fraud rules, transactional outbox). `assistant` is the product surface: React UI, Hono `/api` BFF, and read-only LLM tools bound to the signed-in wallet. Writes (send, deposit) go through explicit HTTP routes that proxy the Java API.
+**Approach.** `ledger-service` implements that core as a Spring Boot service on PostgreSQL (idempotent transfers, row-level locking, fraud rules, transactional outbox). `assistant` is the product surface: a **terminal UI**, Hono `/api` BFF, **P2P peer lane**, **simulated bank corridors**, and read-only LLM tools bound to the signed-in wallet. Writes (send, deposit, bank flows) go through explicit HTTP routes that proxy the Java API.
 
 **Scope.** This repo is an end-to-end system: Docker local stack, native-image CI, $0 deployment path (Render, Supabase, SQS via Terraform, Vercel for the UI), load tests, and property-style integration tests. It is a **demo / portfolio** deployment, not a regulated bank — see [docs/SECURITY.md](docs/SECURITY.md).
 
@@ -32,25 +32,64 @@
 | **Assistant (UI + `/api`)** | [p2p-ledger-pi.vercel.app](https://p2p-ledger-pi.vercel.app) |
 | **Ledger API** | Your Render `LEDGER_URL` (set in Vercel env for live mode) |
 
-Open the assistant → use **practice accounts** (Alex / Sam / Jordan) for a full flow without Docker, or connect `LEDGER_URL` for the Java ledger on Render.
+Open the assistant → **F2 ONBOARD** seeds Alex / Sam / Jordan on PostgreSQL when `LEDGER_URL` is live, or use the in-memory practice ledger offline. Full setup: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**.
 
-### Product screenshots
+### Terminal UI (product surface)
 
-Captured from the deployed sign-in screen and the running assistant (practice ledger).
+The React app is a **Bloomberg-style ledger terminal**: ticker, **WATCH** (wallet + simulated bank), **BLOTTER**, **AUDIT/MSG** (Gemini tools), **CMD>** with **GO**, and **F1–F4** shortcuts.
+
+```mermaid
+flowchart TB
+  subgraph watch["WATCH"]
+    BAL[Balance · cashflow]
+    BANK[SIM BANK · ACH IN / OUT]
+    PEER[PEERS · pay shortcuts]
+  end
+  subgraph cmd["CMD"]
+    PAY[pay sam 10 lunch]
+    BIN[bank in · bank out]
+    FN[F1 help · F2 onboard · F3 audit · F4 race]
+  end
+  watch --> PG[(PostgreSQL ledger)]
+  cmd --> API["/api BFF"]
+  API --> PG
+```
+
+### Simulated bank · corridor peers
+
+There is no separate “bank database.” **`bank-sim`** models ACH-style traffic on the **same ledger**:
+
+1. Each **inbound** or **outbound** flow **opens a new counterparty wallet** (`payroll-*`, `vendor-*`, `client-*`, …).
+2. Inbound corridors **fund** that wallet, then **transfer** to you; outbound corridors **debit** you and credit the vendor wallet.
+3. Counterparties **stay in PEERS** as dormant history (they “came,” settled, then go quiet — like real rails).
+4. **New wallet** open runs **`POST /api/bank/welcome`**: $500 deposit plus one inbound corridor so balances are never empty.
+
+```mermaid
+sequenceDiagram
+  participant U as Your wallet
+  participant B as bank-sim
+  participant P as payroll-abc123
+  participant L as ledger-service
+  U->>B: bank in (or welcome)
+  B->>L: openAccount payroll-abc123
+  B->>L: deposit → peer
+  B->>L: transfer peer → U
+  Note over P: Appears in PEERS until history ages out
+```
+
+### Figures & screenshots
+
+| Asset | Description |
+|-------|-------------|
+| [docs/images/terminal-watch.png](docs/images/terminal-watch.png) | Terminal shell (offline / pre-sign-in) |
+| [docs/images/terminal-blotter.png](docs/images/terminal-blotter.png) | *(optional)* BLOTTER after F2 ONBOARD |
+| Legacy guided UI | [docs/images/assistant-signin.png](docs/images/assistant-signin.png) etc. — older screenshots |
 
 <p align="center">
-  <img src="docs/images/assistant-signin.png" alt="Sign-in and practice network" width="720">
+  <img src="docs/images/terminal-watch.png" alt="P2P ledger terminal" width="720">
 </p>
 
-<table align="center">
-  <tr>
-    <td align="center"><img src="docs/images/assistant-overview.png" alt="Cashflow overview" width="360"><br><sub>Overview · 30-day cashflow</sub></td>
-    <td align="center"><img src="docs/images/assistant-send.png" alt="Send and deposit" width="360"><br><sub>Send · P2P + deposit</sub></td>
-  </tr>
-  <tr>
-    <td colspan="2" align="center"><img src="docs/images/assistant-ask.png" alt="Support chat" width="720"><br><sub>Ask · LLM over ledger tools (read-only)</sub></td>
-  </tr>
-</table>
+See [docs/images/README.md](docs/images/README.md) for more capture steps after `npm run dev:stack`.
 
 ## System context
 
@@ -87,6 +126,8 @@ Transfer path (simplified): idempotency check → lock accounts in PK order → 
 
 ## Quick start
 
+Prerequisites: **Node 22+**, **Docker Desktop** (live ledger), **Java 21** + Maven/`mvnw` (ledger tests). Details: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**.
+
 **Ledger only (Docker)**
 
 ```bash
@@ -96,27 +137,27 @@ docker compose up --build    # Postgres, Kafka, ledger :8080
 **Full stack (ledger + assistant image)**
 
 ```bash
-docker compose up --build    # adds assistant :8787
+docker compose up --build    # adds assistant :8787 when configured
 ```
 
 **Assistant dev (practice ledger, no Docker)**
 
 ```bash
-cd assistant && cp .env.example .env.local   # optional GEMINI_API_KEY for chat
+cd assistant && cp .env.example .env.local   # optional GEMINI_API_KEY for AUDIT/MSG chat
 npm install && npm run dev                   # UI :5173, /api embedded
 ```
 
-**Assistant + live ledger**
+**Assistant + live ledger (recommended)**
 
 ```bash
-cd assistant && npm run dev:stack            # Docker ledger + Vite UI
+cd assistant && npm run dev:stack            # Docker ledger + Vite terminal
 ```
 
 **Tests**
 
 ```bash
 cd ledger-service && ./mvnw verify           # integration + concurrency (Docker)
-cd assistant && npm test                     # 29 unit tests, no API key
+cd assistant && npm test && npm run build      # 68 unit tests, no API key
 ```
 
 ## Assistant layer
@@ -125,13 +166,15 @@ The browser talks only to **`/api/*`**. That layer:
 
 - Routes **live** traffic to `ledger-service` when `LEDGER_URL` is healthy.
 - Falls back to an in-memory **practice** network for offline demos.
-- Exposes **chat** with tools scoped to the session account (no send-money tool; P2P uses `POST /api/transfers`).
+- **`GET /api/peers`** and **`GET /api/peer-ledger`** — bilateral P2P history for the terminal PEERS panel.
+- **`/api/bank/*`** — simulated ACH corridors (ephemeral counterparties on the real ledger).
+- Exposes **chat** with tools scoped to the session account (no send-money tool; P2P uses `POST /api/transfers` or CMD `pay …`).
 
-OpenAPI: [assistant/openapi.yaml](assistant/openapi.yaml) · Integration map: [docs/API.md](docs/API.md).
+OpenAPI: [assistant/openapi.yaml](assistant/openapi.yaml) · Integration map: [docs/API.md](docs/API.md) · Dev setup: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 **Quality**
 
-- **Unit tests** — tools, graders, practice ledger, HTTP API with a scripted model (CI gate).
+- **Unit tests** — terminal commands, bank-sim, peer ledger, tools, practice ledger, HTTP API (CI gate).
 - **Evals** — 8 deterministic cases over a fixture ledger; run locally or via **Actions → assistant eval (Gemini)** when free-tier quota allows ([docs/GITHUB.md](docs/GITHUB.md)).
 
 ## Deployment ($0)
@@ -161,7 +204,7 @@ Setup checklist: [docs/GITHUB.md](docs/GITHUB.md) · Security model: [docs/SECUR
 | `assistant/` | UI, Hono API, evals, Vercel config |
 | `infra/aws/` | SQS, IAM, budget alarm |
 | `loadtest/` | k6 transfer workload |
-| `docs/` | Architecture, API, GitHub setup, screenshots |
+| `docs/` | Architecture, API, **DEVELOPMENT.md**, GitHub setup, screenshots |
 
 ## Engineering notes
 
@@ -172,5 +215,6 @@ Setup checklist: [docs/GITHUB.md](docs/GITHUB.md) · Security model: [docs/SECUR
 
 - [x] Ledger core, fraud, outbox, CI, native deploy pipeline
 - [x] Assistant: P2P UI, BFF API, tool-calling chat, evals
-- [x] Public demo + documentation screenshots
+- [x] Terminal UI, simulated bank corridors, peer lane, documentation
+- [ ] Refresh `docs/images/terminal-*.png` on Vercel after deploy
 - [ ] OAuth and session-bound wallets for a non-demo deployment

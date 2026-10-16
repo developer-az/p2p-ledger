@@ -6,9 +6,16 @@
 |--------|----------------|
 | **ledger-service** | System of record: accounts, transfers, deposits, **ledger_entries**, fraud rules, idempotency, outbox |
 | **assistant `/api`** | Public BFF + terminal UI; no shadow balances |
-| **assistant UI** | Operator terminal: overview, **ledger statement**, send, activity, ask |
+| **assistant UI** | Operator terminal: **guided visual intro** (pre-sign-in), overview + **SVG analytics**, ledger statement, send, activity, ask |
 
 Practice mode mirrors stories in-memory; **live mode** is always PostgreSQL on Render.
+
+## Visual intro (pre-sign-in)
+
+- Scene-based walkthrough with suited 8-bit personas (Alex, Sam, Jordan) — **not** a WASD game.
+- **Skip** or finish stores `p2p-ledger:story-complete` in `localStorage`; sign-in shows immediately on return.
+- **Replay visual intro** on the sign-in screen clears that flag for one session.
+- Story does **not** call the API; charts on **Overview** use real account + entries after sign-in.
 
 ## Live send (today)
 

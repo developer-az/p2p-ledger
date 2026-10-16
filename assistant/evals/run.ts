@@ -5,9 +5,17 @@ import { isLongQuotaWait, isModelOutage, isNetworkError, retryableStatus, retryD
 import { CASES, type EvalCase } from './cases.js';
 import { FixtureLedger, ME, NOW } from './fixture.js';
 
+if (process.env.ALLOW_LIVE_LLM_EVAL !== '1') {
+  console.error(
+    'Live LLM evals are opt-in (they consume API quota). Run:\n' +
+      '  ALLOW_LIVE_LLM_EVAL=1 GEMINI_API_KEY=... npm run eval',
+  );
+  process.exit(1);
+}
+
 /**
  * Runs every case TRIALS times against the configured LLM and the fixture ledger.
- *   GEMINI_API_KEY=... npm run eval            (TRIALS=3 by default)
+ *   ALLOW_LIVE_LLM_EVAL=1 GEMINI_API_KEY=... npm run eval   (TRIALS=3 by default)
  *   LLM_PROVIDER=anthropic ANTHROPIC_API_KEY=... npm run eval
  *   EVAL_CASE_IDS=balance,refuses-writes npm run eval   (subset)
  * Exits non-zero if the pass rate is below EVAL_MIN_PASS_RATE (default 0.9).
@@ -41,7 +49,7 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 2): Promise<T> {
     } catch (e) {
       // One retry. Calls are already paced, and repeating a whole case many times
       // made a single stuck question run for more than ten minutes with no log line.
-      const budget = isModelOutage(e) ? 4 : isNetworkError(e) ? 2 : attempts;
+      const budget = isModelOutage(e) ? 1 : isNetworkError(e) ? 2 : attempts;
       if (isLongQuotaWait(e) || i >= budget || retryableStatus(e) === undefined) throw e;
       console.log(`  retry ${i}: ${(e as Error).message.slice(0, 180)}`);
       await new Promise((r) => setTimeout(r, retryDelayMs(e, i)));

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/server/app.js';
 import { CompositeLedger, PRACTICE_ALEX, PRACTICE_RENT_TRANSFER, PRACTICE_SAM, PracticeLedger } from '../src/server/practice-ledger.js';
 import { ScriptedProvider } from '../src/server/providers/scripted.js';
-import type { LedgerReader, LedgerWriter } from '../src/server/ledger.js';
+import type { LedgerAuditor, LedgerReader, LedgerWriter } from '../src/server/ledger.js';
 
-const rejectLive: LedgerReader & LedgerWriter = {
+const rejectLive: LedgerReader & LedgerWriter & LedgerAuditor = {
   getAccount: () => Promise.reject(new Error('live down')),
   accountsByOwner: () => Promise.resolve([]),
   getTransfer: () => Promise.reject(new Error('live down')),
@@ -13,6 +13,11 @@ const rejectLive: LedgerReader & LedgerWriter = {
   openAccount: () => Promise.reject(new Error('live down')),
   deposit: () => Promise.reject(new Error('live down')),
   transfer: () => Promise.reject(new Error('live down')),
+  trail: () => Promise.resolve(null),
+  integrity: () => Promise.reject(new Error('live down')),
+  tamperChecks: () => Promise.resolve(null),
+  postTransfer: () => Promise.reject(new Error('live down')),
+  postDeposit: () => Promise.reject(new Error('live down')),
 };
 
 describe('practice ledger', () => {
@@ -53,7 +58,7 @@ describe('practice ledger', () => {
 
   it('does not offer practice peers for a live-only wallet', async () => {
     const liveId = '01a1422e-888a-7188-a250-d869574a8191';
-    const liveOnly: LedgerReader & LedgerWriter = {
+    const liveOnly: LedgerReader & LedgerWriter & LedgerAuditor = {
       ...rejectLive,
       getAccount: (id) => Promise.resolve(
         id === liveId

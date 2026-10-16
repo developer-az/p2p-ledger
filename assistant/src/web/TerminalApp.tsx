@@ -34,6 +34,7 @@ import {
 import {
   downloadStatementTxt,
   integrityLegend,
+  integrityPlainEnglish,
   printStatementPdf,
 } from './integrity-display.js';
 import { loadSavedWallets, rememberWallet } from './wallet-store.js';
@@ -109,6 +110,20 @@ export function TerminalApp() {
   useEffect(() => {
     if (account) setHiddenTransferIds(loadHiddenTransfers(account.id));
   }, [account?.id]);
+
+  useEffect(() => {
+    function onDocKeyDown(e: globalThis.KeyboardEvent) {
+      if (e.key !== 'Enter' || e.defaultPrevented) return;
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+      if (el?.closest('button, a, [role="button"]')) return;
+      e.preventDefault();
+      inputRef.current?.focus();
+    }
+    document.addEventListener('keydown', onDocKeyDown);
+    return () => document.removeEventListener('keydown', onDocKeyDown);
+  }, []);
 
   const chatMeta = boot.chat ?? { provider: 'gemini', configured: false };
 
@@ -353,6 +368,14 @@ export function TerminalApp() {
   }
 
   async function pickPayment(transferId: string) {
+    if (selectedPay === transferId) {
+      setSelectedPay(null);
+      setTrail(null);
+      setReplay(null);
+      setTamper(null);
+      setPendingHideId(null);
+      return;
+    }
     setSelectedPay(transferId);
     if (account) void loadTrail(account.id, transferId);
   }
@@ -610,17 +633,24 @@ export function TerminalApp() {
         <div className="bb-grid">
           <section className="bb-panel bb-watch">
             <h2 className="bb-hd">WATCH</h2>
+            <div className="bb-watch-body">
             <table className="bb-tbl">
               <tbody>
                 <tr><td className="bb-k">OWNER</td><td>{view.owner}</td></tr>
                 <tr><td className="bb-k">ID</td><td className="bb-mono">{shortId(account.id)}</td></tr>
                 <tr><td className="bb-k">BAL</td><td className="bb-hi">{view.balance}</td></tr>
-                <tr><td className="bb-k">30D OUT</td><td>{view.summary.sent}</td></tr>
-                <tr><td className="bb-k">30D IN</td><td>{view.summary.received}</td></tr>
+                <tr><td className="bb-k">30D OUT</td><td colSpan={2}>{view.summary.sent}</td></tr>
+                <tr><td className="bb-k">30D DEP</td><td>{view.summary.deposited}</td></tr>
+                <tr>
+                  <td className="bb-k">30D IN</td>
+                  <td>{view.summary.received}</td>
+                </tr>
+                <tr><td colSpan={2} className="bb-dim bb-watch-hint">DEP = bank/+DEP · IN = peer payments only</td></tr>
+                <tr><td className="bb-k">30D ALL IN</td><td>{view.summary.inflow}</td></tr>
                 <tr><td className="bb-k">STOPPED</td><td>{view.summary.stopped}</td></tr>
               </tbody>
             </table>
-            <div className="bb-actions">
+            <div className="bb-actions bb-actions-inline">
               <BbLink onClick={() => downloadStatementTxt(account.id)} disabled={busy !== ''}>DL TXT</BbLink>
               <BbLink onClick={() => void printStatementPdf(account.id).catch((e) => append(`ERR ${(e as Error).message}`))} disabled={busy !== ''}>
                 PRINT PDF
@@ -661,6 +691,7 @@ export function TerminalApp() {
               <BbLink onClick={() => void runDeposit('100')} disabled={busy !== ''}>+DEP $100</BbLink>
               <BbLink onClick={() => void runRace()} disabled={busy !== ''}>RACE</BbLink>
               <BbLink onClick={signOut}>OUT</BbLink>
+            </div>
             </div>
           </section>
 
@@ -765,15 +796,23 @@ export function TerminalApp() {
 
           <section className="bb-panel bb-audit">
             <h2 className="bb-hd">AUDIT / MSG</h2>
-            <BbLink onClick={() => void runIntegrity()} disabled={busy !== ''}>RUN COMPANY RECONCILIATION</BbLink>
+            <BbLink onClick={() => void runIntegrity()} disabled={busy !== ''}>CHECK ALL ACCOUNTS (F3)</BbLink>
             {integrity && (
               <div className="bb-audit-body">
                 {integrity.source === 'audit-unavailable' || integrity.auditAvailable === false ? (
                   <p className="bb-warn">{integrity.message ?? 'Audit API not deployed on ledger host.'}</p>
                 ) : (
                   <>
-                    <pre className="bb-pre">{integrityLegend(integrity).join('\n')}</pre>
-                    <p className="bb-dim">Company-wide check on PostgreSQL — your wallet blotter is only your slice.</p>
+                    <p className="bb-audit-plain">
+                      {integrityPlainEnglish(integrity).map((line, i) => (
+                        <span key={i}>{line}<br /></span>
+                      ))}
+                    </p>
+                    <details className="bb-audit-tech">
+                      <summary>Technical details</summary>
+                      <pre className="bb-pre">{integrityLegend(integrity).join('\n')}</pre>
+                    </details>
+                    <p className="bb-dim">This checks the whole company ledger — WATCH above is only your wallet.</p>
                   </>
                 )}
               </div>

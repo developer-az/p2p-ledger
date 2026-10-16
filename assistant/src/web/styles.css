@@ -553,10 +553,12 @@ code { font-size: .92em; padding: 0 4px; background: var(--sunken); color: var(-
 .bb-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(160px, 200px) 1fr minmax(200px, 260px);
+  grid-template-columns: minmax(200px, 240px) 1fr minmax(200px, 280px);
   gap: 2px;
   padding: 2px;
   min-height: 0;
+  max-height: calc(100vh - 88px);
+  overflow: hidden;
 }
 @media (max-width: 900px) {
   .bb-grid { grid-template-columns: 1fr; }
@@ -694,11 +696,11 @@ code { font-size: .92em; padding: 0 4px; background: var(--sunken); color: var(-
   font-size: 11px;
 }
 .bb-peer-lane {
-  margin-top: 10px;
-  padding: 8px;
+  margin: 6px 8px 8px;
+  padding: 6px;
   border: 1px solid var(--line-strong);
   background: var(--sunken);
-  max-height: 280px;
+  max-height: 160px;
   overflow-y: auto;
 }
 .bb-peer-actions { margin: 6px 0; font-size: 11px; }
@@ -706,4 +708,24 @@ code { font-size: .92em; padding: 0 4px; background: var(--sunken); color: var(-
 .bb-peer-tbl tbody tr:hover { background: #1a1814; }
 .bb-peer-hint { font-size: 10px; margin-top: 8px; }
 .bb-peer-on .bb-link { font-weight: 700; color: var(--accent-hover); }
-.bb-watch { overflow-y: auto; }
+.bb-watch { min-height: 0; overflow: hidden; }
+.bb-watch-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 4px;
+}
+.bb-watch-hint { font-size: 9px; padding: 2px 6px !important; }
+.bb-actions-inline {
+  margin-top: 0;
+  border-top: none;
+  padding-top: 4px;
+}
+.bb-audit-plain {
+  margin: 8px 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+.bb-audit-tech { margin-top: 8px; font-size: 10px; color: var(--muted); }
+.bb-audit-tech summary { cursor: pointer; color: var(--accent); }

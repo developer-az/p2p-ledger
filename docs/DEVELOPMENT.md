@@ -19,7 +19,7 @@ Optional:
 |------|---------|
 | **GEMINI_API_KEY** | Primary chat ([Google AI Studio](https://aistudio.google.com/apikey)); free tier hits **429 / daily quota** quickly |
 | **OPENROUTER_API_KEY** | [OpenRouter](https://openrouter.ai/keys) — set **with** `GEMINI_API_KEY` for automatic failover on 429; or `LLM_PROVIDER=openrouter` alone |
-| **OPENROUTER_MODEL** | e.g. `google/gemini-2.0-flash-001` (default) or any tool-capable model on OpenRouter |
+| **OPENROUTER_MODEL** | Slug from [openrouter.ai/models](https://openrouter.ai/models) — default `google/gemini-2.5-flash-lite` (older `google/gemini-2.0-flash-001` is auto-mapped) |
 | **ANTHROPIC_API_KEY** | Set `LLM_PROVIDER=anthropic` instead of Gemini |
 | **gh** | PRs, Actions, deployment hooks ([docs/GITHUB.md](GITHUB.md)) |
 | **Terraform** | AWS SQS FIFO in `infra/aws/` (production events) |

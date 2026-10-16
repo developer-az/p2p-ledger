@@ -1,3 +1,4 @@
+import { DEFAULT_OPENROUTER_MODEL, normalizeOpenRouterModel, openRouterFallbackModel } from './openrouter-models.js';
 import { isModelOutage, retryableStatus, retryDelayMs } from './retry.js';
 import { timedExecute, type AgentRequest, type AgentResult, type LlmProvider, type ToolCallRecord } from './types.js';
 
@@ -23,12 +24,16 @@ type OpenAIChatMessage = {
 export class OpenRouterProvider implements LlmProvider {
   readonly name = 'openrouter';
 
+  readonly model: string;
+
   constructor(
     private readonly apiKey: string,
-    readonly model = 'google/gemini-2.0-flash-lite-001',
+    model = DEFAULT_OPENROUTER_MODEL,
     private readonly siteUrl = process.env.OPENROUTER_HTTP_REFERER ?? 'https://p2p-ledger-pi.vercel.app',
     private readonly siteTitle = 'p2p-ledger assistant',
-  ) {}
+  ) {
+    this.model = normalizeOpenRouterModel(model);
+  }
 
   async run(req: AgentRequest): Promise<AgentResult> {
     const tools = req.tools.map((t) => ({
@@ -81,6 +86,8 @@ export class OpenRouterProvider implements LlmProvider {
   }
 
   private async complete(body: Record<string, unknown>): Promise<{ choices?: { message?: OpenAIChatMessage }[] }> {
+    let model = normalizeOpenRouterModel(String(body.model ?? this.model));
+    let triedFallback = false;
     for (let attempt = 1; ; attempt++) {
       const res = await fetch(OPENROUTER_URL, {
         method: 'POST',
@@ -90,11 +97,19 @@ export class OpenRouterProvider implements LlmProvider {
           'HTTP-Referer': this.siteUrl,
           'X-Title': this.siteTitle,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, model }),
       });
       const text = await res.text();
       if (res.ok) {
         return JSON.parse(text) as { choices?: { message?: OpenAIChatMessage }[] };
+      }
+      if (res.status === 404 && !triedFallback) {
+        const next = openRouterFallbackModel(model);
+        if (next !== model) {
+          model = next;
+          triedFallback = true;
+          continue;
+        }
       }
       const err = new Error(`OpenRouter ${res.status}: ${text.slice(0, 400)}`) as Error & { status?: number };
       err.status = res.status;

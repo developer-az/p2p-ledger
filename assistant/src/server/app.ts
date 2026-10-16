@@ -365,7 +365,7 @@ export function createApp(deps: {
         return c.json({
           ...(await answerFromLedger({ ledger: deps.ledger, accountId, question })),
           route: 'ledger-fallback',
-          fallbackReason: `Gemini call failed (${errStatus ?? 'no status'}): ${errMsg.slice(0, 220)}`,
+          fallbackReason: `LLM call failed (${errStatus ?? 'no status'}): ${errMsg.slice(0, 220)}`,
         });
       }
       throw e;
@@ -417,7 +417,10 @@ function respondAccount(c: { json: (body: unknown, status?: number) => Response 
 function llmConfigError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   if (/GEMINI_API_KEY is not set/i.test(message)) {
-    return 'GEMINI_API_KEY is not set on the assistant server. Add it in Vercel (or assistant/.env locally), redeploy, then refresh.';
+    return 'GEMINI_API_KEY is not set. Add GEMINI_API_KEY or OPENROUTER_API_KEY on Vercel (assistant/.env locally), redeploy, then refresh.';
+  }
+  if (/OPENROUTER_API_KEY is not set/i.test(message)) {
+    return 'OPENROUTER_API_KEY is not set. Get a key at openrouter.ai/keys or use GEMINI_API_KEY with LLM_PROVIDER=gemini.';
   }
   if (/ANTHROPIC_API_KEY is not set/i.test(message)) {
     return 'ANTHROPIC_API_KEY is not set on the assistant server.';

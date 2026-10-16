@@ -31,6 +31,23 @@ export interface AccountView {
   transfers: AccountActivity[];
 }
 
+export interface RaceAttempt {
+  httpStatus: number;
+  transferId: string;
+  status: 'COMPLETED' | 'REJECTED';
+  ms: number;
+}
+
+export interface RaceResult {
+  copies: number;
+  distinctTransfers: number;
+  transferId: string | null;
+  amount: string;
+  from: string;
+  attempts: RaceAttempt[];
+  wallMs: number;
+}
+
 export interface TransferResult {
   id: string;
   status: 'COMPLETED' | 'REJECTED';
@@ -138,6 +155,11 @@ export const api = {
       method: 'POST',
       headers: { 'Idempotency-Key': idempotencyKey() },
       body: JSON.stringify({ amountMinor }),
+    }),
+  race: (accountId: string, fromAccountId: string) =>
+    call<RaceResult>('/api/race', {
+      method: 'POST',
+      body: JSON.stringify({ accountId, fromAccountId }),
     }),
   transfer: (req: {
     sourceAccountId: string;

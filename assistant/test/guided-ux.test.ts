@@ -45,8 +45,9 @@ describe('tour-storage', () => {
 });
 
 describe('GuidedLedgerStory scenes', () => {
-  it('has handoff as last scene', () => {
-    expect(SCENES.length).toBeGreaterThanOrEqual(6);
+  it('has handoff as last scene and retry storm beat', () => {
+    expect(SCENES.length).toBeGreaterThanOrEqual(8);
+    expect(SCENES.some((s) => s.id === 'retry')).toBe(true);
     expect(SCENES[SCENES.length - 1]?.id).toBe('handoff');
   });
 });

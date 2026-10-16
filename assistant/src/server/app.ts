@@ -82,9 +82,9 @@ export function createApp(deps: {
         deps.isLiveLedgerUp(),
         new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2_000)),
       ]);
-      if (live && deps.liveLedger && 'integrity' in deps.liveLedger) {
+      if (deps.liveLedger) {
         try {
-          await (deps.liveLedger as LedgerAuditor).integrity();
+          await deps.liveLedger.integrity();
           auditCapabilities = true;
         } catch {
           auditCapabilities = false;

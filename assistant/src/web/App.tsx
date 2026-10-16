@@ -12,12 +12,9 @@ import {
   type TamperReport,
   type Turn,
 } from './api.js';
-import { GuidedLedgerStory } from './GuidedLedgerStory.js';
+import { ActivityShell, useTrace } from './activity-log.js';
 import { LedgerCharts } from './LedgerCharts.js';
-import { PipelineStage } from './pipeline/PipelineStage.js';
-import { mapTrailToPipelineSteps } from './pipeline/pipeline-script.js';
-import { OFFLINE_BOOTSTRAP, PRACTICE_ALEX_ID } from './practice-fixture.js';
-import { clearStoryComplete, isStoryComplete } from './tour-storage.js';
+import { OFFLINE_BOOTSTRAP } from './practice-fixture.js';
 
 const REPO = 'https://github.com/developer-az/p2p-ledger';
 
@@ -27,13 +24,6 @@ const SUGGESTIONS = [
   'How much have I sent to each person this month?',
   'Send $50 to sam',
 ];
-
-const GUARANTEES = [
-  ['Double-entry, enforced by Postgres', 'Every payment posts a debit and a credit. A deferred trigger refuses any commit whose legs do not sum to zero.'],
-  ['Retries cannot charge twice', 'The idempotency key is a unique column. Identical requests in flight together resolve to one payment.'],
-  ['Posted money cannot be edited', 'Entries are append-only at the database level, so a bug in application code cannot rewrite history.'],
-  ['Every payment emits an event', 'A transactional outbox relays events to SQS or Kafka. Nothing is lost, and nothing is sent for a rolled-back payment.'],
-] as const;
 
 function personName(owner: string): string {
   if (owner.startsWith('Bank funding')) return 'Bank';
@@ -51,10 +41,6 @@ function clock(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
-}
-
-function count(n: number, noun: string, plural = `${noun}s`): string {
-  return `${n.toLocaleString()} ${n === 1 ? noun : plural}`;
 }
 
 function shortId(id: string): string {
@@ -87,195 +73,150 @@ export function App() {
   const [account, setAccount] = useState<AccountRef | null>(null);
   const [stoppedTransferId, setStoppedTransferId] = useState<string | null>(null);
   const [booksVersion, setBooksVersion] = useState(0);
-  const [showStory, setShowStory] = useState(() => !isStoryComplete());
-  const [tourHighlight, setTourHighlight] = useState<string | null>(null);
-  const [auditLive, setAuditLive] = useState<boolean | null>(null);
+  const [auditMode, setAuditMode] = useState<'live' | 'practice' | 'unknown'>('unknown');
 
   useEffect(() => {
-    void api.bootstrap().then((b) => setAuditLive(b.ledger?.auditCapabilities ?? false)).catch(() => setAuditLive(false));
+    void api.bootstrap().then((b) => {
+      if (b.ledger?.auditCapabilities) setAuditMode('live');
+      else setAuditMode(b.live ? 'unknown' : 'practice');
+    }).catch(() => setAuditMode('practice'));
   }, []);
 
   return (
-    <>
-      <header className="appbar">
-        <div className="appbar-inner">
-          <a className="brand" href="/" onClick={(e) => { e.preventDefault(); setAccount(null); setStoppedTransferId(null); }}>
-            <span className="brand-mark" aria-hidden>L</span>
-            Ledger
-          </a>
-          <nav className="nav">
-            <a href="#books">Reconciliation</a>
-            <a href="#workspace">Payments</a>
-            <a href="#architecture">Architecture</a>
-            <a href={REPO} target="_blank" rel="noreferrer">GitHub</a>
-          </nav>
+    <div className="root">
+      <header className="topbar">
+        <div>
+          <span className="topbar-title">p2p-ledger</span>
+          <span className="topbar-sub">/ ledger terminal</span>
         </div>
+        <a className="t-btn-inline" href={REPO} target="_blank" rel="noreferrer">github</a>
       </header>
-      <main className="shell">
-        {!account && showStory && (
-          <GuidedLedgerStory
-            onComplete={() => setShowStory(false)}
-            onHandoff={(hook) => setTourHighlight(hook)}
-          />
-        )}
-        {!account && !showStory && (
-          <Hero
-            tourHighlight={tourHighlight}
-            onReplayStory={() => {
-              clearStoryComplete();
-              setTourHighlight(null);
-              setShowStory(true);
-            }}
-            onPick={(a, stoppedId) => { setStoppedTransferId(stoppedId ?? null); setAccount(a); }}
-          />
-        )}
-        <Books version={booksVersion} auditLive={auditLive} />
-        {account && (
-          <AccountScreen
-            account={account}
-            stoppedTransferId={stoppedTransferId}
-            onChanged={() => setBooksVersion((v) => v + 1)}
-            onSwitch={() => { setAccount(null); setStoppedTransferId(null); }}
-          />
-        )}
-        <Architecture />
+      <main className="main">
+        <ActivityShell>
+          {!account && (
+            <SignInPane onPick={(a, stoppedId) => { setStoppedTransferId(stoppedId ?? null); setAccount(a); }} />
+          )}
+          <Books version={booksVersion} auditMode={auditMode} onAuditMode={setAuditMode} />
+          {account && (
+            <AccountScreen
+              account={account}
+              stoppedTransferId={stoppedTransferId}
+              onChanged={() => setBooksVersion((v) => v + 1)}
+              onSwitch={() => { setAccount(null); setStoppedTransferId(null); }}
+            />
+          )}
+        </ActivityShell>
       </main>
-    </>
+    </div>
   );
 }
 
-function Hero({
-  onPick,
-  tourHighlight,
-  onReplayStory,
-}: {
-  onPick: (a: AccountRef, stoppedTransferId?: string) => void;
-  tourHighlight?: string | null;
-  onReplayStory?: () => void;
-}) {
+function SignInPane({ onPick }: { onPick: (a: AccountRef, stoppedTransferId?: string) => void }) {
+  const trace = useTrace();
   const [boot, setBoot] = useState<BootstrapResponse>(OFFLINE_BOOTSTRAP);
   const [owner, setOwner] = useState('');
-  const [found, setFound] = useState<AccountRef[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    void api.bootstrap().then(setBoot).catch(() => setBoot(OFFLINE_BOOTSTRAP));
+    trace('GET /api/bootstrap');
+    void api.bootstrap().then((b) => {
+      setBoot(b);
+      trace(`bootstrap · live=${b.live} · audit=${b.ledger?.auditCapabilities ? 'postgres' : 'practice-mirror'}`);
+    }).catch(() => setBoot(OFFLINE_BOOTSTRAP));
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap once on mount
   }, []);
 
-  async function demo() {
+  async function createWallet(e: FormEvent) {
+    e.preventDefault();
+    const id = owner.trim().toLowerCase().replace(/\s+/g, '-');
+    if (!id) return;
     setBusy(true);
     setError('');
+    trace(`POST /api/accounts · ownerId=${id}`);
     try {
-      const seeded = await api.seedDemo();
-      const sender = seeded.accounts.find((a) => a.id === seeded.focusAccountId) ?? seeded.accounts[0];
-      if (sender) onPick(sender, seeded.stopped.transferId);
-    } catch (e) {
-      setError((e as Error).message);
+      const a = await api.openAccount(id);
+      trace(`ledger-service · account opened · ${a.id}`);
+      onPick(a);
+    } catch (err) {
+      setError((err as Error).message);
+      trace(`error · ${(err as Error).message}`);
     } finally {
       setBusy(false);
     }
   }
 
-  async function find(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      setFound(await api.findAccounts(owner));
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
+  function openPractice(a: AccountRef, stopped?: string) {
+    trace(`practice mirror · open ${a.owner} · ${a.id}`);
+    onPick(a, stopped);
   }
 
   return (
-    <section className="hero">
-      <div className="hero-copy">
-        <p className="kicker">Payments infrastructure</p>
-        <h1>A ledger that can prove every number it shows.</h1>
-        <p className="lede">
-          Double-entry books on PostgreSQL behind a Java service, with a support assistant that can only quote
-          what the ledger recorded. Balances are not simulated in the browser.
-        </p>
-        {onReplayStory && (
-          <p className="muted small">
-            <button type="button" className="btn ghost small" onClick={onReplayStory}>Replay visual intro</button>
-          </p>
-        )}
-        <div className="hero-actions">
-          <button
-            className={tourHighlight === 'tour-seed-live' ? 'btn primary tour-pulse' : 'btn primary'}
-            disabled={busy || !boot.live}
-            onClick={() => void demo()}
-          >
-            {busy ? 'Opening accounts…' : 'Run the live demo'}
-          </button>
-          <span className="muted small">Opens three wallets on PostgreSQL. One payment is stopped by fraud rules.</span>
-        </div>
-        {boot.practice?.accounts.length > 0 && (
-          <ul className="found practice-pick">
-            {boot.practice.accounts.map((a, i) => (
-              <li key={a.id}>
-                <button
-                  className={tourHighlight === 'tour-practice-alex' && a.id === PRACTICE_ALEX_ID ? 'tour-pulse' : ''}
-                  onClick={() => onPick(a, a.id === boot.practice.focusAccountId ? boot.practice.stoppedTransferId : undefined)}
-                >
-                  <strong>[{i + 1}] {personName(a.owner)}</strong>
-                  <span className="mono muted">{a.role}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <form className="lookup" onSubmit={(e) => void find(e)}>
-          <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="Look up an existing owner id" aria-label="Owner id" />
-          <button className="btn" disabled={busy || !owner.trim()}>Find</button>
-        </form>
-        {found && (found.length === 0
-          ? <p className="muted small">No accounts for that owner.</p>
-          : (
-            <ul className="found">
-              {found.map((a) => (
-                <li key={a.id}>
-                  <button onClick={() => onPick(a)}>
-                    <strong>{personName(a.owner)}</strong>
-                    <span className="mono muted">{a.owner}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ))}
-        {error && <p className="error" role="alert">{error}</p>}
+    <>
+      <div className="help">
+        <strong>system of record</strong>
+        <p>Balances come from PostgreSQL (live) or the in-memory practice mirror — not from this UI. Use the trace above to see each BFF → ledger call.</p>
       </div>
-      <ol className="guarantees">
-        {GUARANTEES.map(([title, body], i) => (
-          <li key={title}>
-            <span className="index mono">0{i + 1}</span>
-            <div>
-              <strong>{title}</strong>
-              <p>{body}</p>
-            </div>
-          </li>
-        ))}
-      </ol>
-    </section>
+      <section className="pane">
+        <div className="pane-hd"><strong>open account</strong> · POST /api/accounts</div>
+        <form className="pane-bd" onSubmit={(e) => void createWallet(e)}>
+          <div className="field">
+            <label htmlFor="owner">owner id</label>
+            <input id="owner" value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="e.g. alex.ap" />
+          </div>
+          <button type="submit" className="t-btn recommended" disabled={busy || !owner.trim()}>[ create &amp; open ]</button>
+        </form>
+      </section>
+      <section className="pane">
+        <div className="pane-hd"><strong>practice network</strong> · offline double-entry story</div>
+        <div className="pane-bd">
+          {boot.practice.accounts.map((a, i) => (
+            <button
+              key={a.id}
+              type="button"
+              className={a.id === boot.practice.focusAccountId ? 't-btn recommended' : 't-btn'}
+              onClick={() => openPractice(
+                a,
+                a.id === boot.practice.focusAccountId ? boot.practice.stoppedTransferId : undefined,
+              )}
+            >
+              <span className="key">[{i + 1}]</span> {personName(a.owner)}
+              <span className="desc">{a.role} — {a.blurb}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+      {error && <p className="err" role="alert">{error}</p>}
+    </>
   );
 }
 
-function Books({ version, auditLive }: { version: number; auditLive: boolean | null }) {
+function Books({
+  version,
+  auditMode,
+  onAuditMode,
+}: {
+  version: number;
+  auditMode: 'live' | 'practice' | 'unknown';
+  onAuditMode: (m: 'live' | 'practice' | 'unknown') => void;
+}) {
+  const trace = useTrace();
   const [books, setBooks] = useState<Integrity | null>(null);
   const [problem, setProblem] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function check() {
     setBusy(true);
+    trace('GET /api/integrity → GET /v1/ledger/integrity (or practice mirror)');
     try {
-      setBooks(await api.integrity());
+      const result = await api.integrity();
+      setBooks(result);
       setProblem('');
+      onAuditMode(result.source === 'live' ? 'live' : 'practice');
+      trace(`integrity · ${result.source ?? 'unknown'} · balanced=${result.balanced} · entries=${result.entryCount} · sum=${result.entriesSum}`);
     } catch (e) {
       setProblem((e as Error).message);
+      trace(`integrity failed · ${(e as Error).message}`);
     } finally {
       setBusy(false);
     }
@@ -285,46 +226,32 @@ function Books({ version, auditLive }: { version: number; auditLive: boolean | n
 
   const delivery = books?.outbox.p95DeliveryMs ?? null;
   return (
-    <section className="books" id="books" aria-busy={busy}>
-      <div className="books-head">
-        <div className="books-title">
-          <h2>Reconciliation</h2>
-          {books && <Badge tone={books.balanced ? 'ok' : 'bad'}>{books.balanced ? 'Balanced' : 'Out of balance'}</Badge>}
-          {!books && problem && <Badge tone="neutral">Unavailable</Badge>}
-          {auditLive === false && <Badge tone="neutral">Partial proof · redeploy ledger on Render</Badge>}
-          {auditLive === true && <Badge tone="ok">Full live proof</Badge>}
-        </div>
-        <div className="books-meta">
-          <span className="muted small">
-            {books ? `Recomputed from raw entries at ${clock(books.checkedAt)}` : problem || 'Reconciling…'}
-          </span>
-          <button className="btn ghost small" onClick={() => void check()} disabled={busy}>{busy ? 'Running…' : 'Run again'}</button>
-        </div>
+    <section className="pane books-pane" id="books" aria-busy={busy}>
+      <div className="pane-hd">
+        <strong>reconciliation</strong>
+        {books && <Badge tone={books.balanced ? 'ok' : 'bad'}>{books.balanced ? 'balanced' : 'out of balance'}</Badge>}
+        {books && auditMode === 'live' && <Badge tone="ok">live · GET /v1/ledger/integrity</Badge>}
+        {books && auditMode === 'practice' && <Badge tone="neutral">practice mirror</Badge>}
+        {books && auditMode === 'unknown' && <Badge tone="neutral">checking…</Badge>}
       </div>
-      {books && (
-        <dl className="metrics">
-          <Metric label="Sum of all entries" value={books.entriesSum} note={count(books.entryCount, 'entry', 'entries')} />
-          <Metric label="Balance drift" value={`${books.accountsDrifted}`} note={`of ${count(books.accountCount, 'account')}`} />
-          <Metric label="Unbalanced payments" value={`${books.unbalancedTransfers}`} note={`of ${count(books.transferCount, 'payment')}`} />
-          <Metric label="Declines that moved money" value={`${books.rejectedWithEntries}`} note="must stay zero" />
-          <Metric
-            label="Events delivered"
-            value={(books.outbox.total - books.outbox.pending).toLocaleString()}
-            note={[delivery === null ? null : `p95 ${Math.round(delivery)} ms`, books.outbox.pending ? `${books.outbox.pending} queued` : null].filter(Boolean).join(' · ') || 'none yet'}
-          />
-        </dl>
-      )}
+      <div className="pane-bd">
+        <p className="dim" style={{ margin: '0 0 10px', fontSize: '12px' }}>
+          {books ? `Checked ${clock(books.checkedAt)}` : problem || 'Running…'}
+        </p>
+        <button type="button" className="t-btn-inline" onClick={() => void check()} disabled={busy}>
+          {busy ? '[ running… ]' : '[ run again ]'}
+        </button>
+        {books && (
+          <dl className="kv-row" style={{ marginTop: 14 }}>
+            <dl className="kv"><dt>entries sum</dt><dd>{books.entriesSum}</dd></dl>
+            <dl className="kv"><dt>entries</dt><dd>{books.entryCount}</dd></dl>
+            <dl className="kv"><dt>drift</dt><dd>{books.accountsDrifted}</dd></dl>
+            <dl className="kv"><dt>declines w/ $</dt><dd>{books.rejectedWithEntries}</dd></dl>
+            <dl className="kv"><dt>outbox p95</dt><dd>{delivery === null ? '—' : `${Math.round(delivery)} ms`}</dd></dl>
+          </dl>
+        )}
+      </div>
     </section>
-  );
-}
-
-function Metric({ label, value, note }: { label: string; value: string; note?: string }) {
-  return (
-    <div className="metric">
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-      {note && <span className="metric-note">{note}</span>}
-    </div>
   );
 }
 
@@ -334,6 +261,7 @@ function AccountScreen({ account, stoppedTransferId, onChanged, onSwitch }: {
   onChanged: () => void;
   onSwitch: () => void;
 }) {
+  const trace = useTrace();
   const [view, setView] = useState<AccountView | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(true);
@@ -342,8 +270,10 @@ function AccountScreen({ account, stoppedTransferId, onChanged, onSwitch }: {
   async function load(quiet = false) {
     if (!quiet) setBusy(true);
     setError('');
+    trace(`GET /api/accounts?id=${account.id.slice(0, 8)}…`);
     try {
       setView(await api.account(account.id));
+      trace('account view loaded · transfers + 30d summary');
     } catch (e) {
       if (!quiet) setView(null);
       setError((e as Error).message);
@@ -365,20 +295,18 @@ function AccountScreen({ account, stoppedTransferId, onChanged, onSwitch }: {
   return (
     <div className="workspace" id="workspace">
       <div className="main-col" aria-busy={busy}>
-        <div className="account-head">
-          <div>
-            <p className="kicker">Customer account</p>
-            <h2 className="account-name">{name}</h2>
-            <p className="mono muted small">{view?.owner ?? account.owner} · {shortId(account.id)}</p>
+        <section className="pane">
+          <div className="pane-hd">
+            <strong>{name}</strong> · {view?.owner ?? account.owner} · <span className="mono-id">{shortId(account.id)}</span>
+            <button type="button" className="t-btn-inline" style={{ marginLeft: 12 }} onClick={onSwitch}>[ switch ]</button>
           </div>
-          <button className="btn" onClick={onSwitch}>Switch customer</button>
-        </div>
+        </section>
 
         {busy && <div className="loading" aria-label="Loading account"><span /></div>}
         {!busy && error && !view && (
           <div className="inline-error">
             <p className="error" role="alert">{error}</p>
-            <button className="btn small" onClick={() => void load()}>Try again</button>
+            <button type="button" className="t-btn-inline" onClick={() => void load()}>[ retry ]</button>
           </div>
         )}
         {!busy && view && (
@@ -443,10 +371,20 @@ function orderStoppedFirst(transfers: AccountActivity[], stoppedTransferId: stri
 }
 
 function PaymentRow({ transfer, open, onToggle }: { transfer: AccountActivity; open: boolean; onToggle: () => void }) {
+  const trace = useTrace();
   const declined = transfer.status === 'REJECTED';
   const sign = transfer.direction === 'sent' ? '−' : '+';
   return (
-    <button className="trow" role="row" onClick={onToggle} aria-expanded={open}>
+    <button
+      type="button"
+      className="trow"
+      role="row"
+      onClick={() => {
+        trace(open ? 'ui · collapse payment detail' : `ui · inspect transfer ${transfer.transferId.slice(0, 8)}…`);
+        onToggle();
+      }}
+      aria-expanded={open}
+    >
       <span className="cell desc" role="cell">
         <strong>{transfer.memo || (transfer.direction === 'deposit' ? 'Bank deposit' : 'Payment')}</strong>
         {declined && transfer.declineExplanation && <span className="reason">{transfer.declineExplanation}</span>}
@@ -479,6 +417,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 }
 
 function PaymentDetail({ accountId, transferId, onChanged }: { accountId: string; transferId: string; onChanged: () => void }) {
+  const trace = useTrace();
   const [trail, setTrail] = useState<PaymentTrail | null>(null);
   const [error, setError] = useState('');
   const replay = useAction<ReplayResult>();
@@ -488,11 +427,17 @@ function PaymentDetail({ accountId, transferId, onChanged }: { accountId: string
     let live = true;
     setTrail(null);
     setError('');
+    trace(`GET /api/trail · transfer=${transferId.slice(0, 8)}…`);
     api.trail(accountId, transferId)
-      .then((t) => { if (live) setTrail(t); })
+      .then((t) => {
+        if (live) {
+          setTrail(t);
+          trace(`trail · ${t.status} · legs=${t.legs.length} · audited=${t.audited}`);
+        }
+      })
       .catch((e: Error) => { if (live) setError(e.message); });
     return () => { live = false; };
-  }, [accountId, transferId]);
+  }, [accountId, transferId, trace]);
 
   if (error) return <div className="detail"><p className="error">{error}</p></div>;
   if (!trail) return <div className="detail"><div className="loading"><span /></div></div>;
@@ -507,19 +452,13 @@ function PaymentDetail({ accountId, transferId, onChanged }: { accountId: string
     JSON.stringify(trail.request.body, null, 2),
   ].join('\n');
 
-  const pipelineScene = mapTrailToPipelineSteps(trail);
-
   return (
     <div className="detail">
       <div className="detail-head">
-        <span className="mono muted small">Transfer {trail.transferId}</span>
-        {!trail.audited && <Badge tone="neutral">Partial view · ledger update pending deploy</Badge>}
+        <span className="mono-id">transfer {trail.transferId}</span>
+        <span className="dim"> · {trail.from} → {trail.to} · {trail.amount}</span>
+        {!trail.audited && <Badge tone="neutral">statement fallback (no /trail on ledger yet)</Badge>}
       </div>
-      <PipelineStage
-        scene={pipelineScene}
-        actors={[{ cast: 'alex', x: 50 }, { cast: 'sam', x: 180 }]}
-        proofCaption={`GET /api/trail · ${trail.from} → ${trail.to} · ${trail.amount}`}
-      />
       <ol className="steps">
         <Step n={1} title="Decision">
           {declined ? (
@@ -580,12 +519,14 @@ function PaymentDetail({ accountId, transferId, onChanged }: { accountId: string
           {trail.audited ? (
             <>
               <div className="actions">
-                <button className="btn" disabled={replay.busy} onClick={() => void replay.run(async () => {
+                <button type="button" className="t-btn-inline" disabled={replay.busy} onClick={() => void replay.run(async () => {
+                  trace('POST /api/replay · Idempotency-Key replay');
                   const r = await api.replay(accountId, transferId);
+                  trace(`replay · ${r.httpStatus} · replayed=${r.replayed}`);
                   onChanged();
                   return r;
                 })}>
-                  {replay.busy ? 'Sending…' : 'Send this exact request again'}
+                  {replay.busy ? '[ sending… ]' : '[ replay request ]'}
                 </button>
                 <span className="muted small mono">body SHA-256 {trail.request.requestHash.slice(0, 12)}… · same key, different body → 422</span>
               </div>
@@ -609,8 +550,11 @@ function PaymentDetail({ accountId, transferId, onChanged }: { accountId: string
           <Step n={5} title="Try to change the books">
             <p className="muted">Four forbidden writes against these entries, each in a transaction that is always rolled back. The refusals come from Postgres, not the Java code.</p>
             <div className="actions">
-              <button className="btn" disabled={tamper.busy} onClick={() => void tamper.run(() => api.tamper(accountId, transferId))}>
-                {tamper.busy ? 'Attempting…' : 'Attempt the writes'}
+              <button type="button" className="t-btn-inline" disabled={tamper.busy} onClick={() => void tamper.run(async () => {
+                trace('POST /api/tamper → POST /v1/ledger/tamper-checks');
+                return api.tamper(accountId, transferId);
+              })}>
+                {tamper.busy ? '[ attempting… ]' : '[ tamper checks ]'}
               </button>
             </div>
             {tamper.error && <p className="error">{tamper.error}</p>}
@@ -641,6 +585,7 @@ function RetryStorm({ accountId, fromAccountId, fromName, onDone }: {
   fromName: string;
   onDone: (transferId: string | null) => void;
 }) {
+  const trace = useTrace();
   const race = useAction<RaceResult>();
   const r = race.result;
   return (
@@ -654,12 +599,14 @@ function RetryStorm({ accountId, fromAccountId, fromName, onDone }: {
         all with one idempotency key. Postgres admits one and makes the others wait, then return the stored result.
       </p>
       <div className="actions">
-        <button className="btn primary" disabled={race.busy} onClick={() => void race.run(async () => {
+        <button type="button" className="t-btn-inline" disabled={race.busy} onClick={() => void race.run(async () => {
+          trace('POST /api/race · 5 parallel POST /v1/transfers · same Idempotency-Key');
           const result = await api.race(accountId, fromAccountId);
+          trace(`race · distinctTransfers=${result.distinctTransfers} · entries=${result.entriesPosted ?? '—'}`);
           onDone(result.transferId);
           return result;
         })}>
-          {race.busy ? 'Sending five copies…' : 'Send five identical requests'}
+          {race.busy ? '[ sending 5×… ]' : '[ race · 5 identical requests ]'}
         </button>
       </div>
       {race.error && <p className="error">{race.error}</p>}
@@ -693,42 +640,8 @@ function RetryStorm({ accountId, fromAccountId, fromName, onDone }: {
   );
 }
 
-function Architecture() {
-  return (
-    <footer className="architecture" id="architecture">
-      <div className="section-head">
-        <h3>Architecture</h3>
-        <a className="link small" href={REPO} target="_blank" rel="noreferrer">Design notes on GitHub →</a>
-      </div>
-      <dl className="stack">
-        <div><dt>Ledger service</dt><dd>Java 21 and Spring Boot with plain SQL over JDBC, compiled to a GraalVM native image and deployed as a container on Render.</dd></div>
-        <div><dt>Database</dt><dd>PostgreSQL. Append-only entries, a deferred balance trigger, a non-negative balance constraint, and the idempotency key as a unique column.</dd></div>
-        <div><dt>Events</dt><dd>Transactional outbox relayed to AWS SQS FIFO (Kafka locally). At-least-once with per-transfer ordering. Queue, DLQ and IAM in Terraform.</dd></div>
-        <div><dt>Web and assistant</dt><dd>React and TypeScript with a Hono API on Vercel. The assistant uses read-only tools scoped to the open account, with evals checking every amount.</dd></div>
-      </dl>
-
-      <div className="section-head">
-        <h3>Measured under load</h3>
-        <span className="muted small">k6 · open-model arrival · 10% replayed keys · 1 CPU / 512 MB container</span>
-      </div>
-      <table className="grid perf">
-        <thead><tr><th>Build and rate</th><th className="num">p50</th><th className="num">p99</th><th className="num">Errors</th><th className="num">Memory</th></tr></thead>
-        <tbody>
-          <tr><td>Native · 500 req/s</td><td className="num">4.5 ms</td><td className="num">30 ms</td><td className="num">0%</td><td className="num">54 MB</td></tr>
-          <tr><td>Native · 800 req/s</td><td className="num">6.3 ms</td><td className="num">109 ms</td><td className="num">0%</td><td className="num">80 MB</td></tr>
-          <tr><td>Native · 1,000 req/s</td><td className="num">224 ms</td><td className="num">518 ms</td><td className="num">10.9% shed as 503</td><td className="num">181 MB</td></tr>
-        </tbody>
-      </table>
-      <p className="muted small footnote">
-        The first JVM build was killed for running out of memory at 500 req/s because virtual threads queued every request on the heap.
-        The service now caps in-flight requests and answers overflow with a fast 503 and Retry-After, which is safe because every write is idempotent.
-        Totals summed to exactly zero after every run.
-      </p>
-    </footer>
-  );
-}
-
 function Chat({ account, name }: { account: AccountRef; name: string }) {
+  const trace = useTrace();
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -752,7 +665,11 @@ function Chat({ account, name }: { account: AccountRef; name: string }) {
     setBusy(true);
     setError('');
     try {
+      trace('POST /api/chat · tools=ledger-readonly');
       const reply = await api.chat(account.id, next.slice(-10));
+      for (const c of reply.toolCalls ?? []) {
+        trace(`tool · ${c.tool} · ${c.ms}ms`);
+      }
       setTurns([...next, { role: 'assistant', text: reply.answer, toolCalls: reply.toolCalls, model: reply.model }]);
     } catch (e) {
       setError((e as Error).message);
@@ -763,43 +680,57 @@ function Chat({ account, name }: { account: AccountRef; name: string }) {
   }
 
   return (
-    <aside className="chat" aria-label={`Assistant for ${name}`}>
-      <div className="chat-head">
-        <h2>Support assistant</h2>
-        <p className="muted small">
-          Answers from {name}&apos;s records through read-only lookups scoped to this account. It cannot move money,
-          read other customers, or take instructions from a memo.
-        </p>
+    <aside className="chat pane chat-terminal" aria-label={`Assistant for ${name}`}>
+      <div className="pane-hd">
+        <strong>support@ledger</strong> · read-only · scoped to {shortId(account.id)}
       </div>
-      <div className="log">
+      <div className="pane-bd chat-log">
+        {turns.length === 0 && (
+          <p className="dim chat-prompt">
+            &gt; ask about balances, declines, or activity — tools hit GET /api/accounts only for this wallet.
+          </p>
+        )}
         {turns.length === 0 && (
           <div className="suggestions">
-            {SUGGESTIONS.map((s) => <button key={s} className="chip" onClick={() => void send(s)}>{s}</button>)}
+            {SUGGESTIONS.map((s) => (
+              <button key={s} type="button" className="t-btn-inline" onClick={() => void send(s)}>{`> ${s}`}</button>
+            ))}
           </div>
         )}
         {turns.map((t, i) => (
-          <div key={i} className={`msg ${t.role}`}>
-            <p className="line">{t.text}</p>
-            {t.toolCalls && t.toolCalls.length > 0 && (
-              <details className="trace">
-                <summary>Checked the ledger · {t.toolCalls.length} lookup{t.toolCalls.length > 1 ? 's' : ''}</summary>
-                {t.toolCalls.map((c, j) => (
-                  <div key={j} className="call">
-                    <code>{c.tool}</code> <span className="muted">{c.ms} ms</span>
-                    <pre>{JSON.stringify(c.result, null, 2)}</pre>
-                  </div>
-                ))}
-              </details>
-            )}
+          <div key={i} className={t.role === 'user' ? 'line-user' : 'line-bot'}>
+            <span className="chat-prefix">{t.role === 'user' ? 'you%' : 'sys#'}</span>
+            <div className="chat-body">
+              <p>{t.text}</p>
+              {t.toolCalls && t.toolCalls.length > 0 && (
+                <details className="tool-trace">
+                  <summary>{t.toolCalls.length} tool call{t.toolCalls.length > 1 ? 's' : ''}</summary>
+                  {t.toolCalls.map((c, j) => (
+                    <div key={j} className="tool-line">
+                      <code>{c.tool}</code> <span className="dim">{c.ms}ms</span>
+                      <pre>{JSON.stringify(c.result, null, 2)}</pre>
+                    </div>
+                  ))}
+                </details>
+              )}
+            </div>
           </div>
         ))}
-        {busy && <p className="muted small thinking">Looking through the ledger…</p>}
-        {error && <p className="error" role="alert">{error}</p>}
+        {busy && <p className="dim chat-thinking">&gt; querying ledger…</p>}
+        {error && <p className="err" role="alert">{error}</p>}
         <div ref={end} />
       </div>
-      <form className="composer" onSubmit={(e) => { e.preventDefault(); void send(input); }}>
-        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={`Ask about ${name}'s account`} aria-label="Message" maxLength={2000} />
-        <button className="btn primary small" disabled={busy || !input.trim()}>Send</button>
+      <form className="chat-composer" onSubmit={(e) => { e.preventDefault(); void send(input); }}>
+        <span className="chat-prefix" aria-hidden="true">&gt;</span>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={`message (${name})`}
+          aria-label="Message"
+          maxLength={2000}
+          className="chat-input"
+        />
+        <button type="submit" className="t-btn-inline" disabled={busy || !input.trim()}>[ send ]</button>
       </form>
     </aside>
   );

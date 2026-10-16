@@ -10,11 +10,12 @@ import {
   type LedgerEntryRow,
   type Turn,
 } from './api.js';
+import { LedgerWorld } from './LedgerWorld.js';
 import { OFFLINE_BOOTSTRAP } from './practice-fixture.js';
 
 const PRACTICE_PREFIX = '01111111-1111-7111-8111-';
 
-type Tab = 'overview' | 'ledger' | 'send' | 'activity' | 'ask';
+type Tab = 'world' | 'overview' | 'ledger' | 'send' | 'activity' | 'ask';
 
 function displayName(owner: string): string {
   const base = owner.split('-')[0] || owner;
@@ -98,7 +99,12 @@ export function App() {
       <main className="main">
         {booting && <p className="dim wait">loading…</p>}
         {bootError && !account && <p className="err">{bootError}</p>}
-        {!booting && !account && <SignIn onSignIn={signIn} />}
+        {!booting && !account && (
+          <>
+            <LedgerWorld />
+            <SignIn onSignIn={signIn} />
+          </>
+        )}
         {!booting && account && (
           <Wallet account={account} stoppedTransferId={stoppedId} onSignOut={signOut} />
         )}
@@ -281,7 +287,7 @@ function Wallet({
   stoppedTransferId: string | null;
   onSignOut: () => void;
 }) {
-  const [tab, setTab] = useState<Tab>('overview');
+  const [tab, setTab] = useState<Tab>('world');
   const [view, setView] = useState<AccountView | null>(null);
   const [peers, setPeers] = useState<AccountRef[]>([]);
   const [err, setErr] = useState('');
@@ -317,7 +323,7 @@ function Wallet({
       </p>
 
       <nav className="tabs" aria-label="Sections">
-        {(['overview', 'ledger', 'send', 'activity', 'ask'] as Tab[]).map((t) => (
+        {(['world', 'overview', 'ledger', 'send', 'activity', 'ask'] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -329,9 +335,12 @@ function Wallet({
         ))}
       </nav>
 
-      {busy && tab !== 'ask' && <p className="dim wait">syncing…</p>}
+      {busy && tab !== 'ask' && tab !== 'world' && <p className="dim wait">syncing…</p>}
       {err && <p className="err" role="alert">{err}</p>}
 
+      {tab === 'world' && (
+        <LedgerWorld onJump={(t) => setTab(t === 'send' ? 'send' : t === 'ledger' ? 'ledger' : 'ask')} />
+      )}
       {view && tab === 'overview' && <Overview view={view} live={live} />}
       {view && tab === 'ledger' && <LedgerStatement accountId={account.id} currency={view.currency} />}
       {view && tab === 'send' && (

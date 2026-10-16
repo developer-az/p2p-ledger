@@ -10,6 +10,8 @@
 
 Practice mode mirrors stories in-memory; **live mode** is always PostgreSQL on Render.
 
+**P2P vs blockchain:** Counterparty payments are P2P; custody is centralized in Java/Postgres. For Solidity, Ethereum bridges, and how much value the stack is meant to hold, see **[P2P-SOLIDITY-AND-SCALE.md](P2P-SOLIDITY-AND-SCALE.md)**.
+
 ## Visual intro (pre-sign-in)
 
 - Scene-based walkthrough with suited 8-bit personas (Alex, Sam, Jordan) — **not** a WASD game.
@@ -38,7 +40,7 @@ Run **`npm run smoke:api -- https://your-app.vercel.app`** after every deploy.
 
 - Set **`GEMINI_API_KEY`** on Vercel (and locally in `.env.local`) for full LLM answers.
 - Bootstrap reports `chat.configured` — when false, Ask still works via **read-only ledger tools** (spending totals, declines, memos).
-- OpenRouter is not integrated yet; Anthropic is available via `LLM_PROVIDER=anthropic`.
+- **OpenRouter** — `LLM_PROVIDER=openrouter` with `OPENROUTER_API_KEY` (see [DEVELOPMENT.md](DEVELOPMENT.md)); Anthropic via `LLM_PROVIDER=anthropic`.
 
 ## Why live “didn’t save”
 

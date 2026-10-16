@@ -8,6 +8,8 @@
   <a href="docs/API.md">API reference</a>
   ·
   <a href="docs/ARCHITECTURE.md">Ledger deep-dive</a>
+  ·
+  <a href="docs/P2P-SOLIDITY-AND-SCALE.md">P2P &amp; on-chain</a>
 </p>
 
 <p align="center">

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { runAssistant } from './agent.js';
 import { booksCheck, paymentTrail, racePayment, replayPayment, tamperWithPayment } from './console.js';
 import { seedDemo } from './demo.js';
+import { normalizeProviderId } from './env-normalize.js';
 import { answerFromLedger } from './fallback.js';
 import { LedgerError, type LedgerAuditor, type LedgerReader, type LedgerWriter } from './ledger.js';
 import { isModelOutage } from './providers/retry.js';
@@ -103,7 +104,7 @@ export function createApp(deps: {
       configured: boolean;
       model?: string;
       configHint?: string;
-    } = { provider: (process.env.LLM_PROVIDER ?? 'gemini').toLowerCase(), configured: false };
+    } = { provider: normalizeProviderId(process.env.LLM_PROVIDER), configured: false };
     try {
       const p = providerFromEnv();
       chat = { provider: p.name, configured: true, model: p.model };

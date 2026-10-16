@@ -13,6 +13,7 @@
     "build": "tsc --noEmit && vite build",
     "start": "node --import tsx src/server/main.ts",
     "test": "vitest run",
+    "smoke:api": "tsx scripts/smoke-api.ts",
     "eval": "tsx --env-file-if-exists=.env.local evals/run.ts",
     "seed": "tsx scripts/seed.ts",
     "typecheck": "tsc --noEmit"

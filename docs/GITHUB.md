@@ -13,7 +13,7 @@ This repo is designed to run as **your** stack: Java ledger (source of truth) + 
 
 | Name | Type | Purpose |
 |------|------|---------|
-| `ASSISTANT_URL` | **Variable** | Vercel (or other) deployment of `assistant/`. Keep-warm pings `/api/health`. |
+| `ASSISTANT_URL` | **Variable** | Vercel (or other) deployment of `assistant/`. Keep-warm pings `/api/health`; **assistant CI** runs `npm run smoke:api` when this is set. |
 | `GEMINI_API_KEY` | **Secret** | Vercel chat + optional **assistant eval (Gemini)** workflow (manual only; not run on every push). |
 
 ### Set `LEDGER_URL`

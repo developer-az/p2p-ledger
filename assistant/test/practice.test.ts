@@ -51,6 +51,28 @@ describe('practice ledger', () => {
     expect(body.status).toBe('COMPLETED');
   });
 
+  it('does not offer practice peers for a live-only wallet', async () => {
+    const liveId = '01a1422e-888a-7188-a250-d869574a8191';
+    const liveOnly: LedgerReader & LedgerWriter = {
+      ...rejectLive,
+      getAccount: (id) => Promise.resolve(
+        id === liveId
+          ? { id: liveId, ownerId: 'live-user', currency: 'USD', type: 'USER', balanceMinor: 0, createdAt: new Date().toISOString() }
+          : null,
+      ),
+      transfersForAccount: () => Promise.resolve([]),
+    };
+    const liveApp = createApp({
+      ledger: new CompositeLedger(liveOnly, practice, async () => true),
+      practice,
+      isLiveLedgerUp: async () => true,
+      provider: () => new ScriptedProvider([{ answer: 'Hello!' }]),
+    });
+    const res = await liveApp.request(`/api/peers?accountId=${liveId}`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
+  });
+
   it('loads Alex with a declined rent payment', async () => {
     const res = await app.request(`/api/accounts?id=${PRACTICE_ALEX}`);
     expect(res.status).toBe(200);

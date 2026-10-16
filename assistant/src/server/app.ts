@@ -196,8 +196,9 @@ async function accountView(ledger: LedgerReader, id: string, limit = 30) {
 }
 
 async function listPeers(ledger: CompositeLedger, accountId: string) {
-  const practice = ledger.practicePeers(accountId);
-  if (practice.length > 0) return practice;
+  if (ledger.isPracticeAccount(accountId)) {
+    return ledger.practicePeers(accountId);
+  }
   const recent = await ledger.transfersForAccount(accountId, 200);
   const ids = new Set<string>();
   for (const t of recent) {

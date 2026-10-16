@@ -91,13 +91,35 @@ const checks: Check[] = [
     },
   },
   {
-    name: 'GET /api/peers?accountId=',
+    name: 'GET /api/peers?accountId= (practice)',
     run: async () => {
       const { res, json } = await fetchJson(`/api/peers?accountId=${PRACTICE_ALEX}`);
       if (res.status !== 200) throw new Error(`status ${res.status}`);
       const peers = json as { id: string }[];
       if (!Array.isArray(peers) || !peers.some((p) => p.id === PRACTICE_SAM)) {
         throw new Error(`unexpected peers ${JSON.stringify(json)}`);
+      }
+    },
+  },
+  {
+    name: 'GET /api/peers for live wallet (no practice bleed)',
+    run: async () => {
+      const created = await fetchJson('/api/accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ownerId: `smoke-peer-${Date.now()}`, currency: 'USD' }),
+      });
+      if (created.res.status !== 201) {
+        throw new Error(`open account ${created.res.status}`);
+      }
+      const id = (created.json as { id: string }).id;
+      const { res, json } = await fetchJson(`/api/peers?accountId=${id}`);
+      if (res.status !== 200) throw new Error(`status ${res.status}`);
+      const peers = json as { id: string }[];
+      if (!Array.isArray(peers)) throw new Error('expected array');
+      const practiceBleed = peers.some((p) => p.id.startsWith('01111111-1111-7111-8111-'));
+      if (practiceBleed) {
+        throw new Error(`live wallet must not list practice peers: ${JSON.stringify(json)}`);
       }
     },
   },

@@ -423,6 +423,14 @@ export class CompositeLedger implements LedgerReader, LedgerWriter, LedgerAudito
         return { ...i, source: 'live', auditAvailable: true };
       } catch (e) {
         if (e instanceof LedgerError && (e.status === 404 || e.status === 503 || e.status === 502 || e.status === 504)) {
+          const { databaseUrlFromEnv, integrityFromPostgres } = await import('./integrity-postgres.js');
+          const dbUrl = databaseUrlFromEnv();
+          if (dbUrl) {
+            const fromDb = await integrityFromPostgres(dbUrl);
+            if (fromDb) {
+              return { ...fromDb, source: 'live', auditAvailable: true };
+            }
+          }
           return {
             checkedAt: new Date().toISOString(),
             entryCount: 0,
@@ -437,9 +445,9 @@ export class CompositeLedger implements LedgerReader, LedgerWriter, LedgerAudito
             source: 'audit-unavailable',
             auditAvailable: false,
             message:
-              'Your money is in live PostgreSQL, but this host has no GET /v1/ledger/integrity yet. ' +
-              'Redeploy ledger-service from this repo to see company-wide reconciliation. ' +
-              'Use the blotter and ONBOARD (F2) to exercise real transfers now.',
+              'Live PostgreSQL is up, but Render’s ledger image has no GET /v1/ledger/integrity (404). ' +
+              'Merge this branch to main (ledger-ci redeploys Render) or set LEDGER_DATABASE_URL on Vercel to the same Postgres URL as the ledger. ' +
+              'BLOTTER and ONBOARD still use real money.',
           };
         }
         throw e;

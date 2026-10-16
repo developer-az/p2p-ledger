@@ -20,7 +20,7 @@ This repo is designed to run as **your** stack: Java ledger (source of truth) + 
 
 **Quota note:** `assistant-ci.yml` does **not** call Gemini. Daily limits are usually Vercel traffic or manually running **assistant eval (Gemini)** — keep eval manual and use `gemini-2.0-flash-lite` or OpenRouter.
 
-**F3 integrity:** After merging `ledger-service` changes to `main`, `ledger-ci` rebuilds the native image and hits **Render** — then `GET /v1/ledger/integrity` works for the assistant F3 panel.
+**F3 integrity:** Render must expose `GET /v1/ledger/integrity` (merge to `main` or push `feat/guided-visual-ledger` with `ledger-service` changes — CI deploys Render). **Or** set **`LEDGER_DATABASE_URL`** on Vercel to the ledger’s Postgres URL (session pooler); the assistant runs the same audit SQL when Java returns 404.
 
 ### Set `LEDGER_URL`
 

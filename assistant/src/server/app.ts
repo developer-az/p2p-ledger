@@ -11,6 +11,12 @@ import type { LlmProvider } from './providers/types.js';
 import type { CompositeLedger, PracticeLedger } from './practice-ledger.js';
 import { LEDGER_CAPABILITIES } from './personas.js';
 import { formatLedgerStatement } from './statement-export.js';
+import {
+  bankSimulatorStatus,
+  simulateInboundCorridor,
+  simulateOutboundCorridor,
+  welcomeBankPackage,
+} from './bank-sim.js';
 import { peerLedgerView } from './peer-ledger.js';
 import { loadAccountView } from './tools.js';
 import { providerFromEnv } from './providers/index.js';
@@ -227,6 +233,49 @@ export function createApp(deps: {
       }, 503);
     }
     return c.json(await seedDemo(deps.liveLedger));
+  });
+
+  app.get('/bank/status', (c) => c.json(bankSimulatorStatus()));
+
+  const bankBody = z.object({ accountId: z.string().uuid() });
+
+  app.post('/bank/welcome', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = bankBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    const account = await deps.ledger.getAccount(parsed.data.accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    try {
+      return c.json(await welcomeBankPackage(deps.ledger, parsed.data.accountId, 500_00));
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+  });
+
+  app.post('/bank/inbound', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = bankBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    const account = await deps.ledger.getAccount(parsed.data.accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    try {
+      return c.json(await simulateInboundCorridor(deps.ledger, parsed.data.accountId));
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+  });
+
+  app.post('/bank/outbound', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = bankBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    const account = await deps.ledger.getAccount(parsed.data.accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    try {
+      return c.json(await simulateOutboundCorridor(deps.ledger, parsed.data.accountId));
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
   });
 
   app.get('/trail', async (c) => {

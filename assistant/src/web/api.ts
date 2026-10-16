@@ -96,6 +96,16 @@ export interface AccountView {
   transfers: AccountActivity[];
 }
 
+export interface CorridorResult {
+  corridor: 'inbound' | 'outbound';
+  peer: AccountRef;
+  transferId: string;
+  amount: string;
+  status: 'COMPLETED' | 'REJECTED';
+  memo: string;
+  narrative: string;
+}
+
 export interface PeerLedgerView {
   peer: AccountRef;
   windowDays: number;
@@ -241,6 +251,25 @@ export const api = {
 
   peerLedger: (accountId: string, peerId: string, days = 30) =>
     call<PeerLedgerView>(`/api/peer-ledger?accountId=${encodeURIComponent(accountId)}&peerId=${encodeURIComponent(peerId)}&days=${days}`),
+
+  bankStatus: () => call<{
+    name: string;
+    description: string;
+    inboundScenarios: string[];
+    outboundScenarios: string[];
+  }>('/api/bank/status'),
+
+  bankWelcome: (accountId: string) =>
+    call<{ depositTransferId: string; corridor: CorridorResult }>('/api/bank/welcome', {
+      method: 'POST',
+      body: JSON.stringify({ accountId }),
+    }),
+
+  bankInbound: (accountId: string) =>
+    call<CorridorResult>('/api/bank/inbound', { method: 'POST', body: JSON.stringify({ accountId }) }),
+
+  bankOutbound: (accountId: string) =>
+    call<CorridorResult>('/api/bank/outbound', { method: 'POST', body: JSON.stringify({ accountId }) }),
   account: (id: string, limit = 50) =>
     call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}&limit=${limit}`),
   entries: (accountId: string, limit = 50) =>

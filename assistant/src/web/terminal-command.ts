@@ -10,6 +10,8 @@ export type TerminalAction =
   | { kind: 'split'; total: string; args: string }
   | { kind: 'peer'; owner: string }
   | { kind: 'peers' }
+  | { kind: 'bank-in' }
+  | { kind: 'bank-out' }
   | { kind: 'open'; owner: string }
   | { kind: 'signout' }
   | { kind: 'refresh' }
@@ -40,6 +42,8 @@ export function parseTerminalInput(raw: string): TerminalAction {
   if (lower.startsWith('open ')) return { kind: 'open', owner: line.slice(5).trim() };
 
   if (lower === ':peers' || lower === 'peers') return { kind: 'peers' };
+  if (lower === 'bank in' || lower === ':bank in' || lower === 'ach in' || lower === ':ach in') return { kind: 'bank-in' };
+  if (lower === 'bank out' || lower === ':bank out' || lower === 'ach out' || lower === ':ach out') return { kind: 'bank-out' };
   if (lower.startsWith(':peer ')) return { kind: 'peer', owner: line.slice(6).trim() };
   if (lower.startsWith('peer ')) return { kind: 'peer', owner: line.slice(5).trim() };
 

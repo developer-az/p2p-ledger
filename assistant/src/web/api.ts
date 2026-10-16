@@ -72,7 +72,9 @@ export interface Integrity {
   accountsDrifted: number;
   outbox: { total: number; pending: number; oldestPendingAt: string | null; p95DeliveryMs: number | null };
   balanced: boolean;
-  source?: 'live' | 'practice';
+  source?: 'live' | 'practice' | 'audit-unavailable';
+  auditAvailable?: boolean;
+  message?: string;
 }
 
 export interface AccountSummary {
@@ -162,6 +164,15 @@ function idempotencyKey(): string {
   return crypto.randomUUID();
 }
 
+/** Parse "$12.50" or "12.5" into minor units. */
+export function dollarsToMinor(input: string): number | null {
+  const cleaned = input.trim().replace(/[$,\s]/g, '');
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  if (!Number.isFinite(n) || n <= 0 || n > 999_000) return null;
+  return Math.round(n * 100);
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -188,6 +199,26 @@ export const api = {
   findAccounts: (owner: string) => call<AccountRef[]>(`/api/accounts?owner=${encodeURIComponent(owner)}`),
   openAccount: (ownerId: string) =>
     call<AccountRef>('/api/accounts', { method: 'POST', body: JSON.stringify({ ownerId, currency: 'USD' }) }),
+  deposit: (accountId: string, amountMinor: number) =>
+    call<{ id: string; status: string }>(`/api/accounts/${encodeURIComponent(accountId)}/deposits`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey() },
+      body: JSON.stringify({ amountMinor }),
+    }),
+  transfer: (body: {
+    sourceAccountId: string;
+    destinationAccountId: string;
+    amountMinor: number;
+    currency: string;
+    memo?: string;
+  }) =>
+    call<{ id: string; status: string }>('/api/transfers', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey() },
+      body: JSON.stringify(body),
+    }),
+  peers: (accountId: string) =>
+    call<AccountRef[]>(`/api/peers?accountId=${encodeURIComponent(accountId)}`),
   account: (id: string, limit = 50) =>
     call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}&limit=${limit}`),
   entries: (accountId: string, limit = 50) =>

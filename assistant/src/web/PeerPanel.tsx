@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type PeerLedgerView } from './api.js';
-
-function personName(owner: string): string {
-  const base = owner.split('-')[0] || owner;
-  return base.charAt(0).toUpperCase() + base.slice(1);
-}
+import { personName } from './person-name.js';
 
 export function PeerPanel({
   accountId,

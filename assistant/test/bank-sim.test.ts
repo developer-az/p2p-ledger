@@ -63,7 +63,7 @@ describe('bank-sim', () => {
   it('inbound corridor opens a new peer account', async () => {
     const ledger = new SimLedger();
     const r = await simulateInboundCorridor(ledger, USER);
-    expect(r.peer.owner).toMatch(/^(payroll|client|marketplace|refund)-/);
+    expect(r.peer.owner).toMatch(/^(payroll|client|marketplace|refund|stripe|gig|insurance|taxrefund)-/);
     expect(r.status).toBe('COMPLETED');
   });
 });

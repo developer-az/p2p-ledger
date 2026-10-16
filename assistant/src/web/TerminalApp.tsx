@@ -24,7 +24,8 @@ import {
 } from './api.js';
 import { OFFLINE_BOOTSTRAP } from './practice-fixture.js';
 import { PeerPanel } from './PeerPanel.js';
-import { parseTerminalInput } from './terminal-command.js';
+import { personName } from './person-name.js';
+import { parseTerminalInput, splitAmountsMinor } from './terminal-command.js';
 import {
   deleteConfirmSkipped,
   loadHiddenTransfers,
@@ -40,11 +41,6 @@ import {
 import { loadSavedWallets, rememberWallet } from './wallet-store.js';
 
 const REPO = 'https://github.com/developer-az/p2p-ledger';
-function personName(owner: string): string {
-  if (owner.startsWith('Bank funding')) return 'Bank';
-  const base = owner.split('-')[0] || owner;
-  return base.charAt(0).toUpperCase() + base.slice(1);
-}
 
 function shortId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
@@ -163,6 +159,15 @@ export function TerminalApp() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account?.id]);
+
+  useEffect(() => {
+    if (!account || !stoppedTransferId) return;
+    const id = stoppedTransferId;
+    setStoppedTransferId(null);
+    setSelectedPay(id);
+    void loadTrail(account.id, id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account?.id, stoppedTransferId]);
 
   function signIn(a: AccountRef, stoppedId?: string) {
     setAccount(a);
@@ -300,6 +305,42 @@ export function TerminalApp() {
     setBusy('DEP');
     try {
       await fundAccount(account.id, minor, 'user deposit');
+      await loadAccount(account.id);
+    } catch (e) {
+      append(`ERR ${(e as Error).message}`);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function runSplit(totalMinor: number, peerTokens: string[], memo: string) {
+    if (!account) return;
+    const amounts = splitAmountsMinor(totalMinor, peerTokens.length);
+    setBusy('SPLIT');
+    append(`SPLIT ${peerTokens.length} peer(s) · ${(totalMinor / 100).toFixed(2)} USD total`);
+    try {
+      for (let i = 0; i < peerTokens.length; i++) {
+        const peerTok = peerTokens[i]!;
+        const minor = amounts[i]!;
+        let dest = peers.find((p) => p.id === peerTok || p.owner === peerTok || p.owner.startsWith(peerTok));
+        if (!dest) {
+          const found = await api.findAccounts(peerTok);
+          dest = found[0] ?? undefined;
+        }
+        if (!dest) {
+          append(`ERR split: unknown peer ${peerTok}`);
+          continue;
+        }
+        append(`POST /api/transfers → ${dest.owner} (${(minor / 100).toFixed(2)})`);
+        const t = await api.transfer({
+          sourceAccountId: account.id,
+          destinationAccountId: dest.id,
+          amountMinor: minor,
+          currency: 'USD',
+          memo,
+        });
+        append(t.status === 'REJECTED' ? `SPLIT REJ ${dest.owner}` : `SPLIT OK ${dest.owner}`);
+      }
       await loadAccount(account.id);
     } catch (e) {
       append(`ERR ${(e as Error).message}`);
@@ -494,7 +535,7 @@ export function TerminalApp() {
     const action = parseTerminalInput(raw);
     switch (action.kind) {
       case 'help':
-        append('CMD F1 help | F2 onboard | bank in | bank out | peer sam | pay sam 10 lunch | split 50 sam dinner');
+        append('CMD F1 help | F2 onboard | bank in/out | pay sam 10 lunch | split 60 sam jordan lunch');
         return;
       case 'bank-in':
         void runBankInbound();
@@ -523,6 +564,9 @@ export function TerminalApp() {
         return;
       case 'pay':
         void runPay(action.args);
+        return;
+      case 'split':
+        void runSplit(action.totalMinor, action.peers, action.memo);
         return;
       case 'open':
         void openWallet(action.owner, true);
@@ -556,7 +600,7 @@ export function TerminalApp() {
 
   const saved = loadSavedWallets().filter((w) => w.live);
   const selectedPeer = peers.find((p) => p.id === selectedPeerId) ?? null;
-  const allTransfers = view ? orderStoppedFirst(view.transfers, stoppedTransferId) : [];
+  const allTransfers = view ? sortTransfersNewestFirst(view.transfers) : [];
   const transfers = (selectedPeer
     ? allTransfers.filter((t) =>
       t.counterpartyAccountId === selectedPeer.id
@@ -879,7 +923,6 @@ export function TerminalApp() {
   );
 }
 
-function orderStoppedFirst(transfers: AccountActivity[], stoppedTransferId: string | null): AccountActivity[] {
-  if (!stoppedTransferId) return transfers;
-  return [...transfers].sort((a, b) => Number(b.transferId === stoppedTransferId) - Number(a.transferId === stoppedTransferId));
+function sortTransfersNewestFirst(transfers: AccountActivity[]): AccountActivity[] {
+  return [...transfers].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }

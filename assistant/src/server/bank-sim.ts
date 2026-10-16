@@ -8,12 +8,23 @@ const INBOUND_SCENARIOS = [
   { prefix: 'client', memo: 'Client reimbursement', amountMinor: 42_500 },
   { prefix: 'marketplace', memo: 'Marketplace payout', amountMinor: 18_750 },
   { prefix: 'refund', memo: 'Card refund corridor', amountMinor: 9_900 },
+  { prefix: 'stripe', memo: 'Stripe payout', amountMinor: 31_200 },
+  { prefix: 'gig', memo: 'Gig platform settlement', amountMinor: 12_400 },
+  { prefix: 'insurance', memo: 'Insurance reimbursement', amountMinor: 6_500 },
+  { prefix: 'taxrefund', memo: 'Tax refund corridor', amountMinor: 22_000 },
 ] as const;
 
 const OUTBOUND_SCENARIOS = [
   { prefix: 'vendor', memo: 'Vendor invoice · simulated wire', amountMinor: 15_000 },
   { prefix: 'saas', memo: 'SaaS subscription', amountMinor: 4_999 },
   { prefix: 'landlord', memo: 'Rent corridor', amountMinor: 85_000 },
+  { prefix: 'utilities', memo: 'Utilities ACH', amountMinor: 18_500 },
+  { prefix: 'contractor', memo: 'Contractor payment', amountMinor: 32_000 },
+  { prefix: 'insurance', memo: 'Insurance premium', amountMinor: 11_200 },
+  { prefix: 'property', memo: 'Property management', amountMinor: 92_000 },
+  { prefix: 'freight', memo: 'Freight & logistics', amountMinor: 7_800 },
+  { prefix: 'caterer', memo: 'Catering invoice', amountMinor: 5_600 },
+  { prefix: 'gear', memo: 'Equipment supplier', amountMinor: 21_000 },
 ] as const;
 
 export interface CorridorResult {

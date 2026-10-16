@@ -91,12 +91,18 @@ export function createApp(deps: {
         }
       }
     }
-    let chat = { provider: (process.env.LLM_PROVIDER ?? 'gemini').toLowerCase(), configured: false };
+    let chat: {
+      provider: string;
+      configured: boolean;
+      model?: string;
+      configHint?: string;
+    } = { provider: (process.env.LLM_PROVIDER ?? 'gemini').toLowerCase(), configured: false };
     try {
-      providerFromEnv();
-      chat = { ...chat, configured: true };
-    } catch {
+      const p = providerFromEnv();
+      chat = { provider: p.name, configured: true, model: p.model };
+    } catch (e) {
       chat.configured = false;
+      chat.configHint = llmConfigError(e);
     }
     return c.json({
       live,
@@ -273,7 +279,12 @@ export function createApp(deps: {
     } catch (e) {
       console.error(e);
       const question = messages.at(-1)?.text ?? '';
-      return c.json(await answerFromLedger({ ledger: deps.ledger, accountId, question }));
+      const reason = llmConfigError(e);
+      return c.json({
+        ...(await answerFromLedger({ ledger: deps.ledger, accountId, question })),
+        route: 'ledger-fallback',
+        fallbackReason: reason,
+      });
     }
     try {
       return c.json(await runAssistant({ provider, ledger: deps.ledger, accountId, messages }));
@@ -281,7 +292,11 @@ export function createApp(deps: {
       // The free Gemini cap is 20 requests a day. The books can still answer.
       if (isModelOutage(e)) {
         const question = messages.at(-1)?.text ?? '';
-        return c.json(await answerFromLedger({ ledger: deps.ledger, accountId, question }));
+        return c.json({
+          ...(await answerFromLedger({ ledger: deps.ledger, accountId, question })),
+          route: 'ledger-fallback',
+          fallbackReason: 'Gemini is unavailable (quota, timeout, or outage). Answering with ledger tools instead.',
+        });
       }
       throw e;
     }
@@ -327,4 +342,15 @@ async function listPeers(ledger: CompositeLedger, accountId: string) {
 function respondAccount(c: { json: (body: unknown, status?: number) => Response }, view: Awaited<ReturnType<typeof loadAccountView>>) {
   if (!view) return c.json({ error: 'Account not found' }, 404);
   return c.json(view);
+}
+
+function llmConfigError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/GEMINI_API_KEY is not set/i.test(message)) {
+    return 'GEMINI_API_KEY is not set on the assistant server. Add it in Vercel (or assistant/.env locally), redeploy, then refresh.';
+  }
+  if (/ANTHROPIC_API_KEY is not set/i.test(message)) {
+    return 'ANTHROPIC_API_KEY is not set on the assistant server.';
+  }
+  return message;
 }

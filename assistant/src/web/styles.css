@@ -420,3 +420,88 @@ code { font-size: .92em; padding: 0 4px; background: var(--sunken); color: var(-
 .chart-svg { width: 100%; max-width: 320px; height: auto; display: block; }
 .chart-label { fill: var(--muted); font-size: 9px; font-family: ui-monospace, monospace; }
 .chart-legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); grid-column: 1 / -1; }
+
+/* Unified terminal shell */
+.term-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 16px 24px;
+}
+.term-hd {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 14px 0 10px;
+  border-bottom: 1px solid var(--line-strong);
+  flex-wrap: wrap;
+}
+.term-hd a.term-link.quiet {
+  margin-left: auto;
+  text-decoration: underline;
+  color: var(--text-2);
+}
+.term-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 0 12px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.term-line { margin: 0 0 10px; white-space: pre-wrap; word-break: break-word; }
+.term-block { margin-bottom: 8px; }
+.term-user { color: var(--text); }
+.term-bot { color: var(--text-2); }
+.term-link {
+  display: inline;
+  padding: 0 2px;
+  margin: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--action);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+.term-link:hover { color: var(--accent-hover); }
+.term-link:disabled { opacity: .35; cursor: default; text-decoration: none; }
+.term-link.quiet { text-decoration: underline; }
+.term-expand {
+  margin: 8px 0 14px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--line-strong);
+  background: var(--surface);
+}
+.term-expand.nested { margin-left: 8px; padding-left: 10px; }
+.term-pre {
+  margin: 8px 0 0;
+  padding: 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+.term-details { margin: 6px 0 10px; font-size: 12px; }
+.term-details summary { cursor: pointer; color: var(--muted); }
+.trace-details { margin-top: 20px; border-top: 1px dashed var(--line); padding-top: 12px; }
+.term-pay.highlight .term-link { font-weight: 700; }
+.term-prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-strong);
+}
+.term-prompt input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--text);
+}
+.term-busy { margin: 0; padding: 0 0 8px; font-size: 11px; }
+.term-chat-turn { margin-bottom: 4px; }

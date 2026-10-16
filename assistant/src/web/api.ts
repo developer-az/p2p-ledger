@@ -126,7 +126,7 @@ export interface BootstrapResponse {
     persistence?: string;
     auditCapabilities?: boolean;
   };
-  chat?: { provider: string; configured: boolean };
+  chat?: { provider: string; configured: boolean; model?: string; configHint?: string };
 }
 
 export interface ToolCall { tool: string; args: unknown; result: unknown; ms: number }
@@ -204,7 +204,14 @@ export const api = {
   tamper: (accountId: string, transferId: string) =>
     call<TamperReport>('/api/tamper', { method: 'POST', body: JSON.stringify({ accountId, transferId }) }),
   chat: (accountId: string, messages: Turn[]) =>
-    call<{ answer: string; toolCalls: ToolCall[]; provider: string; model: string }>('/api/chat', {
+    call<{
+      answer: string;
+      toolCalls: ToolCall[];
+      provider: string;
+      model: string;
+      route?: 'gemini' | 'anthropic' | 'ledger-fallback';
+      fallbackReason?: string;
+    }>('/api/chat', {
       method: 'POST',
       body: JSON.stringify({ accountId, messages: messages.map(({ role, text }) => ({ role, text })) }),
     }),

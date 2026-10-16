@@ -151,3 +151,21 @@ table.ledger tr.fail td:first-child { color: var(--red); }
 .status-line { font-size: 12px; margin-bottom: 12px; }
 .status-line .live { color: var(--action); }
 .status-line .off { color: var(--amber); }
+
+.cap-list {
+  margin: 8px 0 0; padding-left: 18px; font-size: 11px; color: var(--dim);
+}
+.cap-list li { margin: 2px 0; }
+
+.mono-id { font-size: 11px; color: var(--dim); word-break: break-all; }
+
+table.stmt {
+  width: 100%; border-collapse: collapse; font-size: 11px;
+}
+table.stmt th {
+  text-align: left; color: var(--dim); font-weight: 500;
+  border-bottom: 1px solid var(--line); padding: 6px 4px;
+}
+table.stmt td { padding: 6px 4px; border-bottom: 1px solid #1a1a1a; }
+table.stmt .pos { color: var(--action); }
+table.stmt .neg { color: var(--red); }

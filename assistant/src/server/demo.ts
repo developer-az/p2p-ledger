@@ -24,10 +24,14 @@ export async function seedDemo(ledger: LedgerWriter) {
   await send(sam.id, alex.id, 1_800, 'Uber split');
   await send(alex.id, sam.id, 150_000, 'Concert tickets');
   await send(alex.id, jordan.id, 2_599, 'Groceries');
+  await send(alex.id, jordan.id, 8_900, 'Utilities · electric + water');
+  await send(sam.id, alex.id, 22_500, 'Reimbursement · team offsite travel');
   return {
     accounts: [alex, sam, jordan].map((a) => ({ id: a.id, owner: a.ownerId })),
     focusAccountId: alex.id,
     stopped: stoppedPayment(rent),
+    narrative:
+      'Live PostgreSQL ledger: household + work reimbursements, one declined rent (NEW_ACCOUNT_LARGE_TRANSFER).',
   };
 }
 

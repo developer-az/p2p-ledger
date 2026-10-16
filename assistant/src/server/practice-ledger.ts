@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { RENT_AMOUNT_MINOR, RENT_MEMO } from './demo.js';
 import type { Account, LedgerEntry, LedgerReader, LedgerWriter, Transfer } from './ledger.js';
+import { personaForOwner } from './personas.js';
 
 export const PRACTICE_ALEX = '01111111-1111-7111-8111-111111111101';
 export const PRACTICE_SAM = '01111111-1111-7111-8111-111111111102';
@@ -89,14 +90,23 @@ function buildPracticeData(): { accounts: Account[]; transfers: Transfer[] } {
     transfer('p-uber', PRACTICE_SAM, PRACTICE_ALEX, 1_800, daysAgo(4), 'Uber split'),
     transfer('p-concert', PRACTICE_ALEX, PRACTICE_SAM, 150_000, daysAgo(3), 'Concert tickets'),
     transfer('p-groceries', PRACTICE_ALEX, PRACTICE_JORDAN, 2_599, daysAgo(2), 'Groceries'),
+    transfer('p-util', PRACTICE_ALEX, PRACTICE_JORDAN, 8_900, daysAgo(8), 'Utilities · electric + water'),
+    transfer('p-reimb', PRACTICE_SAM, PRACTICE_ALEX, 22_500, daysAgo(7), 'Reimbursement · team offsite travel'),
   ];
 
   return { accounts, transfers };
 }
 
+export interface PracticeBootstrapAccount {
+  id: string;
+  owner: string;
+  role: string;
+  blurb: string;
+}
+
 export interface PracticeBootstrap {
   mode: 'practice';
-  accounts: { id: string; owner: string }[];
+  accounts: PracticeBootstrapAccount[];
   focusAccountId: string;
   stoppedTransferId: string;
   hint: string;
@@ -117,10 +127,13 @@ export class PracticeLedger implements LedgerReader, LedgerWriter {
   bootstrap(): PracticeBootstrap {
     return {
       mode: 'practice',
-      accounts: this.userAccounts().map((a) => ({ id: a.id, owner: a.ownerId })),
+      accounts: this.userAccounts().map((a) => {
+        const p = personaForOwner(a.ownerId);
+        return { id: a.id, owner: a.ownerId, role: p.role, blurb: p.blurb };
+      }),
       focusAccountId: PRACTICE_ALEX,
       stoppedTransferId: PRACTICE_RENT_TRANSFER,
-      hint: 'Practice network — send, deposit, and query like production.',
+      hint: 'Practice network — same fraud story as live seed; statement tab shows double-entry lines.',
     };
   }
 
@@ -161,8 +174,37 @@ export class PracticeLedger implements LedgerReader, LedgerWriter {
       .slice(0, limit);
   }
 
-  async entries(_accountId: string, _limit: number): Promise<LedgerEntry[]> {
-    return [];
+  async entries(accountId: string, limit: number): Promise<LedgerEntry[]> {
+    const account = this.account(accountId);
+    if (!account) return [];
+    const lines: LedgerEntry[] = [];
+    let seq = 1;
+    let balance = 0;
+    const related = this.transfers
+      .filter((t) => t.sourceAccountId === accountId || t.destinationAccountId === accountId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    for (const t of related) {
+      if (t.status !== 'COMPLETED') continue;
+      let delta = 0;
+      if (t.kind === 'DEPOSIT' && t.destinationAccountId === accountId) {
+        delta = t.amountMinor;
+      } else if (t.sourceAccountId === accountId) {
+        delta = -t.amountMinor;
+      } else if (t.destinationAccountId === accountId) {
+        delta = t.amountMinor;
+      }
+      if (delta === 0) continue;
+      balance += delta;
+      lines.push({
+        id: seq++,
+        transferId: t.id,
+        accountId,
+        amountMinor: delta,
+        balanceAfterMinor: balance,
+        createdAt: t.createdAt,
+      });
+    }
+    return lines.slice(-limit).reverse();
   }
 
   async openAccount(ownerId: string, currency: string): Promise<Account> {

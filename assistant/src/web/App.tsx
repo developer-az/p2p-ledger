@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { parseDollarsToMinor } from '../server/money.js';
-import { api, type AccountActivity, type AccountRef, type AccountView, type BootstrapResponse, type Turn } from './api.js';
+import { formatMoney, parseDollarsToMinor } from '../server/money.js';
+import {
+  api,
+  type AccountActivity,
+  type AccountRef,
+  type AccountView,
+  type BootstrapResponse,
+  type LedgerEntryRow,
+  type Turn,
+} from './api.js';
 import { OFFLINE_BOOTSTRAP } from './practice-fixture.js';
 
 const PRACTICE_PREFIX = '01111111-1111-7111-8111-';
 
-type Tab = 'overview' | 'send' | 'activity' | 'ask';
+type Tab = 'overview' | 'ledger' | 'send' | 'activity' | 'ask';
 
 function displayName(owner: string): string {
   const base = owner.split('-')[0] || owner;
@@ -160,11 +168,18 @@ function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string) => v
       </p>
 
       <div className="help">
-        <strong>Sign in</strong>
+        <strong>ledger-service · system of record</strong>
         <p>
-          Full P2P: send money, add funds, view cashflow, ask anything about your account.
-          Live mode uses the Java ledger when Docker is up (<code>npm run dev:stack</code>).
+          PostgreSQL double-entry, idempotent HTTP API, fraud rules, outbox events.
+          The assistant is a terminal over that API — not a second ledger.
         </p>
+        {boot.ledger && (
+          <ul className="cap-list">
+            {boot.ledger.capabilities.map((c) => (
+              <li key={c}>{c}</li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {err && <p className="err" role="alert">{err}</p>}
@@ -187,8 +202,11 @@ function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string) => v
           <div className="pane-hd"><strong>live demo world</strong></div>
           <div className="pane-bd">
             <button type="button" className="t-btn" disabled={busy !== ''} onClick={() => void seedLive()}>
-              [ seed alex / sam / jordan on ledger ]
+              [ seed live household on PostgreSQL ]
             </button>
+            <p className="dim" style={{ fontSize: '11px', margin: '8px 0 0' }}>
+              Creates distinct wallets (alex-/sam-/jordan-*) with deposits, P2P, utilities, reimbursements, and a declined rent.
+            </p>
           </div>
         </section>
       )}
@@ -204,6 +222,7 @@ function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string) => v
               onClick={() => openPractice(a)}
             >
               <span className="key">[{i + 1}]</span> {displayName(a.owner)}
+              <span className="desc">{a.role} — {a.blurb}</span>
             </button>
           ))}
         </div>
@@ -257,7 +276,7 @@ function Wallet({
       </p>
 
       <nav className="tabs" aria-label="Sections">
-        {(['overview', 'send', 'activity', 'ask'] as Tab[]).map((t) => (
+        {(['overview', 'ledger', 'send', 'activity', 'ask'] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -272,10 +291,12 @@ function Wallet({
       {busy && tab !== 'ask' && <p className="dim wait">syncing…</p>}
       {err && <p className="err" role="alert">{err}</p>}
 
-      {view && tab === 'overview' && <Overview view={view} />}
+      {view && tab === 'overview' && <Overview view={view} live={live} />}
+      {view && tab === 'ledger' && <LedgerStatement accountId={account.id} currency={view.currency} />}
       {view && tab === 'send' && (
         <SendPayment
           accountId={account.id}
+          live={live}
           peers={peers}
           onDone={() => void reload()}
         />
@@ -288,14 +309,20 @@ function Wallet({
   );
 }
 
-function Overview({ view }: { view: AccountView }) {
+function Overview({ view, live }: { view: AccountView; live: boolean }) {
   return (
     <section className="pane">
-      <div className="pane-hd"><strong>cashflow</strong> · last 30 days</div>
+      <div className="pane-hd">
+        <strong>cashflow</strong> · last 30 days · {live ? 'ledger-service' : 'practice mirror'}
+      </div>
       <div className="pane-bd">
         <dl className="kv">
           <dt>available</dt>
           <dd>{view.balance}</dd>
+          <dt>account</dt>
+          <dd className="mono-id">{view.id}</dd>
+          <dt>opened</dt>
+          <dd>{new Date(view.openedAt).toLocaleString()}</dd>
         </dl>
         <div className="kv-row">
           <dl className="kv"><dt>money in</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.inflow}</dd></dl>
@@ -315,16 +342,82 @@ function Overview({ view }: { view: AccountView }) {
   );
 }
 
+function LedgerStatement({ accountId, currency }: { accountId: string; currency: string }) {
+  const [rows, setRows] = useState<LedgerEntryRow[]>([]);
+  const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void api.entries(accountId, 60).then((r) => {
+      if (!cancelled) {
+        setRows(r.entries);
+        setErr('');
+        setLoading(false);
+      }
+    }).catch((e) => {
+      if (!cancelled) {
+        setErr((e as Error).message);
+        setLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [accountId]);
+
+  return (
+    <section className="pane">
+      <div className="pane-hd">
+        <strong>statement</strong> · GET /v1/accounts/…/entries · append-only lines
+      </div>
+      <div className="pane-bd">
+        {loading && <p className="dim wait">loading entries…</p>}
+        {err && <p className="err">{err}</p>}
+        {!loading && !err && rows.length === 0 && (
+          <p className="dim">No posted lines yet — complete a deposit or transfer.</p>
+        )}
+        {rows.length > 0 && (
+          <table className="stmt">
+            <thead>
+              <tr>
+                <th>when</th>
+                <th>transfer</th>
+                <th>Δ</th>
+                <th>balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((e) => (
+                <tr key={`${e.id}-${e.transferId}`}>
+                  <td>{new Date(e.createdAt).toLocaleString()}</td>
+                  <td className="mono-id">{e.transferId.slice(0, 8)}…</td>
+                  <td className={e.amountMinor >= 0 ? 'pos' : 'neg'}>
+                    {formatMoney(e.amountMinor, currency)}
+                  </td>
+                  <td>{formatMoney(e.balanceAfterMinor, currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function SendPayment({
   accountId,
+  live,
   peers,
   onDone,
 }: {
   accountId: string;
+  live: boolean;
   peers: AccountRef[];
   onDone: () => void;
 }) {
   const [to, setTo] = useState(peers[0]?.id ?? '');
+  const [handleLookup, setHandleLookup] = useState('');
   const [amount, setAmount] = useState('');
   const [memo, setMemo] = useState('');
   const [depositAmt, setDepositAmt] = useState('');
@@ -400,13 +493,48 @@ function SendPayment({
                 <option key={p.id} value={p.id}>{displayName(p.owner)} ({p.owner})</option>
               ))}
             </select>
-            {peers.length === 0 && (
+            {peers.length === 0 && live && (
               <p className="dim" style={{ fontSize: '11px', margin: '6px 0 0' }}>
-                Live wallets only pay people you have paid before, or use [1][2][3] practice accounts on sign-in.
-                Run demo seed on sign-in to create a live network with peers.
+                No history yet — use exact owner id from live seed (e.g. <code>sam-abc123</code>) below, or seed the household first.
               </p>
             )}
           </div>
+          {live && (
+            <div className="field">
+              <label htmlFor="handle">pay by owner id (live ledger)</label>
+              <input
+                id="handle"
+                type="text"
+                value={handleLookup}
+                onChange={(e) => setHandleLookup(e.target.value)}
+                placeholder="sam-3f2a1b"
+              />
+              <button
+                type="button"
+                className="t-btn-inline"
+                style={{ marginTop: 8 }}
+                disabled={busy || !handleLookup.trim()}
+                onClick={() => {
+                  void (async () => {
+                    setErr('');
+                    try {
+                      const matches = await api.findAccounts(handleLookup.trim());
+                      if (matches.length === 0) throw new Error('No wallet with that owner id');
+                      const hit = matches[0];
+                      if (!hit) throw new Error('No wallet with that owner id');
+                      if (matches.length > 1) throw new Error('Multiple wallets — use UUID from ledger tab');
+                      setTo(hit.id);
+                      setMsg(`recipient set · ${hit.owner}`);
+                    } catch (ex) {
+                      setErr((ex as Error).message);
+                    }
+                  })();
+                }}
+              >
+                [ resolve owner ]
+              </button>
+            </div>
+          )}
           <div className="field">
             <label htmlFor="amt">amount (USD)</label>
             <input id="amt" type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="25.00" />
@@ -415,7 +543,7 @@ function SendPayment({
             <label htmlFor="memo">memo</label>
             <input id="memo" type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="dinner split" />
           </div>
-          <button type="submit" className="t-btn recommended" disabled={busy || peers.length === 0}>[ send payment ]</button>
+          <button type="submit" className="t-btn recommended" disabled={busy || !to}>[ send payment ]</button>
         </form>
       </section>
       <section className="pane">

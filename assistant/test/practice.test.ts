@@ -73,6 +73,14 @@ describe('practice ledger', () => {
     expect(await res.json()).toEqual([]);
   });
 
+  it('exposes double-entry statement lines for practice', async () => {
+    const res = await app.request(`/api/accounts/${PRACTICE_ALEX}/entries`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { entries: { amountMinor: number; balanceAfterMinor: number }[] };
+    expect(body.entries.length).toBeGreaterThan(3);
+    expect(body.entries[0]?.balanceAfterMinor).toBeGreaterThan(0);
+  });
+
   it('loads Alex with a declined rent payment', async () => {
     const res = await app.request(`/api/accounts?id=${PRACTICE_ALEX}`);
     expect(res.status).toBe(200);

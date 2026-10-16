@@ -56,7 +56,7 @@ cp .env.example .env.local
 | `GEMINI_API_KEY` | Primary LLM | Optional if `OPENROUTER_API_KEY` is set |
 | `OPENROUTER_API_KEY` | Backup / alternate LLM | Auto-failover when Gemini returns 429 |
 | `LLM_PROVIDER` | No | `gemini` (default) or `anthropic` |
-| `LLM_MODEL` | No | Override default model id |
+| `LLM_MODEL` | No | Default **`gemini-2.0-flash-lite`** (higher free-tier headroom than `flash-latest`) |
 
 Vercel production also needs `LEDGER_URL` pointing at your Render ledger URL.
 
@@ -101,7 +101,7 @@ docker compose up --build    # includes assistant on :8787 when enabled in compo
 1. **F2 ONBOARD** — seeds Alex/Sam/Jordan on live Postgres (`POST /api/demo`).
 2. **Open wallet** — `open <handle>` or create handle; triggers **simulated bank welcome** (`POST /api/bank/welcome`: $500 deposit + inbound corridor peer).
 3. **ACH IN / ACH OUT** or CMD `bank in` / `bank out` — each call spins up a **new** corridor counterparty (`payroll-*`, `vendor-*`, …), funds if needed, posts a real transfer, then they appear in **PEERS** (dormant history).
-4. **F3** integrity — banner when the hosted ledger has no `GET /v1/ledger/integrity` yet (redeploy `ledger-service` from this repo when available; WATCH/BLOTTER still read live Postgres).
+4. **F3** integrity — calls `GET /v1/ledger/integrity` on `ledger-service` (merge to `main` + Render deploy if production still shows the old banner).
 5. **F4** race — parallel idempotency demo.
 6. **AUDIT / MSG** — Gemini tools over your signed-in account (peers, balances, peer ledger).
 

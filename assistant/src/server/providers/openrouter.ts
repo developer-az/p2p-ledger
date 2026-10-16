@@ -25,7 +25,7 @@ export class OpenRouterProvider implements LlmProvider {
 
   constructor(
     private readonly apiKey: string,
-    readonly model = 'google/gemini-2.0-flash-001',
+    readonly model = 'google/gemini-2.0-flash-lite-001',
     private readonly siteUrl = process.env.OPENROUTER_HTTP_REFERER ?? 'https://p2p-ledger-pi.vercel.app',
     private readonly siteTitle = 'p2p-ledger assistant',
   ) {}

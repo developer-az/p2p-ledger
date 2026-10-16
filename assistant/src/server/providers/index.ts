@@ -4,7 +4,7 @@ import { GeminiProvider } from './gemini.js';
 import { OpenRouterProvider } from './openrouter.js';
 import type { LlmProvider } from './types.js';
 
-const DEFAULT_OPENROUTER_MODEL = 'google/gemini-2.0-flash-001';
+const DEFAULT_OPENROUTER_MODEL = 'google/gemini-2.0-flash-lite-001';
 
 /**
  * Picks the LLM from the environment.

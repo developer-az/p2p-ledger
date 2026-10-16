@@ -43,7 +43,6 @@ describe('tour-storage', () => {
   });
 });
 
-
 describe('chart-data', () => {
   it('parses money strings to minor units', () => {
     expect(moneyStringToMinor('$1,234.56')).toBe(123_456);
@@ -89,6 +88,8 @@ describe('chart-data', () => {
         transferId: '1',
         direction: 'sent',
         counterparty: 'sam',
+        counterpartyAccountId: 's',
+        kind: 'TRANSFER',
         amount: '$1',
         status: 'COMPLETED',
         declineReason: null,
@@ -100,6 +101,8 @@ describe('chart-data', () => {
         transferId: '2',
         direction: 'sent',
         counterparty: 'jordan',
+        counterpartyAccountId: 'j',
+        kind: 'TRANSFER',
         amount: '$2',
         status: 'REJECTED',
         declineReason: 'X',

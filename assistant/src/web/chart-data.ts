@@ -20,7 +20,7 @@ export function cashflowFromSummary(summary: AccountSummary): CashflowBars {
     deposited: moneyStringToMinor(summary.deposited),
     received: moneyStringToMinor(summary.received),
     sent: moneyStringToMinor(summary.sent),
-    inflow: moneyStringToMinor(summary.inflow),
+    inflow: moneyStringToMinor(summary.inflow ?? summary.received),
   };
 }
 

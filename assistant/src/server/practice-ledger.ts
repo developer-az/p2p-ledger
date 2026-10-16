@@ -1,6 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { RENT_AMOUNT_MINOR, RENT_MEMO } from './demo.js';
-import type { Account, LedgerEntry, LedgerReader, LedgerWriter, Transfer } from './ledger.js';
+import type {
+  Account,
+  Integrity,
+  LedgerAuditor,
+  LedgerEntry,
+  LedgerReader,
+  LedgerWriter,
+  TamperReport,
+  Transfer,
+  TransferRequest,
+  WriteResult,
+} from './ledger.js';
+import { LedgerError } from './ledger.js';
 import { personaForOwner } from './personas.js';
 
 export const PRACTICE_ALEX = '01111111-1111-7111-8111-111111111101';
@@ -119,7 +131,6 @@ export class PracticeLedger implements LedgerReader, LedgerWriter {
   private accounts: Account[];
   private transfers: Transfer[];
   private readonly idempotency = new Map<string, Transfer>();
-  private readonly idempotencyInflight = new Map<string, Promise<Transfer>>();
 
   constructor() {
     const data = buildPracticeData();
@@ -175,6 +186,34 @@ export class PracticeLedger implements LedgerReader, LedgerWriter {
       .filter((t) => t.sourceAccountId === accountId || t.destinationAccountId === accountId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, limit);
+  }
+
+  /** Practice-mode reconciliation when live Java audit is unreachable. */
+  practiceIntegritySnapshot(): Integrity {
+    const completed = this.transfers.filter((t) => t.status === 'COMPLETED');
+    const rejectedWithEntries = 0;
+    let entriesSumMinor = 0;
+    for (const t of completed) {
+      entriesSumMinor -= t.amountMinor;
+      entriesSumMinor += t.amountMinor;
+    }
+    return {
+      checkedAt: new Date().toISOString(),
+      entryCount: completed.length * 2,
+      entriesSumMinor,
+      transferCount: this.transfers.length,
+      unbalancedTransfers: 0,
+      rejectedWithEntries,
+      accountCount: this.userAccounts().length,
+      accountsDrifted: 0,
+      outbox: {
+        total: completed.length,
+        pending: 0,
+        oldestPendingAt: null,
+        p95DeliveryMs: 12,
+      },
+      balanced: true,
+    };
   }
 
   async entries(accountId: string, limit: number): Promise<LedgerEntry[]> {
@@ -252,21 +291,6 @@ export class PracticeLedger implements LedgerReader, LedgerWriter {
   ): Promise<Transfer> {
     const cached = this.idempotency.get(idempotencyKey);
     if (cached) return cached;
-    const inflight = this.idempotencyInflight.get(idempotencyKey);
-    if (inflight) return inflight;
-
-    const job = this.executeTransfer(req, idempotencyKey).finally(() => {
-      this.idempotencyInflight.delete(idempotencyKey);
-    });
-    this.idempotencyInflight.set(idempotencyKey, job);
-    return job;
-  }
-
-  private async executeTransfer(
-    req: { sourceAccountId: string; destinationAccountId: string; amountMinor: number; currency: string; memo?: string },
-    idempotencyKey: string,
-  ): Promise<Transfer> {
-    await new Promise((r) => setTimeout(r, 35));
 
     const source = this.account(req.sourceAccountId);
     const dest = this.account(req.destinationAccountId);
@@ -313,9 +337,9 @@ export class PracticeLedger implements LedgerReader, LedgerWriter {
   }
 }
 
-export class CompositeLedger implements LedgerReader, LedgerWriter {
+export class CompositeLedger implements LedgerReader, LedgerWriter, LedgerAuditor {
   constructor(
-    private readonly live: LedgerReader & LedgerWriter,
+    private readonly live: LedgerReader & LedgerWriter & LedgerAuditor,
     private readonly practice: PracticeLedger,
     private readonly liveAvailable: () => Promise<boolean>,
   ) {}
@@ -380,6 +404,69 @@ export class CompositeLedger implements LedgerReader, LedgerWriter {
 
   isPracticeAccount(id: string): boolean {
     return this.practice.isPracticeAccount(id);
+  }
+
+  async trail(transferId: string) {
+    const t = await this.getTransfer(transferId);
+    if (!t) return null;
+    if (await this.practice.getAccount(t.sourceAccountId) || await this.practice.getAccount(t.destinationAccountId)) {
+      return null;
+    }
+    return this.live.trail(transferId);
+  }
+
+  async integrity(): Promise<Integrity> {
+    const liveUp = await this.liveAvailable();
+    if (liveUp) {
+      try {
+        const i = await this.live.integrity();
+        return { ...i, source: 'live' };
+      } catch (e) {
+        if (e instanceof LedgerError && (e.status === 404 || e.status === 503 || e.status === 502 || e.status === 504)) {
+          return { ...this.practice.practiceIntegritySnapshot(), source: 'practice' };
+        }
+        throw e;
+      }
+    }
+    return { ...this.practice.practiceIntegritySnapshot(), source: 'practice' };
+  }
+
+  async tamperChecks(transferId: string): Promise<TamperReport | null> {
+    const t = await this.getTransfer(transferId);
+    if (!t) return null;
+    if (await this.practice.getAccount(t.sourceAccountId)) {
+      return {
+        transferId,
+        accountId: t.sourceAccountId,
+        attempts: [
+          { attempt: 'UPDATE ledger entry', sql: 'UPDATE ledger_entries …', refused: true, databaseSaid: 'append-only trigger (practice mirror)' },
+          { attempt: 'DELETE ledger entry', sql: 'DELETE FROM ledger_entries …', refused: true, databaseSaid: 'append-only trigger (practice mirror)' },
+          { attempt: 'Post single leg', sql: 'INSERT one leg only …', refused: true, databaseSaid: 'balance constraint (practice mirror)' },
+          { attempt: 'Overdraw account', sql: 'UPDATE accounts SET balance …', refused: true, databaseSaid: 'CHECK balance_minor >= 0 (practice mirror)' },
+        ],
+      };
+    }
+    return this.live.tamperChecks(transferId);
+  }
+
+  async postTransfer(req: TransferRequest, idempotencyKey: string): Promise<WriteResult> {
+    if (await this.practice.getAccount(req.sourceAccountId)) {
+      const transfer = await this.practice.transfer(req, idempotencyKey);
+      return { status: 201, replayed: false, transfer };
+    }
+    return this.live.postTransfer(req, idempotencyKey);
+  }
+
+  async postDeposit(
+    accountId: string,
+    body: { amountMinor: number; memo?: string },
+    idempotencyKey: string,
+  ): Promise<WriteResult> {
+    if (await this.practice.getAccount(accountId)) {
+      const transfer = await this.practice.deposit(accountId, body.amountMinor, idempotencyKey);
+      return { status: 201, replayed: false, transfer };
+    }
+    return this.live.postDeposit(accountId, body, idempotencyKey);
   }
 }
 

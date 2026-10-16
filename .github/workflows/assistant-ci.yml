@@ -30,3 +30,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npx vite build
+      - name: Production API smoke (optional)
+        if: vars.ASSISTANT_URL != ''
+        env:
+          ASSISTANT_URL: ${{ vars.ASSISTANT_URL }}
+        run: npm run smoke:api

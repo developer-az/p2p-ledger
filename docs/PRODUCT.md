@@ -6,9 +6,16 @@
 |--------|----------------|
 | **ledger-service** | System of record: accounts, transfers, deposits, **ledger_entries**, fraud rules, idempotency, outbox |
 | **assistant `/api`** | Public BFF + terminal UI; no shadow balances |
-| **assistant UI** | Operator terminal: overview, **ledger statement**, send, activity, ask |
+| **assistant UI** | **Guided intro** (pipeline diorama) + **operations dashboard**: reconciliation, payment trail, replay/retry-storm, tamper checks, analytics charts |
 
 Practice mode mirrors stories in-memory; **live mode** is always PostgreSQL on Render.
+
+## Unified experience (PR #1 + guided story)
+
+- Pre-sign-in **guided intro** walks the ledger pipeline (idempotency → lock → fraud → double-entry → outbox). Skip stores `p2p-ledger:story-complete`.
+- Signed-in **dashboard** proves P2P: each payment opens `GET /api/trail`, live **PipelineStage** animation, and Postgres-backed replay/tamper when `ledger.auditCapabilities` is true.
+- Bootstrap exposes **auditCapabilities**; UI shows **Full live proof** vs **Partial** until Render deploys ledger-service audit endpoints from this branch.
+- After merge: redeploy **ledger-service on Render**, confirm Vercel `LEDGER_URL`, run `npm run smoke:api -- <preview-url>`.
 
 ## Live send (today)
 

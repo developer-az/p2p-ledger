@@ -2,9 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { runAssistant } from './agent.js';
+import { booksCheck, paymentTrail, racePayment, replayPayment, tamperWithPayment } from './console.js';
 import { seedDemo } from './demo.js';
 import { answerFromLedger } from './fallback.js';
-import { LedgerError, type LedgerReader, type LedgerWriter } from './ledger.js';
+import { LedgerError, type LedgerAuditor, type LedgerReader, type LedgerWriter } from './ledger.js';
 import { isModelOutage } from './providers/retry.js';
 import type { LlmProvider } from './providers/types.js';
 import type { CompositeLedger, PracticeLedger } from './practice-ledger.js';
@@ -36,6 +37,9 @@ const chatBody = z.object({
   })).min(1).max(20).refine((m) => m.at(-1)?.role === 'user', 'Last message must be from the user'),
 });
 
+const paymentBody = z.object({ accountId: z.string().uuid(), transferId: z.string().uuid() });
+const raceBody = z.object({ accountId: z.string().uuid(), fromAccountId: z.string().uuid() });
+
 /** Fixed-window limiter per client IP: protects the free LLM quota from one noisy visitor. */
 function rateLimiter(limit: number, windowMs: number) {
   const hits = new Map<string, { count: number; resetAt: number }>();
@@ -54,7 +58,7 @@ function rateLimiter(limit: number, windowMs: number) {
 export function createApp(deps: {
   ledger: CompositeLedger;
   practice: PracticeLedger;
-  liveLedger?: LedgerWriter;
+  liveLedger?: LedgerWriter & LedgerAuditor;
   isLiveLedgerUp?: () => Promise<boolean>;
   /** Tests inject a fake model; production loads Gemini/Claude on first chat only. */
   provider?: () => LlmProvider;
@@ -63,6 +67,7 @@ export function createApp(deps: {
   const allowChat = rateLimiter(20, 60_000);
   const allowSeed = rateLimiter(3, 60_000);
   const allowWrite = rateLimiter(40, 60_000);
+  const allowProof = rateLimiter(12, 60_000);
   const clientIp = (c: { req: { header(name: string): string | undefined } }) =>
     c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
 
@@ -71,11 +76,20 @@ export function createApp(deps: {
   app.get('/bootstrap', async (c) => {
     const practice = deps.practice.bootstrap();
     let live = false;
+    let auditCapabilities = false;
     if (deps.isLiveLedgerUp) {
       live = await Promise.race([
         deps.isLiveLedgerUp(),
         new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2_000)),
       ]);
+      if (live && deps.liveLedger && 'integrity' in deps.liveLedger) {
+        try {
+          await (deps.liveLedger as LedgerAuditor).integrity();
+          auditCapabilities = true;
+        } catch {
+          auditCapabilities = false;
+        }
+      }
     }
     let chat = { provider: (process.env.LLM_PROVIDER ?? 'gemini').toLowerCase(), configured: false };
     try {
@@ -94,6 +108,7 @@ export function createApp(deps: {
         persistence: live
           ? 'Accounts and transfers persist in PostgreSQL (Render). Bookmark ?id= or use saved wallets below.'
           : 'Practice mode is in-memory per server instance — use live seed or create wallet while ledger is online.',
+        auditCapabilities,
       },
       chat,
     });
@@ -194,6 +209,50 @@ export function createApp(deps: {
       }, 503);
     }
     return c.json(await seedDemo(deps.liveLedger));
+  });
+
+  app.get('/trail', async (c) => {
+    const parsed = paymentBody.safeParse({ accountId: c.req.query('account'), transferId: c.req.query('transfer') });
+    if (!parsed.success) return c.json({ error: 'Payment not found' }, 404);
+    const trail = await paymentTrail(deps.ledger, parsed.data.accountId, parsed.data.transferId);
+    return trail ? c.json(trail) : c.json({ error: 'Payment not found' }, 404);
+  });
+
+  app.get('/integrity', async (c) => {
+    try {
+      return c.json(await booksCheck(deps.ledger));
+    } catch (e) {
+      if (e instanceof LedgerError && e.status === 404) {
+        return c.json({ error: 'Reconciliation is not on the deployed ledger build yet.', code: 'LEDGER_OUTDATED' }, 503);
+      }
+      throw e;
+    }
+  });
+
+  app.post('/replay', async (c) => {
+    if (!allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = paymentBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    const result = await replayPayment(deps.ledger, parsed.data.accountId, parsed.data.transferId);
+    return result ? c.json(result) : c.json({ error: 'Payment not found' }, 404);
+  });
+
+  app.post('/race', async (c) => {
+    if (!allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = raceBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    const result = await racePayment(deps.ledger, parsed.data.accountId, parsed.data.fromAccountId);
+    if (!result) return c.json({ error: 'Account not found' }, 404);
+    return 'error' in result ? c.json(result, 400) : c.json(result);
+  });
+
+  app.post('/tamper', async (c) => {
+    if (!allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = paymentBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    const result = await tamperWithPayment(deps.ledger, parsed.data.accountId, parsed.data.transferId);
+    if (!result) return c.json({ error: 'Payment not found' }, 404);
+    return 'error' in result ? c.json(result, 400) : c.json(result);
   });
 
   app.post('/chat', async (c) => {

@@ -260,7 +260,11 @@ export function TerminalApp() {
         currency: 'USD',
         memo: memo?.trim() || undefined,
       });
-      append(`PAY ${t.status} id=${shortId(t.id)}`);
+      append(
+        t.status === 'REJECTED' && t.rejectionReason
+          ? `PAY REJECTED ${t.rejectionReason} id=${shortId(t.id)}`
+          : `PAY ${t.status} id=${shortId(t.id)}`,
+      );
       await loadAccount(account.id);
       setSelectedPay(t.id);
       void loadTrail(account.id, t.id);
@@ -510,7 +514,9 @@ export function TerminalApp() {
                     <td>{when(t.createdAt)}</td>
                     <td>{t.memo || '—'}</td>
                     <td>{t.direction === 'deposit' ? 'BANK' : personName(t.counterparty)}</td>
-                    <td>{t.status === 'REJECTED' ? 'REJ' : 'OK'}</td>
+                    <td title={t.declineExplanation ?? undefined}>
+                      {t.status === 'REJECTED' ? `REJ${t.declineReason ? `·${t.declineReason.slice(0, 12)}` : ''}` : 'OK'}
+                    </td>
                     <td className="bb-r">{t.amount}</td>
                   </tr>
                 ))}
@@ -519,9 +525,17 @@ export function TerminalApp() {
             {selectedPay && trail && (
               <div className="bb-detail">
                 <p className="bb-mono">{trail.from} → {trail.to} · {trail.amount} · {trail.status}</p>
+                {trail.status === 'REJECTED' && trail.decline && (
+                  <p className="bb-warn">
+                    {trail.decline.code}: {trail.decline.explanation ?? 'Declined by fraud rules.'}
+                  </p>
+                )}
+                {trail.status === 'REJECTED' && trail.legs.length === 0 && (
+                  <p className="bb-dim">No ledger entries — the rule ran before any money moved.</p>
+                )}
                 <pre className="bb-pre">{trail.legs.map((l) =>
                   `#${l.entryId} ${l.account} ${l.side} ${l.amount}`,
-                ).join('\n') || '(no entries)'}</pre>
+                ).join('\n') || (trail.status === 'REJECTED' ? '' : '(no entries)')}</pre>
                 {trail.audited && (
                   <p>
                     <BbLink onClick={() => account && void api.replay(account.id, selectedPay).then((r) => {

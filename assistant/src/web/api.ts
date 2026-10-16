@@ -212,7 +212,7 @@ export const api = {
     currency: string;
     memo?: string;
   }) =>
-    call<{ id: string; status: string }>('/api/transfers', {
+    call<{ id: string; status: string; rejectionReason?: string | null }>('/api/transfers', {
       method: 'POST',
       headers: { 'Idempotency-Key': idempotencyKey() },
       body: JSON.stringify(body),

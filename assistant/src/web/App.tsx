@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { formatMoney, MAX_DOLLARS_UI, parseDollarsToMinor } from '../server/money.js';
 import { loadSavedWallets, rememberWallet } from './wallet-store.js';
 import {
@@ -8,17 +8,18 @@ import {
   type AccountView,
   type BootstrapResponse,
   type LedgerEntryRow,
-  type Turn,
 } from './api.js';
-import { GuidedLedgerStory } from './GuidedLedgerStory.js';
+import { ActivityShell } from './activity-log.js';
 import { LedgerCharts } from './LedgerCharts.js';
+import { ResearchPoster } from './ResearchPoster.js';
 import { RetryStorm } from './RetryStorm.js';
-import { OFFLINE_BOOTSTRAP, PRACTICE_ALEX_ID } from './practice-fixture.js';
-import { clearStoryComplete, isStoryComplete } from './tour-storage.js';
+import { TerminalAssistant } from './TerminalAssistant.js';
+import { OFFLINE_BOOTSTRAP } from './practice-fixture.js';
 
+const REPO = 'https://github.com/developer-az/p2p-ledger';
 const PRACTICE_PREFIX = '01111111-1111-7111-8111-';
 
-type Tab = 'overview' | 'ledger' | 'send' | 'activity' | 'ask';
+type Tab = 'overview' | 'ledger' | 'send' | 'activity';
 
 function displayName(owner: string): string {
   const base = owner.split('-')[0] || owner;
@@ -43,8 +44,13 @@ export function App() {
   const [stoppedId, setStoppedId] = useState<string | null>(null);
   const [booting, setBooting] = useState(() => accountFromUrl() !== null);
   const [bootError, setBootError] = useState('');
-  const [showStory, setShowStory] = useState(() => !isStoryComplete());
-  const [tourHighlight, setTourHighlight] = useState<string | null>(null);
+  const [chatMeta, setChatMeta] = useState({ provider: 'gemini', configured: false });
+
+  useEffect(() => {
+    void api.bootstrap().then((b) => {
+      if (b.chat) setChatMeta({ provider: b.chat.provider, configured: b.chat.configured });
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     let id = accountFromUrl();
@@ -62,8 +68,14 @@ export function App() {
     let cancelled = false;
     void api.account(id).then((v) => {
       if (!cancelled) {
+        if (v.id.startsWith(PRACTICE_PREFIX)) {
+          syncAccountUrl(null);
+          setBootError('Practice wallets are disabled — use live PostgreSQL accounts below.');
+          setBooting(false);
+          return;
+        }
         setAccount({ id: v.id, owner: v.owner });
-        rememberWallet({ id: v.id, owner: v.owner, live: !v.id.startsWith(PRACTICE_PREFIX), savedAt: new Date().toISOString() });
+        rememberWallet({ id: v.id, owner: v.owner, live: true, savedAt: new Date().toISOString() });
         setBooting(false);
       }
     }).catch(() => {
@@ -76,12 +88,12 @@ export function App() {
     return () => { cancelled = true; };
   }, []);
 
-  function signIn(a: AccountRef, stopped?: string, live = false) {
+  function signIn(a: AccountRef, stopped?: string) {
     setStoppedId(stopped ?? null);
     setAccount(a);
     setBootError('');
     syncAccountUrl(a.id);
-    rememberWallet({ id: a.id, owner: a.owner, live, savedAt: new Date().toISOString() });
+    rememberWallet({ id: a.id, owner: a.owner, live: true, savedAt: new Date().toISOString() });
   }
 
   function signOut() {
@@ -92,58 +104,50 @@ export function App() {
 
   return (
     <div className="root">
-      <header className="topbar">
-        <div>
-          <span className="topbar-title">p2p-ledger</span>
-          <span className="topbar-sub">/ corporate ledger terminal</span>
-        </div>
+      <header className="gh-header">
+        <a className="gh-brand" href="/">
+          <span className="gh-mark" aria-hidden>L</span>
+          <span className="gh-name">p2p-ledger</span>
+        </a>
+        <nav className="gh-nav" aria-label="Primary">
+          <a href={REPO} target="_blank" rel="noreferrer">Repository</a>
+          <a href={`${REPO}#readme`} target="_blank" rel="noreferrer">Architecture</a>
+        </nav>
         {account && (
-          <button type="button" className="t-btn-inline" onClick={signOut}>[ sign out ]</button>
+          <button type="button" className="gh-btn" onClick={signOut}>Sign out</button>
         )}
       </header>
-      <main className="main">
-        {booting && <p className="dim wait">loading…</p>}
-        {bootError && !account && <p className="err">{bootError}</p>}
-        {!booting && !account && showStory && (
-          <GuidedLedgerStory
-            onComplete={() => setShowStory(false)}
-            onHandoff={(hook) => setTourHighlight(hook)}
-          />
-        )}
-        {!booting && !account && !showStory && (
-          <SignIn
-            onSignIn={signIn}
-            tourHighlight={tourHighlight}
-            onReplayStory={() => {
-              clearStoryComplete();
-              setTourHighlight(null);
-              setShowStory(true);
-            }}
-          />
-        )}
-        {!booting && account && (
-          <Wallet account={account} stoppedTransferId={stoppedId} onSignOut={signOut} />
-        )}
+      <main className="main terminal-main">
+        <ActivityShell>
+          {booting && <p className="dim wait">loading wallet…</p>}
+          {bootError && !account && <p className="err">{bootError}</p>}
+          {!booting && !account && (
+            <>
+              <ResearchPoster />
+              <SignIn onSignIn={signIn} />
+            </>
+          )}
+          {!booting && account && (
+            <Wallet
+              account={account}
+              stoppedTransferId={stoppedId}
+              chatMeta={chatMeta}
+            />
+          )}
+        </ActivityShell>
       </main>
     </div>
   );
 }
 
-function SignIn({
-  onSignIn,
-  tourHighlight,
-  onReplayStory,
-}: {
-  onSignIn: (a: AccountRef, stopped?: string, live?: boolean) => void;
-  tourHighlight?: string | null;
-  onReplayStory?: () => void;
-}) {
+function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string) => void }) {
   const [boot, setBoot] = useState<BootstrapResponse>(OFFLINE_BOOTSTRAP);
   const [err, setErr] = useState('');
-  const [owner, setOwner] = useState(() => loadSavedWallets()[0]?.owner ?? '');
+  const [owner, setOwner] = useState(() => loadSavedWallets().find((w) => w.live)?.owner ?? '');
   const [busy, setBusy] = useState('');
   const [apiUp, setApiUp] = useState(false);
-  const [saved, setSaved] = useState(() => loadSavedWallets());
+  const [saved, setSaved] = useState(() => loadSavedWallets().filter((w) => w.live));
+  const [household, setHousehold] = useState<AccountRef[]>([]);
 
   useEffect(() => {
     void api.bootstrap()
@@ -158,8 +162,6 @@ function SignIn({
       });
   }, []);
 
-  const practice = boot?.practice;
-
   async function createWallet() {
     const id = owner.trim().toLowerCase().replace(/\s+/g, '-');
     if (!id) return;
@@ -167,7 +169,8 @@ function SignIn({
     setErr('');
     try {
       const a = await api.openAccount(id);
-      onSignIn(a, undefined, boot.live);
+      if (!boot.live) throw new Error('Live ledger is not reachable. Wait for Render to wake, then retry.');
+      onSignIn(a);
       setSaved(loadSavedWallets());
     } catch (e) {
       setErr((e as Error).message);
@@ -182,7 +185,8 @@ function SignIn({
     try {
       const seeded = await api.seedDemo();
       const focus = seeded.accounts.find((a) => a.id === seeded.focusAccountId) ?? seeded.accounts[0];
-      if (focus) onSignIn(focus, seeded.stopped.transferId, true);
+      setHousehold(seeded.accounts);
+      if (focus) onSignIn(focus, seeded.stopped.transferId);
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -190,62 +194,20 @@ function SignIn({
     }
   }
 
-  function openPractice(a: AccountRef) {
-    if (!practice) return;
-    const stopped = a.id === practice.focusAccountId ? practice.stoppedTransferId : undefined;
-    onSignIn(a, stopped, false);
-  }
-
   return (
     <>
       <p className="status-line">
         ledger-service:{' '}
         {!apiUp ? (
-          <span className="off">API starting — practice accounts below work offline</span>
+          <span className="off">API starting…</span>
         ) : boot.live ? (
-          <span className="live">ledger online</span>
+          <span className="live">PostgreSQL online</span>
         ) : (
-          <span className="off">ledger offline — practice network</span>
-        )}
-        {boot.chat && (
-          <span style={{ marginLeft: 12 }}>
-            ask: {boot.chat.configured ? `${boot.chat.provider} ready` : `${boot.chat.provider} key missing — tool-only answers`}
-          </span>
+          <span className="off">waiting for Render — live wallets only</span>
         )}
       </p>
-      {boot.ledger?.persistence && (
-        <p className="dim" style={{ fontSize: '11px', margin: '0 0 12px' }}>{boot.ledger.persistence}</p>
-      )}
-
-      <div className="help">
-        <strong>ledger-service · system of record</strong>
-        <p>
-          PostgreSQL double-entry, idempotent HTTP API, fraud rules, outbox events.
-          The assistant is a terminal over that API — not a second ledger.
-        </p>
-        {boot.ledger && (
-          <ul className="cap-list">
-            {boot.ledger.capabilities.map((c) => (
-              <li key={c}>{c}</li>
-            ))}
-          </ul>
-        )}
-      </div>
 
       {err && <p className="err" role="alert">{err}</p>}
-
-      {onReplayStory && (
-        <p className="dim" style={{ fontSize: '11px', margin: '0 0 12px' }}>
-          <button type="button" className="t-btn-inline" onClick={onReplayStory}>[ replay visual intro ]</button>
-        </p>
-      )}
-
-      {tourHighlight === 'tour-activity-hint' && (
-        <p className="tour-callout">After sign-in, open the <strong>activity</strong> tab to see declined transfers.</p>
-      )}
-      {tourHighlight === 'tour-ledger-hint' && (
-        <p className="tour-callout">After sign-in, open the <strong>ledger</strong> tab for append-only lines and statement download.</p>
-      )}
 
       {saved.length > 0 && (
         <section className="pane">
@@ -256,9 +218,9 @@ function SignIn({
                 key={w.id}
                 type="button"
                 className="t-btn"
-                onClick={() => onSignIn({ id: w.id, owner: w.owner }, undefined, w.live)}
+                onClick={() => onSignIn({ id: w.id, owner: w.owner })}
               >
-                {displayName(w.owner)} <span className="desc">{w.live ? 'PostgreSQL' : 'practice'} · {w.id.slice(0, 8)}…</span>
+                {displayName(w.owner)} <span className="desc">PostgreSQL · {w.id.slice(0, 8)}…</span>
               </button>
             ))}
           </div>
@@ -275,50 +237,36 @@ function SignIn({
               When ledger is online, wallet is stored in PostgreSQL and appears under saved wallets.
             </p>
           </div>
-          <button type="button" className="t-btn recommended" disabled={busy !== '' || !owner.trim()} onClick={() => void createWallet()}>
-            [ create &amp; open ]
+          <button type="button" className="t-btn recommended" disabled={busy !== '' || !owner.trim() || !boot.live} onClick={() => void createWallet()}>
+            [ create &amp; open live wallet ]
           </button>
         </div>
       </section>
 
-      {boot?.live && (
-        <section className="pane">
-          <div className="pane-hd"><strong>live demo world</strong></div>
-          <div className="pane-bd">
-            <button
-              type="button"
-              className={tourHighlight === 'tour-seed-live' ? 't-btn tour-pulse' : 't-btn'}
-              data-tour-target="tour-seed-live"
-              disabled={busy !== ''}
-              onClick={() => void seedLive()}
-            >
-              [ seed live household on PostgreSQL ]
-            </button>
-            <p className="dim" style={{ fontSize: '11px', margin: '8px 0 0' }}>
-              Creates distinct wallets (alex-/sam-/jordan-*) with deposits, P2P, utilities, reimbursements, and a declined rent.
-            </p>
-          </div>
-        </section>
-      )}
-
       <section className="pane">
-        <div className="pane-hd"><strong>practice network</strong> · works offline</div>
+        <div className="pane-hd"><strong>demo household</strong> · PostgreSQL on Render</div>
         <div className="pane-bd">
-          {practice?.accounts.map((a, i) => (
-            <button
-              key={a.id}
-              type="button"
-              data-tour-target={a.id === PRACTICE_ALEX_ID ? 'tour-practice-alex' : undefined}
-              className={[
-                a.id === practice.focusAccountId ? 't-btn recommended' : 't-btn',
-                tourHighlight === 'tour-practice-alex' && a.id === PRACTICE_ALEX_ID ? 'tour-pulse' : '',
-              ].filter(Boolean).join(' ')}
-              onClick={() => openPractice(a)}
-            >
-              <span className="key">[{i + 1}]</span> {displayName(a.owner)}
-              <span className="desc">{a.role} — {a.blurb}</span>
-            </button>
-          ))}
+          <button
+            type="button"
+            className="t-btn recommended"
+            disabled={busy !== '' || !boot.live}
+            onClick={() => void seedLive()}
+          >
+            [ seed alex / sam / jordan household ]
+          </button>
+          <p className="dim" style={{ fontSize: '11px', margin: '8px 0 0' }}>
+            Real wallets with deposits, P2P, utilities, reimbursements, and a declined rent — pick a role after seeding.
+          </p>
+          {household.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <p className="step-label">play as</p>
+              {household.map((a) => (
+                <button key={a.id} type="button" className="t-btn" onClick={() => onSignIn(a)}>
+                  {displayName(a.owner)} <span className="desc">{a.owner}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </>
@@ -328,11 +276,11 @@ function SignIn({
 function Wallet({
   account,
   stoppedTransferId,
-  onSignOut,
+  chatMeta,
 }: {
   account: AccountRef;
   stoppedTransferId: string | null;
-  onSignOut: () => void;
+  chatMeta: { provider: string; configured: boolean };
 }) {
   const [tab, setTab] = useState<Tab>('overview');
   const [view, setView] = useState<AccountView | null>(null);
@@ -360,17 +308,17 @@ function Wallet({
   useEffect(() => { void reload(); }, [reload]);
 
   const owner = displayName(view?.owner ?? account.owner);
-  const live = !account.id.startsWith(PRACTICE_PREFIX);
 
   return (
-    <>
+    <div className="workspace-terminal">
+      <div className="workspace-main">
       <p className="status-line">
-        signed in as <strong>{owner}</strong> · {live ? 'live ledger' : 'practice ledger'}
+        signed in as <strong>{owner}</strong> · PostgreSQL ledger-service
         <button type="button" className="t-btn-inline" style={{ marginLeft: 12 }} onClick={() => void reload()}>[ refresh ]</button>
       </p>
 
       <nav className="tabs" aria-label="Sections">
-        {(['overview', 'ledger', 'send', 'activity', 'ask'] as Tab[]).map((t) => (
+        {(['overview', 'ledger', 'send', 'activity'] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -382,17 +330,17 @@ function Wallet({
         ))}
       </nav>
 
-      {busy && tab !== 'ask' && <p className="dim wait">syncing…</p>}
+      {busy && <p className="dim wait">syncing…</p>}
       {err && <p className="err" role="alert">{err}</p>}
 
       {view && tab === 'overview' && (
-        <Overview view={view} live={live} accountId={account.id} peers={peers} />
+        <Overview view={view} accountId={account.id} peers={peers} />
       )}
       {view && tab === 'ledger' && <LedgerStatement accountId={account.id} currency={view.currency} />}
       {view && tab === 'send' && (
         <SendPayment
           accountId={account.id}
-          live={live}
+          live
           peers={peers}
           onDone={() => void reload()}
         />
@@ -400,19 +348,23 @@ function Wallet({
       {view && tab === 'activity' && (
         <ActivityList transfers={view.transfers} stoppedTransferId={stoppedTransferId} />
       )}
-      {tab === 'ask' && <SupportChat accountId={account.id} owner={owner} />}
-    </>
+      </div>
+      <TerminalAssistant
+        accountId={account.id}
+        owner={owner}
+        llmReady={chatMeta.configured}
+        llmProvider={chatMeta.provider}
+      />
+    </div>
   );
 }
 
 function Overview({
   view,
-  live,
   accountId,
   peers,
 }: {
   view: AccountView;
-  live: boolean;
   accountId: string;
   peers: AccountRef[];
 }) {
@@ -421,7 +373,7 @@ function Overview({
     <>
       <section className="pane">
         <div className="pane-hd">
-          <strong>cashflow</strong> · last 30 days · {live ? 'ledger-service' : 'practice mirror'}
+          <strong>cashflow</strong> · last 30 days · ledger-service
         </div>
         <div className="pane-bd">
           <dl className="kv">
@@ -443,7 +395,7 @@ function Overview({
             <dl className="kv"><dt>count</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.declinedCount}</dd></dl>
           </div>
           <p className="dim" style={{ fontSize: '11px', margin: 0 }}>
-            Income questions in Ask use these totals (summed in cents on the server).
+            Ask in the support terminal — totals are summed in integer cents on the server.
           </p>
         </div>
       </section>
@@ -722,78 +674,6 @@ function TxRow({ t, mark }: { t: AccountActivity; mark: boolean }) {
         {t.declineExplanation && <><br /><span className="err" style={{ fontSize: '11px' }}>{t.declineExplanation}</span></>}
       </td>
     </tr>
-  );
-}
-
-function SupportChat({ accountId, owner }: { accountId: string; owner: string }) {
-  const [turns, setTurns] = useState<Turn[]>([]);
-  const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  const end = useRef<HTMLDivElement>(null);
-  const lock = useRef(false);
-
-  useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth' }); }, [turns, busy]);
-
-  async function send(text: string) {
-    const q = text.trim();
-    if (!q || lock.current) return;
-    lock.current = true;
-    const next = [...turns, { role: 'user' as const, text: q }];
-    setTurns(next);
-    setInput('');
-    setBusy(true);
-    setErr('');
-    try {
-      const reply = await api.chat(accountId, next.slice(-12));
-      setTurns([...next, { role: 'assistant', text: reply.answer, toolCalls: reply.toolCalls, model: reply.model }]);
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      lock.current = false;
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="pane">
-      <div className="pane-hd"><strong>ask</strong> · free text · {owner}</div>
-      <div className="pane-bd">
-        <p className="dim" style={{ margin: '0 0 8px', fontSize: '11px' }}>
-          Examples: &quot;how much is my income this month&quot;, &quot;who paid me&quot;, &quot;why was rent declined&quot;, &quot;list last 5 payments&quot;
-        </p>
-        <div className="chat-log">
-          {turns.map((t, i) => (
-            <div key={i}>
-              <div className={t.role === 'user' ? 'line-user' : 'line-bot'}>{t.text}</div>
-              {t.toolCalls?.map((c, j) => (
-                <details key={j} className="tool-block">
-                  <summary>{c.tool}</summary>
-                  <pre>{JSON.stringify(c.result, null, 2)}</pre>
-                </details>
-              ))}
-            </div>
-          ))}
-          {busy && <p className="dim wait">…</p>}
-          {err && <p className="err">{err}</p>}
-          <div ref={end} />
-        </div>
-        <form
-          className="input-row"
-          onSubmit={(e) => { e.preventDefault(); void send(input); }}
-        >
-          <label htmlFor="ask">›</label>
-          <input
-            id="ask"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="ask anything about this account…"
-            maxLength={2000}
-          />
-          <button type="submit" className="t-btn-inline" disabled={busy || !input.trim()}>[ send ]</button>
-        </form>
-      </div>
-    </section>
   );
 }
 

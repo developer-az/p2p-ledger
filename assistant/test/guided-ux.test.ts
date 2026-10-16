@@ -1,5 +1,4 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { SCENES } from '../src/web/GuidedLedgerStory.js';
 import {
   balanceSeriesFromEntries,
   cashflowFromSummary,
@@ -44,13 +43,6 @@ describe('tour-storage', () => {
   });
 });
 
-describe('GuidedLedgerStory scenes', () => {
-  it('has handoff as last scene and retry storm beat', () => {
-    expect(SCENES.length).toBeGreaterThanOrEqual(8);
-    expect(SCENES.some((s) => s.id === 'retry')).toBe(true);
-    expect(SCENES[SCENES.length - 1]?.id).toBe('handoff');
-  });
-});
 
 describe('chart-data', () => {
   it('parses money strings to minor units', () => {

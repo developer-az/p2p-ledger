@@ -289,25 +289,10 @@ export function createApp(deps: {
     try {
       return c.json(await runAssistant({ provider, ledger: deps.ledger, accountId, messages }));
     } catch (e) {
-      // #region agent log
       const errMsg = e instanceof Error ? e.message : String(e);
       const errStatus = (e as { status?: number }).status;
-      const outage = isModelOutage(e);
-      fetch('http://127.0.0.1:7662/ingest/7f9970e2-18d0-4d08-862d-4fbb88c57ac7', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '8f37b7' },
-        body: JSON.stringify({
-          sessionId: '8f37b7',
-          hypothesisId: 'H3-H4',
-          location: 'app.ts:chat',
-          message: 'runAssistant failed',
-          data: { errStatus, outage, errMsg: errMsg.slice(0, 240) },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       // The free Gemini cap is 20 requests a day. The books can still answer.
-      if (outage) {
+      if (isModelOutage(e)) {
         const question = messages.at(-1)?.text ?? '';
         return c.json({
           ...(await answerFromLedger({ ledger: deps.ledger, accountId, question })),

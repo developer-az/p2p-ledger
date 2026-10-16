@@ -423,20 +423,6 @@ export class CompositeLedger implements LedgerReader, LedgerWriter, LedgerAudito
         return { ...i, source: 'live', auditAvailable: true };
       } catch (e) {
         if (e instanceof LedgerError && (e.status === 404 || e.status === 503 || e.status === 502 || e.status === 504)) {
-          // #region agent log
-          fetch('http://127.0.0.1:7662/ingest/7f9970e2-18d0-4d08-862d-4fbb88c57ac7', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '8f37b7' },
-            body: JSON.stringify({
-              sessionId: '8f37b7',
-              hypothesisId: 'H5',
-              location: 'practice-ledger.ts:integrity',
-              message: 'live integrity failed',
-              data: { status: e.status, message: e.message.slice(0, 120) },
-              timestamp: Date.now(),
-            }),
-          }).catch(() => {});
-          // #endregion
           return {
             checkedAt: new Date().toISOString(),
             entryCount: 0,

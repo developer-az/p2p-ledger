@@ -19,7 +19,7 @@ export function ActivityShell({ children }: { children: ReactNode }) {
     <TraceContext.Provider value={trace}>
       <section className="activity-console pane" aria-label="Backend trace">
         <div className="pane-hd">
-          <strong>trace</strong> · BFF → ledger-service (live PostgreSQL)
+          <strong>trace</strong> · what the BFF and ledger-service are doing
         </div>
         <div className="activity-console-body pane-bd" role="log" aria-live="polite">
           {lines.length === 0 ? (

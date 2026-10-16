@@ -1,18 +1,20 @@
 # Documentation images
 
-## Current UI (Bloomberg-style terminal)
+PNG assets for the root **README** and portfolio use. Prefer captures from **live** or `npm run dev:stack` after UI changes.
 
-Check in PNGs from a local `npm run dev:stack` session:
+## Terminal (current product)
 
-| File | Suggested capture |
-|------|-------------------|
-| `terminal-watch.png` | WATCH panel: balance, SIM BANK · ACH IN/OUT |
-| `terminal-blotter.png` | BLOTTER with recent transfers |
-| `terminal-peers.png` | PEERS lane + pay shortcuts |
-| `terminal-audit.png` | AUDIT tab or F3 integrity banner |
+| File | Capture |
+|------|---------|
+| `terminal-workstation.png` | Signed-in session: WATCH · BLOTTER · AUDIT/MSG · CMD (1280×720 or wider) |
+| `terminal-watch.png` | Same as workstation hero, or crop on WATCH + bank dock |
 
-Root `README.md` references these when present. Until then, Mermaid figures in the README describe the same flows.
+**How to refresh**
 
-## Legacy (guided sign-in UI)
+1. Open [p2p-ledger-pi.vercel.app](https://p2p-ledger-pi.vercel.app) (or local `npm run dev:stack`).
+2. **F2 ONBOARD** or resume a saved wallet.
+3. Full-page screenshot; save under `docs/images/` and commit.
 
-`assistant-signin.png`, `assistant-overview.png`, `assistant-send.png`, and `assistant-ask.png` are from the older multi-pane assistant. They remain for history; prefer terminal assets for new docs.
+## Archive (guided UI, pre-terminal)
+
+`assistant-signin.png`, `assistant-overview.png`, `assistant-send.png`, `assistant-ask.png` — older multi-pane UI; kept for history only.

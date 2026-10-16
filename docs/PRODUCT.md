@@ -26,3 +26,17 @@ Practice mode mirrors stories in-memory; **live mode** is always PostgreSQL on R
 6. **Observability** — surface actuator health/metrics in an ops pane; outbox lag.
 
 Run **`npm run smoke:api -- https://your-app.vercel.app`** after every deploy.
+
+## Gemini / Ask tab
+
+- Set **`GEMINI_API_KEY`** on Vercel (and locally in `.env.local`) for full LLM answers.
+- Bootstrap reports `chat.configured` — when false, Ask still works via **read-only ledger tools** (spending totals, declines, memos).
+- OpenRouter is not integrated yet; Anthropic is available via `LLM_PROVIDER=anthropic`.
+
+## Why live “didn’t save”
+
+| Symptom | Cause |
+|---------|--------|
+| Refresh loses wallet | Practice mode or ledger was **offline** when you clicked create — account lived only in that server instance. |
+| Data gone after deploy | Practice is ephemeral; **live** wallets are UUIDs in PostgreSQL — use **saved wallets** or `?id=` in the URL. |
+| Send failed | Live wallet paying a **practice** UUID (fixed) — use live seed or owner-id resolve. |

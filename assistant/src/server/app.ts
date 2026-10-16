@@ -9,17 +9,21 @@ import { isModelOutage } from './providers/retry.js';
 import type { LlmProvider } from './providers/types.js';
 import type { CompositeLedger, PracticeLedger } from './practice-ledger.js';
 import { LEDGER_CAPABILITIES } from './personas.js';
+import { formatLedgerStatement } from './statement-export.js';
 import { loadAccountView } from './tools.js';
+import { providerFromEnv } from './providers/index.js';
+import { MAX_MINOR_UI } from './money.js';
 
 const openAccountBody = z.object({
   ownerId: z.string().min(1).max(64),
   currency: z.string().length(3).default('USD'),
 });
-const depositBody = z.object({ amountMinor: z.number().int().positive().max(100_000_000_000) });
+
+const depositBody = z.object({ amountMinor: z.number().int().positive().max(MAX_MINOR_UI) });
 const transferBody = z.object({
   sourceAccountId: z.string().uuid(),
   destinationAccountId: z.string().uuid(),
-  amountMinor: z.number().int().positive().max(100_000_000_000),
+  amountMinor: z.number().int().positive().max(MAX_MINOR_UI),
   currency: z.string().length(3).default('USD'),
   memo: z.string().max(200).optional(),
 });
@@ -73,6 +77,13 @@ export function createApp(deps: {
         new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2_000)),
       ]);
     }
+    let chat = { provider: (process.env.LLM_PROVIDER ?? 'gemini').toLowerCase(), configured: false };
+    try {
+      providerFromEnv();
+      chat = { ...chat, configured: true };
+    } catch {
+      chat.configured = false;
+    }
     return c.json({
       live,
       practice,
@@ -80,7 +91,11 @@ export function createApp(deps: {
         engine: 'ledger-service',
         apiVersion: 'v1',
         capabilities: [...LEDGER_CAPABILITIES],
+        persistence: live
+          ? 'Accounts and transfers persist in PostgreSQL (Render). Bookmark ?id= or use saved wallets below.'
+          : 'Practice mode is in-memory per server instance — use live seed or create wallet while ledger is online.',
       },
+      chat,
     });
   });
 
@@ -150,6 +165,24 @@ export function createApp(deps: {
     if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
     const entries = await deps.ledger.entries(id, limit);
     return c.json({ accountId: id, currency: account.currency, entries });
+  });
+
+  app.get('/accounts/:id/statement.txt', async (c) => {
+    const id = c.req.param('id');
+    if (!z.string().uuid().safeParse(id).success) return c.text('Invalid account id', 400);
+    const view = await accountView(deps.ledger, id, 100);
+    if (!view) return c.text('Account not found', 404);
+    const entries = await deps.ledger.entries(id, 200);
+    const body = formatLedgerStatement(view, entries, {
+      generatedAt: new Date().toISOString(),
+      engine: deps.isLiveLedgerUp && (await deps.isLiveLedgerUp()) ? 'ledger-service (PostgreSQL)' : 'practice mirror',
+    });
+    return new Response(body, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Disposition': `attachment; filename="statement-${id.slice(0, 8)}.txt"`,
+      },
+    });
   });
 
   app.post('/demo', async (c) => {

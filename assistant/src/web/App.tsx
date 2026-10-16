@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { formatMoney, parseDollarsToMinor } from '../server/money.js';
+import { formatMoney, MAX_DOLLARS_UI, parseDollarsToMinor } from '../server/money.js';
+import { loadSavedWallets, rememberWallet } from './wallet-store.js';
 import {
   api,
   type AccountActivity,
@@ -40,7 +41,14 @@ export function App() {
   const [bootError, setBootError] = useState('');
 
   useEffect(() => {
-    const id = accountFromUrl();
+    let id = accountFromUrl();
+    if (!id) {
+      const saved = loadSavedWallets()[0];
+      if (saved) {
+        id = saved.id;
+        syncAccountUrl(id);
+      }
+    }
     if (!id) {
       setBooting(false);
       return;
@@ -49,6 +57,7 @@ export function App() {
     void api.account(id).then((v) => {
       if (!cancelled) {
         setAccount({ id: v.id, owner: v.owner });
+        rememberWallet({ id: v.id, owner: v.owner, live: !v.id.startsWith(PRACTICE_PREFIX), savedAt: new Date().toISOString() });
         setBooting(false);
       }
     }).catch(() => {
@@ -61,11 +70,12 @@ export function App() {
     return () => { cancelled = true; };
   }, []);
 
-  function signIn(a: AccountRef, stopped?: string) {
+  function signIn(a: AccountRef, stopped?: string, live = false) {
     setStoppedId(stopped ?? null);
     setAccount(a);
     setBootError('');
     syncAccountUrl(a.id);
+    rememberWallet({ id: a.id, owner: a.owner, live, savedAt: new Date().toISOString() });
   }
 
   function signOut() {
@@ -79,7 +89,7 @@ export function App() {
       <header className="topbar">
         <div>
           <span className="topbar-title">p2p-ledger</span>
-          <span className="topbar-sub">/ payments + support</span>
+          <span className="topbar-sub">/ corporate ledger terminal</span>
         </div>
         {account && (
           <button type="button" className="t-btn-inline" onClick={signOut}>[ sign out ]</button>
@@ -97,12 +107,13 @@ export function App() {
   );
 }
 
-function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string) => void }) {
+function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string, live?: boolean) => void }) {
   const [boot, setBoot] = useState<BootstrapResponse>(OFFLINE_BOOTSTRAP);
   const [err, setErr] = useState('');
-  const [owner, setOwner] = useState('');
+  const [owner, setOwner] = useState(() => loadSavedWallets()[0]?.owner ?? '');
   const [busy, setBusy] = useState('');
   const [apiUp, setApiUp] = useState(false);
+  const [saved, setSaved] = useState(() => loadSavedWallets());
 
   useEffect(() => {
     void api.bootstrap()
@@ -126,7 +137,8 @@ function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string) => v
     setErr('');
     try {
       const a = await api.openAccount(id);
-      onSignIn(a);
+      onSignIn(a, undefined, boot.live);
+      setSaved(loadSavedWallets());
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -140,7 +152,7 @@ function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string) => v
     try {
       const seeded = await api.seedDemo();
       const focus = seeded.accounts.find((a) => a.id === seeded.focusAccountId) ?? seeded.accounts[0];
-      if (focus) onSignIn(focus, seeded.stopped.transferId);
+      if (focus) onSignIn(focus, seeded.stopped.transferId, true);
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -151,7 +163,7 @@ function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string) => v
   function openPractice(a: AccountRef) {
     if (!practice) return;
     const stopped = a.id === practice.focusAccountId ? practice.stoppedTransferId : undefined;
-    onSignIn(a, stopped);
+    onSignIn(a, stopped, false);
   }
 
   return (
@@ -165,7 +177,15 @@ function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string) => v
         ) : (
           <span className="off">ledger offline — practice network</span>
         )}
+        {boot.chat && (
+          <span style={{ marginLeft: 12 }}>
+            ask: {boot.chat.configured ? `${boot.chat.provider} ready` : `${boot.chat.provider} key missing — tool-only answers`}
+          </span>
+        )}
       </p>
+      {boot.ledger?.persistence && (
+        <p className="dim" style={{ fontSize: '11px', margin: '0 0 12px' }}>{boot.ledger.persistence}</p>
+      )}
 
       <div className="help">
         <strong>ledger-service · system of record</strong>
@@ -184,12 +204,33 @@ function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string) => v
 
       {err && <p className="err" role="alert">{err}</p>}
 
+      {saved.length > 0 && (
+        <section className="pane">
+          <div className="pane-hd"><strong>saved wallets</strong> · this browser</div>
+          <div className="pane-bd">
+            {saved.map((w) => (
+              <button
+                key={w.id}
+                type="button"
+                className="t-btn"
+                onClick={() => onSignIn({ id: w.id, owner: w.owner }, undefined, w.live)}
+              >
+                {displayName(w.owner)} <span className="desc">{w.live ? 'PostgreSQL' : 'practice'} · {w.id.slice(0, 8)}…</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="pane">
         <div className="pane-hd"><strong>create wallet</strong></div>
         <div className="pane-bd">
           <div className="field">
             <label htmlFor="owner">owner id (your handle)</label>
-            <input id="owner" type="text" value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="e.g. riley" />
+            <input id="owner" type="text" value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="e.g. riley.ap" />
+            <p className="dim" style={{ fontSize: '11px', margin: '6px 0 0' }}>
+              When ledger is online, wallet is stored in PostgreSQL and appears under saved wallets.
+            </p>
           </div>
           <button type="button" className="t-btn recommended" disabled={busy !== '' || !owner.trim()} onClick={() => void createWallet()}>
             [ create &amp; open ]
@@ -373,6 +414,14 @@ function LedgerStatement({ accountId, currency }: { accountId: string; currency:
       <div className="pane-bd">
         {loading && <p className="dim wait">loading entries…</p>}
         {err && <p className="err">{err}</p>}
+        <p style={{ margin: '0 0 10px' }}>
+          <a className="t-btn-inline" href={api.statementDownloadUrl(accountId)} download>
+            [ download statement .txt ]
+          </a>
+          <button type="button" className="t-btn-inline" style={{ marginLeft: 8 }} onClick={() => window.print()}>
+            [ print / save PDF ]
+          </button>
+        </p>
         {!loading && !err && rows.length === 0 && (
           <p className="dim">No posted lines yet — complete a deposit or transfer.</p>
         )}
@@ -537,7 +586,7 @@ function SendPayment({
           )}
           <div className="field">
             <label htmlFor="amt">amount (USD)</label>
-            <input id="amt" type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="25.00" />
+            <input id="amt" type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={`25.00 (max ${MAX_DOLLARS_UI.toLocaleString()})`} />
           </div>
           <div className="field">
             <label htmlFor="memo">memo</label>

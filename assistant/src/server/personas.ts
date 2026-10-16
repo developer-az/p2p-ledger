@@ -6,16 +6,16 @@ export interface AccountPersona {
 
 export const PERSONA_BY_OWNER: Record<string, AccountPersona> = {
   alex: {
-    role: 'Primary spender',
-    blurb: 'High activity, declined $1,200 rent (new-account fraud rule).',
+    role: 'Director of Finance (AP)',
+    blurb: 'Spend analytics demo — declined $12k vendor prepay (new-account rule). Ask about cashflow.',
   },
   sam: {
-    role: 'Roommate · splitter',
-    blurb: 'Receives pizza/Uber splits; sends concert money back.',
+    role: 'Engineering manager',
+    blurb: 'Team reimbursements & velocity — declined $1,500 concert (5 transfers / 60s).',
   },
   jordan: {
-    role: 'Landlord / creditor',
-    blurb: 'Rent and groceries in; low cash balance, high inflow history.',
+    role: 'Treasury / vendor payouts',
+    blurb: 'Utilities, rent, and corporate reimbursements in; creditor balance profile.',
   },
 };
 

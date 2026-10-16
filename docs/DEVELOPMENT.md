@@ -101,7 +101,7 @@ docker compose up --build    # includes assistant on :8787 when enabled in compo
 1. **F2 ONBOARD** — seeds Alex/Sam/Jordan on live Postgres (`POST /api/demo`).
 2. **Open wallet** — `open <handle>` or create handle; triggers **simulated bank welcome** (`POST /api/bank/welcome`: $500 deposit + inbound corridor peer).
 3. **ACH IN / ACH OUT** or CMD `bank in` / `bank out` — each call spins up a **new** corridor counterparty (`payroll-*`, `vendor-*`, …), funds if needed, posts a real transfer, then they appear in **PEERS** (dormant history).
-4. **F3** integrity — honest banner if company-wide audit API is not deployed.
+4. **F3** integrity — banner when the hosted ledger has no `GET /v1/ledger/integrity` yet (redeploy `ledger-service` from this repo when available; WATCH/BLOTTER still read live Postgres).
 5. **F4** race — parallel idempotency demo.
 6. **AUDIT / MSG** — Gemini tools over your signed-in account (peers, balances, peer ledger).
 

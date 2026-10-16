@@ -359,16 +359,14 @@ export function createApp(deps: {
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
       const errStatus = (e as { status?: number }).status;
-      // The free Gemini cap is 20 requests a day. The books can still answer.
-      if (isModelOutage(e)) {
-        const question = messages.at(-1)?.text ?? '';
-        return c.json({
-          ...(await answerFromLedger({ ledger: deps.ledger, accountId, question })),
-          route: 'ledger-fallback',
-          fallbackReason: `LLM call failed (${errStatus ?? 'no status'}): ${errMsg.slice(0, 220)}`,
-        });
-      }
-      throw e;
+      console.error('chat LLM error', errStatus, errMsg.slice(0, 500));
+      const question = messages.at(-1)?.text ?? '';
+      // Never 500 the UI for model/config errors — ledger tools still answer.
+      return c.json({
+        ...(await answerFromLedger({ ledger: deps.ledger, accountId, question })),
+        route: 'ledger-fallback',
+        fallbackReason: `LLM call failed (${errStatus ?? 'no status'}): ${errMsg.slice(0, 220)}`,
+      });
     }
   });
 

@@ -12,6 +12,7 @@ import {
 } from './api.js';
 import { GuidedLedgerStory } from './GuidedLedgerStory.js';
 import { LedgerCharts } from './LedgerCharts.js';
+import { RetryStorm } from './RetryStorm.js';
 import { OFFLINE_BOOTSTRAP, PRACTICE_ALEX_ID } from './practice-fixture.js';
 import { clearStoryComplete, isStoryComplete } from './tour-storage.js';
 
@@ -384,7 +385,9 @@ function Wallet({
       {busy && tab !== 'ask' && <p className="dim wait">syncing…</p>}
       {err && <p className="err" role="alert">{err}</p>}
 
-      {view && tab === 'overview' && <Overview view={view} live={live} accountId={account.id} />}
+      {view && tab === 'overview' && (
+        <Overview view={view} live={live} accountId={account.id} peers={peers} />
+      )}
       {view && tab === 'ledger' && <LedgerStatement accountId={account.id} currency={view.currency} />}
       {view && tab === 'send' && (
         <SendPayment
@@ -402,7 +405,18 @@ function Wallet({
   );
 }
 
-function Overview({ view, live, accountId }: { view: AccountView; live: boolean; accountId: string }) {
+function Overview({
+  view,
+  live,
+  accountId,
+  peers,
+}: {
+  view: AccountView;
+  live: boolean;
+  accountId: string;
+  peers: AccountRef[];
+}) {
+  const counterparty = peers.find((p) => p.id !== accountId);
   return (
     <>
       <section className="pane">
@@ -434,6 +448,9 @@ function Overview({ view, live, accountId }: { view: AccountView; live: boolean;
         </div>
       </section>
       <LedgerCharts view={view} accountId={accountId} />
+      {counterparty && (
+        <RetryStorm accountId={accountId} peers={[counterparty]} />
+      )}
     </>
   );
 }

@@ -1,6 +1,6 @@
-/** 8-bit suited characters — palette keys: . transparent, H hair, S skin, K suit, W shirt, B shoes, T tie */
+/** 8-bit suited cast — palette keys: . transparent, H hair, S skin, K suit, W shirt, B shoes, T tie */
 
-export type Pose = 'idle' | 'pay' | 'blocked' | 'readLedger';
+export type Pose = 'idle' | 'pay' | 'blocked' | 'readLedger' | 'wave';
 
 export interface CharacterPalette {
   hair: string;
@@ -9,13 +9,26 @@ export interface CharacterPalette {
   shirt: string;
   shoes: string;
   tie: string;
+  suitShadow: string;
 }
 
 export const CAST: Record<string, CharacterPalette> = {
-  alex: { hair: '#1a1208', skin: '#c68642', suit: '#1e3a5f', shirt: '#e8e8e8', shoes: '#111', tie: '#3dd68c' },
-  sam: { hair: '#4a3728', skin: '#e0b88a', suit: '#4b5563', shirt: '#f3f4f6', shoes: '#111', tie: '#60a5fa' },
-  jordan: { hair: '#0f0f0f', skin: '#8d5524', suit: '#374151', shirt: '#d1d5db', shoes: '#111', tie: '#e5a50a' },
-  clerk: { hair: '#2d2d2d', skin: '#d4a574', suit: '#6b7280', shirt: '#fff', shoes: '#111', tie: '#9ca3af' },
+  alex: {
+    hair: '#1a1208', skin: '#c68642', suit: '#1e3a5f', suitShadow: '#0f1f33',
+    shirt: '#e8e8e8', shoes: '#111', tie: '#3dd68c',
+  },
+  sam: {
+    hair: '#4a3728', skin: '#e0b88a', suit: '#4b5563', suitShadow: '#2d333b',
+    shirt: '#f3f4f6', shoes: '#111', tie: '#60a5fa',
+  },
+  jordan: {
+    hair: '#0f0f0f', skin: '#8d5524', suit: '#374151', suitShadow: '#1f2937',
+    shirt: '#d1d5db', shoes: '#111', tie: '#e5a50a',
+  },
+  clerk: {
+    hair: '#2d2d2d', skin: '#d4a574', suit: '#6b7280', suitShadow: '#4b5563',
+    shirt: '#fff', shoes: '#111', tie: '#9ca3af',
+  },
 };
 
 const PALETTE_MAP: Record<string, keyof CharacterPalette | 'transparent'> = {
@@ -26,9 +39,9 @@ const PALETTE_MAP: Record<string, keyof CharacterPalette | 'transparent'> = {
   W: 'shirt',
   B: 'shoes',
   T: 'tie',
+  D: 'suitShadow',
 };
 
-/** 16×28 character facing forward */
 const BASE_IDLE = `
 ................
 ................
@@ -101,12 +114,42 @@ const BASE_BLOCKED = `
 ................
 `.trim().split('\n');
 
+const BASE_WAVE = `
+................
+................
+....HHHHHHHH....
+...HHHHHHHHHH...
+...SSSSSSSSSS...
+...SSSSSSSSSS...
+....SSSSSSSS....
+....KKKKKKKK....
+...KKKKKKKKKK...
+...KKWWWWWWKK...
+...KKWWTTWWKK...
+...KKWWWWWWKK...
+...KKKKKKKKKK...
+....KKKKKKKK....
+...KKK......KKK.
+..KKKK......KKKK
+..KKKK......KKKK
+..BBB.......BBB.
+..BBB.......BBB.
+................
+................
+`.trim().split('\n');
+
 const POSE_GRID: Record<Pose, string[]> = {
   idle: BASE_IDLE,
   pay: BASE_PAY,
   blocked: BASE_BLOCKED,
   readLedger: BASE_IDLE,
+  wave: BASE_WAVE,
 };
+
+function isBlinkFrame(animTick: number): boolean {
+  const phase = animTick % 120;
+  return phase >= 4 && phase <= 5;
+}
 
 export function drawCharacter(
   ctx: CanvasRenderingContext2D,
@@ -115,17 +158,31 @@ export function drawCharacter(
   x: number,
   y: number,
   scale: number,
+  animTick = 0,
 ): void {
   const palette = CAST[castId]!;
   const grid = POSE_GRID[pose];
+  const bob = Math.sin(animTick * 0.14) * scale * 0.35;
+  const sway = Math.sin(animTick * 0.09 + x * 0.01) * scale * 0.25;
+  const blink = isBlinkFrame(animTick);
+  const drawY = y + bob;
+  const drawX = x + sway;
+
+  // soft ground shadow (ClaudePix-style lift)
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.beginPath();
+  ctx.ellipse(drawX + 8 * scale, drawY + 22 * scale, 10 * scale, 3 * scale, 0, 0, Math.PI * 2);
+  ctx.fill();
+
   for (let row = 0; row < grid.length; row++) {
     const line = grid[row] ?? '';
     for (let col = 0; col < line.length; col++) {
       const ch = line[col] ?? '.';
+      if (blink && row >= 3 && row <= 4 && ch === 'S') continue;
       const key = PALETTE_MAP[ch] ?? 'transparent';
       if (key === 'transparent') continue;
       ctx.fillStyle = palette[key];
-      ctx.fillRect(x + col * scale, y + row * scale, scale, scale);
+      ctx.fillRect(drawX + col * scale, drawY + row * scale, scale, scale);
     }
   }
 }

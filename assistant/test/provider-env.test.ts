@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { FallbackChainProvider } from '../src/server/providers/fallback-chain.js';
-import { providerFromEnv } from '../src/server/providers/index.js';
+import { normalizeOpenRouterModel, providerFromEnv } from '../src/server/providers/index.js';
 import { GeminiProvider } from '../src/server/providers/gemini.js';
 import { OpenRouterProvider } from '../src/server/providers/openrouter.js';
+
+describe('normalizeOpenRouterModel', () => {
+  it('maps deprecated Gemini 2.0 slugs to current OpenRouter default', () => {
+    expect(normalizeOpenRouterModel('google/gemini-2.0-flash-001')).toBe('google/gemini-2.5-flash-lite');
+    expect(normalizeOpenRouterModel('google/gemini-2.0-flash-lite-001')).toBe('google/gemini-2.5-flash-lite');
+  });
+});
 
 describe('providerFromEnv', () => {
   it('chains Gemini with OpenRouter when both keys are set', () => {

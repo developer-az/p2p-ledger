@@ -18,6 +18,26 @@ export function integrityLegend(integrity: Integrity): string[] {
   ];
 }
 
+/** Plain-language summary for the terminal audit panel. */
+export function integrityPlainEnglish(integrity: Integrity): string[] {
+  const balanced = integrity.balanced
+    ? 'Every payment in the database still adds up — nothing was “lost” in the math.'
+    : 'Something does not add up — an engineer would investigate before trusting balances.';
+  const drift = integrity.accountsDrifted === 0
+    ? 'Every wallet balance matches its transaction history (no drift).'
+    : `${integrity.accountsDrifted} wallet(s) disagree with their history — that should be zero in production.`;
+  const sum = integrity.entriesSum === '$0.00' || integrity.entriesSum === '0.00 USD'
+    ? 'Company-wide, money in equals money out (double-entry bookkeeping).'
+    : `Entry totals should net to zero company-wide; saw ${integrity.entriesSum}.`;
+  return [
+    balanced,
+    drift,
+    sum,
+    `${integrity.entryCount} ledger lines recorded across all accounts (append-only — no deletes).`,
+    `Background event queue: ${formatOutboxP95(integrity.outbox.p95DeliveryMs)}.`,
+  ];
+}
+
 export function downloadStatementTxt(accountId: string): void {
   const a = document.createElement('a');
   a.href = `/api/accounts/${encodeURIComponent(accountId)}/statement.txt`;

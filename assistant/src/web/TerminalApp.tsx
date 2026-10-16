@@ -56,9 +56,19 @@ function when(iso: string): string {
   return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-function BbLink({ children, onClick, disabled }: { children: ReactNode; onClick: () => void; disabled?: boolean }) {
+function BbLink({
+  children,
+  onClick,
+  disabled,
+  title,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+}) {
   return (
-    <button type="button" className="bb-link" onClick={onClick} disabled={disabled}>
+    <button type="button" className="bb-link" onClick={onClick} disabled={disabled} title={title}>
       {children}
     </button>
   );

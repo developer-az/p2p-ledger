@@ -119,6 +119,7 @@ export class PracticeLedger implements LedgerReader, LedgerWriter {
   private accounts: Account[];
   private transfers: Transfer[];
   private readonly idempotency = new Map<string, Transfer>();
+  private readonly idempotencyInflight = new Map<string, Promise<Transfer>>();
 
   constructor() {
     const data = buildPracticeData();
@@ -251,6 +252,21 @@ export class PracticeLedger implements LedgerReader, LedgerWriter {
   ): Promise<Transfer> {
     const cached = this.idempotency.get(idempotencyKey);
     if (cached) return cached;
+    const inflight = this.idempotencyInflight.get(idempotencyKey);
+    if (inflight) return inflight;
+
+    const job = this.executeTransfer(req, idempotencyKey).finally(() => {
+      this.idempotencyInflight.delete(idempotencyKey);
+    });
+    this.idempotencyInflight.set(idempotencyKey, job);
+    return job;
+  }
+
+  private async executeTransfer(
+    req: { sourceAccountId: string; destinationAccountId: string; amountMinor: number; currency: string; memo?: string },
+    idempotencyKey: string,
+  ): Promise<Transfer> {
+    await new Promise((r) => setTimeout(r, 35));
 
     const source = this.account(req.sourceAccountId);
     const dest = this.account(req.destinationAccountId);

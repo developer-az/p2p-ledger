@@ -25,10 +25,11 @@ export async function racePayment(ledger: Ledger, accountId: string, fromAccount
   };
   const started = Date.now();
   const attempts = await Promise.all(
-    Array.from({ length: RACE_COPIES }, async () => {
+    Array.from({ length: RACE_COPIES }, async (_, copy) => {
       const t0 = Date.now();
       const transfer = await ledger.transfer(body, key);
       return {
+        copy: copy + 1,
         httpStatus: 201,
         transferId: transfer.id,
         status: transfer.status,
@@ -36,13 +37,23 @@ export async function racePayment(ledger: Ledger, accountId: string, fromAccount
       };
     }),
   );
+  const winnerId = attempts[0]?.transferId;
+  let admitted = false;
+  const labeled = attempts.map((a) => {
+    const admittedThis = !admitted && a.transferId === winnerId;
+    if (admittedThis) admitted = true;
+    return {
+      ...a,
+      outcome: admittedThis ? 'admitted' as const : 'deduplicated' as const,
+    };
+  });
   const ids = [...new Set(attempts.map((a) => a.transferId))];
   return {
     idempotencyKey: key,
     from: from.ownerId,
     amount: formatMoney(RACE_AMOUNT_MINOR, to.currency),
     copies: RACE_COPIES,
-    attempts,
+    attempts: labeled,
     distinctTransfers: ids.length,
     transferId: ids[0] ?? null,
     status: attempts[0]?.status ?? null,

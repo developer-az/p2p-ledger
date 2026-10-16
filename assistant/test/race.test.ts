@@ -32,8 +32,10 @@ describe('POST /api/race', () => {
       body: JSON.stringify({ accountId: PRACTICE_ALEX, fromAccountId: PRACTICE_SAM }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json() as { distinctTransfers: number; copies: number };
+    const body = await res.json() as { distinctTransfers: number; copies: number; attempts: { outcome: string }[] };
     expect(body.copies).toBe(5);
     expect(body.distinctTransfers).toBe(1);
+    expect(body.attempts.filter((a) => a.outcome === 'admitted')).toHaveLength(1);
+    expect(body.attempts.filter((a) => a.outcome === 'deduplicated')).toHaveLength(4);
   });
 });

@@ -137,6 +137,7 @@ export function TerminalApp() {
   function signOut() {
     setAccount(null);
     setStoppedTransferId(null);
+    setSelectedPeerId(null);
     append('SESS OUT');
   }
 
@@ -680,7 +681,7 @@ export function TerminalApp() {
           ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={account ? ':pay sam 10 lunch · or ask a question' : ':open name · F2 onboard'}
+          placeholder={account ? 'peer sam · pay sam 10 lunch · split 50 sam dinner · or ask AI' : ':open name · F2 onboard'}
           disabled={busy === 'CHAT'}
           autoComplete="off"
           spellCheck={false}

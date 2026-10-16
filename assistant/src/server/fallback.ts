@@ -68,6 +68,34 @@ export async function answerFromLedger(opts: {
     );
   }
 
+  if (/given out|give out|how much have i (given|sent|paid)|total.*sent|spent the most|spend.*money|better spend|what should i do/.test(q)) {
+    const days = /month/.test(q) ? 30 : daysIn(q);
+    const sum = await call('summarize_activity', { days });
+    const rows = asRows(sum.byCounterparty).filter((r) => r.sent !== '$0.00');
+    const top = rows.sort((a, b) => moneyMinor(b.sent) - moneyMinor(a.sent))[0];
+    const lines = rows.slice(0, 4).map((r) => `${r.counterparty} ${r.sent}`);
+    const advice = top
+      ? `Largest outflow to ${top.counterparty} (${top.sent}). In a real treasury run you'd set per-vendor limits and review memos weekly — here, try PEERS + BLOTTER to inspect each line.`
+      : 'No outbound P2P in this window — deposits and inbound corridors dominate.';
+    return finish(
+      `You sent ${String(sum.totalSent)} in the last ${String(sum.windowDays)} days. ${lines.length ? `By counterparty: ${lines.join(', ')}. ` : ''}${advice}`,
+    );
+  }
+
+  if (/given out|give out|how much have i (given|sent|paid)|total.*sent|spent the most|spend.*money|better spend|what should i do/.test(q)) {
+    const days = /month/.test(q) ? 30 : daysIn(q);
+    const sum = await call('summarize_activity', { days });
+    const rows = asRows(sum.byCounterparty).filter((r) => r.sent !== '$0.00');
+    const top = rows.sort((a, b) => moneyMinor(b.sent) - moneyMinor(a.sent))[0];
+    const lines = rows.slice(0, 4).map((r) => `${r.counterparty} ${r.sent}`);
+    const advice = top
+      ? `Largest outflow to ${top.counterparty} (${top.sent}). In a real treasury run you'd set per-vendor limits and review memos weekly — here, try PEERS + BLOTTER to inspect each line.`
+      : 'No outbound P2P in this window — deposits and inbound corridors dominate.';
+    return finish(
+      `You sent ${String(sum.totalSent)} in the last ${String(sum.windowDays)} days. ${lines.length ? `By counterparty: ${lines.join(', ')}. ` : ''}${advice}`,
+    );
+  }
+
   if (/each person|sent to [a-z]|total amount|how much .*sent|\bi sent\b/.test(q)) {
     const days = /month/.test(q) ? 30 : daysIn(q);
     const sum = await call('summarize_activity', { days });
@@ -143,4 +171,9 @@ function asTransfers(value: unknown): Listed[] {
 
 function asRows(value: unknown): { counterparty: string; sent: string }[] {
   return Array.isArray(value) ? value as { counterparty: string; sent: string }[] : [];
+}
+
+function moneyMinor(display: string): number {
+  const n = Number(display.replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(n) ? Math.round(n * 100) : 0;
 }

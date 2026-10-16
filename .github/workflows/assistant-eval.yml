@@ -23,7 +23,9 @@ jobs:
   eval:
     runs-on: ubuntu-latest
     env:
+      ALLOW_LIVE_LLM_EVAL: "1"
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      LLM_MODEL: gemini-2.0-flash-lite
       GEMINI_MIN_INTERVAL_MS: "13000"
       EVAL_CASE_IDS: ${{ inputs.case_ids != '' && inputs.case_ids || 'balance,decline-reason,prompt-injection,refuses-writes' }}
       EVAL_REQUIRE_COMPLETE: "1"

@@ -2,14 +2,22 @@ import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { runAssistant } from './agent.js';
+import { booksCheck, paymentTrail, racePayment, replayPayment, tamperWithPayment } from './console.js';
 import { seedDemo } from './demo.js';
 import { answerFromLedger } from './fallback.js';
-import { LedgerError, type LedgerReader, type LedgerWriter } from './ledger.js';
+import { LedgerError, type LedgerAuditor, type LedgerReader, type LedgerWriter } from './ledger.js';
 import { isModelOutage } from './providers/retry.js';
 import type { LlmProvider } from './providers/types.js';
 import type { CompositeLedger, PracticeLedger } from './practice-ledger.js';
 import { LEDGER_CAPABILITIES } from './personas.js';
 import { formatLedgerStatement } from './statement-export.js';
+import {
+  bankSimulatorStatus,
+  simulateInboundCorridor,
+  simulateOutboundCorridor,
+  welcomeBankPackage,
+} from './bank-sim.js';
+import { peerLedgerView } from './peer-ledger.js';
 import { loadAccountView } from './tools.js';
 import { providerFromEnv } from './providers/index.js';
 import { MAX_MINOR_UI } from './money.js';
@@ -36,6 +44,9 @@ const chatBody = z.object({
   })).min(1).max(20).refine((m) => m.at(-1)?.role === 'user', 'Last message must be from the user'),
 });
 
+const paymentBody = z.object({ accountId: z.string().uuid(), transferId: z.string().uuid() });
+const raceBody = z.object({ accountId: z.string().uuid(), fromAccountId: z.string().uuid() });
+
 /** Fixed-window limiter per client IP: protects the free LLM quota from one noisy visitor. */
 function rateLimiter(limit: number, windowMs: number) {
   const hits = new Map<string, { count: number; resetAt: number }>();
@@ -54,7 +65,7 @@ function rateLimiter(limit: number, windowMs: number) {
 export function createApp(deps: {
   ledger: CompositeLedger;
   practice: PracticeLedger;
-  liveLedger?: LedgerWriter;
+  liveLedger?: LedgerWriter & LedgerAuditor;
   isLiveLedgerUp?: () => Promise<boolean>;
   /** Tests inject a fake model; production loads Gemini/Claude on first chat only. */
   provider?: () => LlmProvider;
@@ -63,6 +74,7 @@ export function createApp(deps: {
   const allowChat = rateLimiter(20, 60_000);
   const allowSeed = rateLimiter(3, 60_000);
   const allowWrite = rateLimiter(40, 60_000);
+  const allowProof = rateLimiter(12, 60_000);
   const clientIp = (c: { req: { header(name: string): string | undefined } }) =>
     c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
 
@@ -71,18 +83,33 @@ export function createApp(deps: {
   app.get('/bootstrap', async (c) => {
     const practice = deps.practice.bootstrap();
     let live = false;
+    let auditCapabilities = false;
     if (deps.isLiveLedgerUp) {
       live = await Promise.race([
         deps.isLiveLedgerUp(),
         new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2_000)),
       ]);
+      if (deps.liveLedger) {
+        try {
+          await deps.liveLedger.integrity();
+          auditCapabilities = true;
+        } catch {
+          auditCapabilities = false;
+        }
+      }
     }
-    let chat = { provider: (process.env.LLM_PROVIDER ?? 'gemini').toLowerCase(), configured: false };
+    let chat: {
+      provider: string;
+      configured: boolean;
+      model?: string;
+      configHint?: string;
+    } = { provider: (process.env.LLM_PROVIDER ?? 'gemini').toLowerCase(), configured: false };
     try {
-      providerFromEnv();
-      chat = { ...chat, configured: true };
-    } catch {
+      const p = providerFromEnv();
+      chat = { provider: p.name, configured: true, model: p.model };
+    } catch (e) {
       chat.configured = false;
+      chat.configHint = llmConfigError(e);
     }
     return c.json({
       live,
@@ -94,6 +121,7 @@ export function createApp(deps: {
         persistence: live
           ? 'Accounts and transfers persist in PostgreSQL (Render). Bookmark ?id= or use saved wallets below.'
           : 'Practice mode is in-memory per server instance — use live seed or create wallet while ledger is online.',
+        auditCapabilities,
       },
       chat,
     });
@@ -124,6 +152,17 @@ export function createApp(deps: {
     }
     const peers = await listPeers(deps.ledger, accountId);
     return c.json(peers);
+  });
+
+  app.get('/peer-ledger', async (c) => {
+    const accountId = c.req.query('accountId');
+    const peerId = c.req.query('peerId');
+    if (!accountId || !peerId || !z.string().uuid().safeParse(accountId).success || !z.string().uuid().safeParse(peerId).success) {
+      return c.json({ error: 'accountId and peerId are required' }, 400);
+    }
+    const days = Math.min(Number(c.req.query('days') ?? '30'), 365);
+    const view = await peerLedgerView(deps.ledger, accountId, peerId, days, 40);
+    return view ? c.json(view) : c.json({ error: 'Peer not found' }, 404);
   });
 
   app.post('/accounts/:id/deposits', async (c) => {
@@ -196,6 +235,93 @@ export function createApp(deps: {
     return c.json(await seedDemo(deps.liveLedger));
   });
 
+  app.get('/bank/status', (c) => c.json(bankSimulatorStatus()));
+
+  const bankBody = z.object({ accountId: z.string().uuid() });
+
+  app.post('/bank/welcome', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = bankBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    const account = await deps.ledger.getAccount(parsed.data.accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    try {
+      return c.json(await welcomeBankPackage(deps.ledger, parsed.data.accountId, 500_00));
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+  });
+
+  app.post('/bank/inbound', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = bankBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    const account = await deps.ledger.getAccount(parsed.data.accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    try {
+      return c.json(await simulateInboundCorridor(deps.ledger, parsed.data.accountId));
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+  });
+
+  app.post('/bank/outbound', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = bankBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    const account = await deps.ledger.getAccount(parsed.data.accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    try {
+      return c.json(await simulateOutboundCorridor(deps.ledger, parsed.data.accountId));
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+  });
+
+  app.get('/trail', async (c) => {
+    const parsed = paymentBody.safeParse({ accountId: c.req.query('account'), transferId: c.req.query('transfer') });
+    if (!parsed.success) return c.json({ error: 'Payment not found' }, 404);
+    const trail = await paymentTrail(deps.ledger, parsed.data.accountId, parsed.data.transferId);
+    return trail ? c.json(trail) : c.json({ error: 'Payment not found' }, 404);
+  });
+
+  app.get('/integrity', async (c) => {
+    try {
+      return c.json(await booksCheck(deps.ledger));
+    } catch (e) {
+      if (e instanceof LedgerError && e.status === 404) {
+        return c.json({ error: 'Reconciliation is not on the deployed ledger build yet.', code: 'LEDGER_OUTDATED' }, 503);
+      }
+      throw e;
+    }
+  });
+
+  app.post('/replay', async (c) => {
+    if (!allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = paymentBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    const result = await replayPayment(deps.ledger, parsed.data.accountId, parsed.data.transferId);
+    return result ? c.json(result) : c.json({ error: 'Payment not found' }, 404);
+  });
+
+  app.post('/race', async (c) => {
+    if (!allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = raceBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    const result = await racePayment(deps.ledger, parsed.data.accountId, parsed.data.fromAccountId);
+    if (!result) return c.json({ error: 'Account not found' }, 404);
+    return 'error' in result ? c.json(result, 400) : c.json(result);
+  });
+
+  app.post('/tamper', async (c) => {
+    if (!allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = paymentBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    const result = await tamperWithPayment(deps.ledger, parsed.data.accountId, parsed.data.transferId);
+    if (!result) return c.json({ error: 'Payment not found' }, 404);
+    return 'error' in result ? c.json(result, 400) : c.json(result);
+  });
+
   app.post('/chat', async (c) => {
     if (!allowChat(clientIp(c))) return c.json({ error: 'Too many requests, slow down a little.' }, 429);
     const parsed = chatBody.safeParse(await c.req.json().catch(() => null));
@@ -214,17 +340,33 @@ export function createApp(deps: {
     } catch (e) {
       console.error(e);
       const question = messages.at(-1)?.text ?? '';
-      return c.json(await answerFromLedger({ ledger: deps.ledger, accountId, question }));
+      const reason = llmConfigError(e);
+      return c.json({
+        ...(await answerFromLedger({ ledger: deps.ledger, accountId, question })),
+        route: 'ledger-fallback',
+        fallbackReason: reason,
+      });
     }
     try {
-      return c.json(await runAssistant({ provider, ledger: deps.ledger, accountId, messages }));
+      const peers = await listPeers(deps.ledger, accountId);
+      return c.json(await runAssistant({
+        provider,
+        ledger: deps.ledger,
+        accountId,
+        messages,
+        peers,
+      }));
     } catch (e) {
-      // The free Gemini cap is 20 requests a day. The books can still answer.
-      if (isModelOutage(e)) {
-        const question = messages.at(-1)?.text ?? '';
-        return c.json(await answerFromLedger({ ledger: deps.ledger, accountId, question }));
-      }
-      throw e;
+      const errMsg = e instanceof Error ? e.message : String(e);
+      const errStatus = (e as { status?: number }).status;
+      console.error('chat LLM error', errStatus, errMsg.slice(0, 500));
+      const question = messages.at(-1)?.text ?? '';
+      // Never 500 the UI for model/config errors — ledger tools still answer.
+      return c.json({
+        ...(await answerFromLedger({ ledger: deps.ledger, accountId, question })),
+        route: 'ledger-fallback',
+        fallbackReason: `LLM call failed (${errStatus ?? 'no status'}): ${errMsg.slice(0, 220)}`,
+      });
     }
   });
 
@@ -268,4 +410,18 @@ async function listPeers(ledger: CompositeLedger, accountId: string) {
 function respondAccount(c: { json: (body: unknown, status?: number) => Response }, view: Awaited<ReturnType<typeof loadAccountView>>) {
   if (!view) return c.json({ error: 'Account not found' }, 404);
   return c.json(view);
+}
+
+function llmConfigError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/GEMINI_API_KEY is not set/i.test(message)) {
+    return 'GEMINI_API_KEY is not set. Add GEMINI_API_KEY or OPENROUTER_API_KEY on Vercel (assistant/.env locally), redeploy, then refresh.';
+  }
+  if (/OPENROUTER_API_KEY is not set/i.test(message)) {
+    return 'OPENROUTER_API_KEY is not set. Get a key at openrouter.ai/keys or use GEMINI_API_KEY with LLM_PROVIDER=gemini.';
+  }
+  if (/ANTHROPIC_API_KEY is not set/i.test(message)) {
+    return 'ANTHROPIC_API_KEY is not set on the assistant server.';
+  }
+  return message;
 }

@@ -16,6 +16,7 @@ Base URL: `LEDGER_URL` (local default `http://localhost:8080`).
 | POST | `/v1/transfers` | P2P transfer (requires `Idempotency-Key`) |
 | GET | `/v1/transfers/{id}` | Transfer detail |
 | GET | `/v1/transfers?accountId=` | History |
+| GET | `/v1/ledger/integrity` | Company-wide reconciliation (entry sum, balance drift, outbox) |
 | GET | `/actuator/health` | Health (used by keep-warm) |
 
 Money is **integer cents** (`amountMinor`). Idempotency and fraud rules are enforced in Postgres.
@@ -39,6 +40,13 @@ This is the **integration API** for the React client: P2P actions, account views
 | POST | `/api/accounts/{id}/deposits` | Deposit |
 | POST | `/api/transfers` | Send money (proxies to ledger; practice in-memory when offline) |
 | POST | `/api/demo` | Seed live demo world (needs Docker ledger) |
+| GET | `/api/peers?accountId=` | Counterparties from transfer history |
+| GET | `/api/peer-ledger?accountId=&peerAccountId=` | Bilateral activity with one peer |
+| GET | `/api/integrity` | Balance audit snapshot (live or honest partial) |
+| GET | `/api/bank/status` | Simulated ACH/corridor metadata |
+| POST | `/api/bank/welcome` | Opening deposit + inbound corridor (`{ accountId }`) |
+| POST | `/api/bank/inbound` | New inbound peer pays user (`{ accountId }`) |
+| POST | `/api/bank/outbound` | User pays new vendor peer (`{ accountId }`) |
 | POST | `/api/chat` | LLM support (tools bound to `accountId`) |
 
 Implementation:
@@ -46,6 +54,7 @@ Implementation:
 - Routes: `assistant/src/server/app.ts`
 - Ledger client: `assistant/src/server/ledger.ts`
 - Practice / composite ledger: `assistant/src/server/practice-ledger.ts`
+- Simulated bank corridors: `assistant/src/server/bank-sim.ts`
 - Tool schemas + account math: `assistant/src/server/tools.ts`
 - Vercel entry: `assistant/api/index.ts` (one function; `vercel.json` rewrites `/api/*` → `/api/index`)
 

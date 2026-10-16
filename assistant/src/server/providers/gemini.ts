@@ -7,7 +7,7 @@ export class GeminiProvider implements LlmProvider {
   private readonly ai: GoogleGenAI;
   private lastCallAt = 0;
 
-  constructor(apiKey: string, readonly model = 'gemini-flash-latest') {
+  constructor(apiKey: string, readonly model = 'gemini-2.0-flash-lite') {
     this.ai = new GoogleGenAI({ apiKey, httpOptions: { timeout: 45_000 } });
   }
 
@@ -62,8 +62,10 @@ export class GeminiProvider implements LlmProvider {
         return await this.ai.models.generateContent({ model: this.model, contents, config });
       } catch (error) {
         const status = retryableStatus(error);
+        // 429: fail fast so OpenRouter / ledger-fallback runs — retries burn free-tier quota.
+        if (status === 429 || isLongQuotaWait(error)) throw error;
         const budget = status === 503 || status === 504 ? 4 : 2;
-        if (isLongQuotaWait(error) || attempt >= budget || status === undefined) throw error;
+        if (attempt >= budget || status === undefined) throw error;
         await new Promise((resolve) => setTimeout(resolve, retryDelayMs(error, attempt, 20_000)));
       }
     }

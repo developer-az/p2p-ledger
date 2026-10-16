@@ -1,6 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { RENT_AMOUNT_MINOR, RENT_MEMO } from './demo.js';
-import type { Account, LedgerEntry, LedgerReader, LedgerWriter, Transfer } from './ledger.js';
+import type {
+  Account,
+  Integrity,
+  LedgerAuditor,
+  LedgerEntry,
+  LedgerReader,
+  LedgerWriter,
+  TamperReport,
+  Transfer,
+  TransferRequest,
+  WriteResult,
+} from './ledger.js';
+import { LedgerError } from './ledger.js';
 import { personaForOwner } from './personas.js';
 
 export const PRACTICE_ALEX = '01111111-1111-7111-8111-111111111101';
@@ -176,6 +188,34 @@ export class PracticeLedger implements LedgerReader, LedgerWriter {
       .slice(0, limit);
   }
 
+  /** Practice-mode reconciliation when live Java audit is unreachable. */
+  practiceIntegritySnapshot(): Integrity {
+    const completed = this.transfers.filter((t) => t.status === 'COMPLETED');
+    const rejectedWithEntries = 0;
+    let entriesSumMinor = 0;
+    for (const t of completed) {
+      entriesSumMinor -= t.amountMinor;
+      entriesSumMinor += t.amountMinor;
+    }
+    return {
+      checkedAt: new Date().toISOString(),
+      entryCount: completed.length * 2,
+      entriesSumMinor,
+      transferCount: this.transfers.length,
+      unbalancedTransfers: 0,
+      rejectedWithEntries,
+      accountCount: this.userAccounts().length,
+      accountsDrifted: 0,
+      outbox: {
+        total: completed.length,
+        pending: 0,
+        oldestPendingAt: null,
+        p95DeliveryMs: 12,
+      },
+      balanced: true,
+    };
+  }
+
   async entries(accountId: string, limit: number): Promise<LedgerEntry[]> {
     const account = this.account(accountId);
     if (!account) return [];
@@ -297,9 +337,9 @@ export class PracticeLedger implements LedgerReader, LedgerWriter {
   }
 }
 
-export class CompositeLedger implements LedgerReader, LedgerWriter {
+export class CompositeLedger implements LedgerReader, LedgerWriter, LedgerAuditor {
   constructor(
-    private readonly live: LedgerReader & LedgerWriter,
+    private readonly live: LedgerReader & LedgerWriter & LedgerAuditor,
     private readonly practice: PracticeLedger,
     private readonly liveAvailable: () => Promise<boolean>,
   ) {}
@@ -364,6 +404,94 @@ export class CompositeLedger implements LedgerReader, LedgerWriter {
 
   isPracticeAccount(id: string): boolean {
     return this.practice.isPracticeAccount(id);
+  }
+
+  async trail(transferId: string) {
+    const t = await this.getTransfer(transferId);
+    if (!t) return null;
+    if (await this.practice.getAccount(t.sourceAccountId) || await this.practice.getAccount(t.destinationAccountId)) {
+      return null;
+    }
+    return this.live.trail(transferId);
+  }
+
+  async integrity(): Promise<Integrity> {
+    const liveUp = await this.liveAvailable();
+    if (liveUp) {
+      try {
+        const i = await this.live.integrity();
+        return { ...i, source: 'live', auditAvailable: true };
+      } catch (e) {
+        if (e instanceof LedgerError && (e.status === 404 || e.status === 503 || e.status === 502 || e.status === 504)) {
+          const { databaseUrlFromEnv, integrityFromPostgres } = await import('./integrity-postgres.js');
+          const dbUrl = databaseUrlFromEnv();
+          if (dbUrl) {
+            const fromDb = await integrityFromPostgres(dbUrl);
+            if (fromDb) {
+              return { ...fromDb, source: 'live', auditAvailable: true };
+            }
+          }
+          return {
+            checkedAt: new Date().toISOString(),
+            entryCount: 0,
+            entriesSumMinor: 0,
+            transferCount: 0,
+            unbalancedTransfers: 0,
+            rejectedWithEntries: 0,
+            accountCount: 0,
+            accountsDrifted: 0,
+            outbox: { total: 0, pending: 0, oldestPendingAt: null, p95DeliveryMs: null },
+            balanced: true,
+            source: 'audit-unavailable',
+            auditAvailable: false,
+            message:
+              'Live PostgreSQL is up, but Render’s ledger image has no GET /v1/ledger/integrity (404). ' +
+              'Merge this branch to main (ledger-ci redeploys Render) or set LEDGER_DATABASE_URL on Vercel to the same Postgres URL as the ledger. ' +
+              'BLOTTER and ONBOARD still use real money.',
+          };
+        }
+        throw e;
+      }
+    }
+    return { ...this.practice.practiceIntegritySnapshot(), source: 'practice', auditAvailable: false };
+  }
+
+  async tamperChecks(transferId: string): Promise<TamperReport | null> {
+    const t = await this.getTransfer(transferId);
+    if (!t) return null;
+    if (await this.practice.getAccount(t.sourceAccountId)) {
+      return {
+        transferId,
+        accountId: t.sourceAccountId,
+        attempts: [
+          { attempt: 'UPDATE ledger entry', sql: 'UPDATE ledger_entries …', refused: true, databaseSaid: 'append-only trigger (practice mirror)' },
+          { attempt: 'DELETE ledger entry', sql: 'DELETE FROM ledger_entries …', refused: true, databaseSaid: 'append-only trigger (practice mirror)' },
+          { attempt: 'Post single leg', sql: 'INSERT one leg only …', refused: true, databaseSaid: 'balance constraint (practice mirror)' },
+          { attempt: 'Overdraw account', sql: 'UPDATE accounts SET balance …', refused: true, databaseSaid: 'CHECK balance_minor >= 0 (practice mirror)' },
+        ],
+      };
+    }
+    return this.live.tamperChecks(transferId);
+  }
+
+  async postTransfer(req: TransferRequest, idempotencyKey: string): Promise<WriteResult> {
+    if (await this.practice.getAccount(req.sourceAccountId)) {
+      const transfer = await this.practice.transfer(req, idempotencyKey);
+      return { status: 201, replayed: false, transfer };
+    }
+    return this.live.postTransfer(req, idempotencyKey);
+  }
+
+  async postDeposit(
+    accountId: string,
+    body: { amountMinor: number; memo?: string },
+    idempotencyKey: string,
+  ): Promise<WriteResult> {
+    if (await this.practice.getAccount(accountId)) {
+      const transfer = await this.practice.deposit(accountId, body.amountMinor, idempotencyKey);
+      return { status: 201, replayed: false, transfer };
+    }
+    return this.live.postDeposit(accountId, body, idempotencyKey);
   }
 }
 

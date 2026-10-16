@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { LedgerReader, Transfer } from './ledger.js';
 import { formatMoney } from './money.js';
+import { listPeerRefs, peerLedgerView } from './peer-ledger.js';
 
 /**
  * The assistant's tools. Every tool is read-only and bound to one account: the model never
@@ -47,6 +48,22 @@ const defs = {
   explain_decline_reason: {
     description: 'Explain what a decline reason code (for example VELOCITY_LIMIT) means and what the limit is.',
     schema: z.object({ reasonCode: z.string().min(1).max(64) }).strict(),
+  },
+  list_peers: {
+    description:
+      'List people this account has sent money to or received money from recently (P2P counterparty wallets on the same ledger).',
+    schema: z.object({}).strict(),
+  },
+  peer_ledger: {
+    description:
+      'Ledger activity between the user and one peer: totals sent/received in a window and recent transfers. ' +
+      'Use peerOwner (e.g. sam-f3a2b1) or peerAccountId (UUID).',
+    schema: z.object({
+      peerOwner: z.string().min(1).max(64).optional(),
+      peerAccountId: z.string().uuid().optional(),
+      days: z.number().int().min(1).max(365).default(30),
+      limit: z.number().int().min(1).max(50).default(15),
+    }).strict(),
   },
 } as const;
 
@@ -143,6 +160,32 @@ export async function executeTool(ctx: ToolContext, name: string, rawArgs: unkno
       const explanation = DECLINE_REASONS[code];
       return explanation ? { reasonCode: code, explanation } : { error: `Unknown reason code: ${code}` };
     }
+    case 'list_peers': {
+      const peers = await listPeerRefs(ctx.ledger, ctx.accountId);
+      return { peers };
+    }
+    case 'peer_ledger': {
+      let peerId = args.peerAccountId as string | undefined;
+      if (!peerId && args.peerOwner) {
+        const owner = (args.peerOwner as string).toLowerCase();
+        const matches = await listPeerRefs(ctx.ledger, ctx.accountId);
+        const hit = matches.find((p) => p.owner === owner || p.owner.startsWith(owner));
+        if (!hit) {
+          const byOwner = await ctx.ledger.accountsByOwner(owner);
+          const user = byOwner.find((a) => a.type === 'USER');
+          if (user) peerId = user.id;
+        } else peerId = hit.id;
+      }
+      if (!peerId) return { error: 'Peer not found. Use list_peers or a full owner id from a recent payment.' };
+      const view = await peerLedgerView(
+        ctx.ledger,
+        ctx.accountId,
+        peerId,
+        args.days as number,
+        args.limit as number,
+      );
+      return view ?? { error: 'Peer not found' };
+    }
   }
 }
 
@@ -160,6 +203,8 @@ export interface AccountActivity {
   transferId: string;
   direction: 'sent' | 'received' | 'deposit';
   counterparty: string;
+  counterpartyAccountId: string;
+  kind: Transfer['kind'];
   amount: string;
   status: Transfer['status'];
   declineReason: string | null;
@@ -239,6 +284,8 @@ function describe(self: string, t: Transfer, names: Map<string, string>): Accoun
     transferId: t.id,
     direction,
     counterparty: names.get(counterpartyId) ?? 'unknown',
+    counterpartyAccountId: counterpartyId,
+    kind: t.kind,
     amount: formatMoney(t.amountMinor, t.currency),
     status: t.status,
     declineReason: t.rejectionReason,

@@ -83,6 +83,22 @@ class ApiTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void ledgerIntegrityIsBalancedAfterTransfer() throws Exception {
+        String alice = openAccount("alice-int-" + UUID.randomUUID());
+        mvc.perform(post("/v1/accounts/{id}/deposits", alice)
+                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"amountMinor\": 1000}"))
+                .andExpect(status().isCreated());
+
+        mvc.perform(get("/v1/ledger/integrity"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.balanced").value(true))
+                .andExpect(jsonPath("$.entriesSumMinor").value(0))
+                .andExpect(jsonPath("$.entryCount").value(2));
+    }
+
     private String openAccount(String owner) throws Exception {
         String response = mvc.perform(post("/v1/accounts").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"ownerId\": \"%s\", \"currency\": \"USD\"}".formatted(owner)))

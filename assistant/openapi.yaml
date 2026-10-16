@@ -79,6 +79,42 @@ paths:
   /demo:
     post:
       summary: Seed demo accounts on live ledger
+  /bank/status:
+    get:
+      summary: Simulated ACH / corridor metadata
+  /bank/welcome:
+    post:
+      summary: Opening deposit plus inbound corridor peer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accountId]
+              properties:
+                accountId: { type: string, format: uuid }
+  /bank/inbound:
+    post:
+      summary: New inbound corridor counterparty pays user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accountId]
+              properties:
+                accountId: { type: string, format: uuid }
+  /bank/outbound:
+    post:
+      summary: User pays new outbound corridor vendor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accountId]
+              properties:
+                accountId: { type: string, format: uuid }
   /chat:
     post:
       summary: Support chat (LLM + ledger tools)

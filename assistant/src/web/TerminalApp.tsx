@@ -22,6 +22,7 @@ import {
   type Turn,
 } from './api.js';
 import { OFFLINE_BOOTSTRAP } from './practice-fixture.js';
+import { parseTerminalInput } from './terminal-command.js';
 import { loadSavedWallets, rememberWallet } from './wallet-store.js';
 
 const REPO = 'https://github.com/developer-az/p2p-ledger';
@@ -192,7 +193,7 @@ export function TerminalApp() {
       const result = await api.integrity();
       setIntegrity(result);
       if (result.auditAvailable === false || result.source === 'audit-unavailable') {
-        append('AUDIT endpoint not on ledger — use blotter for your real balance');
+        append('AUDIT pending on ledger host (404) — balances in WATCH/BLOTTER are still live Postgres');
       } else {
         append(`AUDIT live balanced=${result.balanced} entries=${result.entryCount}`);
       }
@@ -348,47 +349,41 @@ export function TerminalApp() {
   }
 
   function runCommand(raw: string) {
-    const line = raw.trim();
-    if (!line) return;
-    const lower = line.toLowerCase();
-    if (lower === 'help' || lower === ':help') {
-      append('CMD F1 help | F2 onboard | F3 audit | F4 race | :deposit :pay :open :go');
-      return;
+    const action = parseTerminalInput(raw);
+    switch (action.kind) {
+      case 'help':
+        append('CMD F1 help | F2 onboard | F3 audit | F4 race | pay sam 10 lunch | deposit 100 | :open name');
+        return;
+      case 'onboard':
+        void onboard();
+        return;
+      case 'audit':
+        void runIntegrity();
+        return;
+      case 'race':
+        void runRace();
+        return;
+      case 'deposit':
+        void runDeposit(action.amount);
+        return;
+      case 'pay':
+        void runPay(action.args);
+        return;
+      case 'open':
+        void openWallet(action.owner, true);
+        return;
+      case 'signout':
+        signOut();
+        return;
+      case 'refresh':
+        if (account) void loadAccount(account.id);
+        return;
+      case 'chat':
+        if (!action.text) return;
+        if (account) void sendChat(action.text);
+        else append('ERR sign in — F2 ONBOARD or open name');
+        return;
     }
-    if (lower === ':onboard' || lower === ':seed') {
-      void onboard();
-      return;
-    }
-    if (lower === ':audit' || lower === ':integrity') {
-      void runIntegrity();
-      return;
-    }
-    if (lower === ':race') {
-      void runRace();
-      return;
-    }
-    if (lower.startsWith(':deposit ')) {
-      void runDeposit(line.slice(9));
-      return;
-    }
-    if (lower.startsWith(':pay ')) {
-      void runPay(line.slice(5));
-      return;
-    }
-    if (lower.startsWith(':open ')) {
-      void openWallet(line.slice(6), true);
-      return;
-    }
-    if (lower === ':signout') {
-      signOut();
-      return;
-    }
-    if (lower === ':refresh' && account) {
-      void loadAccount(account.id);
-      return;
-    }
-    if (account) void sendChat(line);
-    else append('ERR sign in — F2 ONBOARD or :open yourname');
   }
 
   function onSubmit(e: FormEvent) {
@@ -573,9 +568,17 @@ export function TerminalApp() {
               </div>
             )}
             {raceResult && (
-              <pre className="bb-pre">{raceResult.attempts.map((a, i) =>
-                `#${i + 1} ${a.httpStatus} ${a.replayed ? 'REPLAY' : 'NEW'} ${a.ms}ms`,
-              ).join('\n')}</pre>
+              <>
+                <p className="bb-dim">
+                  {raceResult.attempts.filter((a) => !a.replayed).length} processed ·
+                  {raceResult.attempts.filter((a) => a.replayed).length} replays ·
+                  {raceResult.distinctTransfers} payment(s)
+                  <span className="bb-dim"> — copy # is launch order, not who won first</span>
+                </p>
+                <pre className="bb-pre">{raceResult.attempts.map((a) =>
+                  `copy ${a.copyIndex}  HTTP ${a.httpStatus}  ${a.replayed ? 'REPLAY' : 'PROCESSED'}  ${a.ms}ms`,
+                ).join('\n')}</pre>
+              </>
             )}
             <div className="bb-chat">
               {chatTurns.slice(-4).map((t, i) => (

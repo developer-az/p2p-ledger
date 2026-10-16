@@ -48,7 +48,7 @@ export interface RaceResult {
   from: string;
   amount: string;
   copies: number;
-  attempts: { httpStatus: number; replayed: boolean; transferId: string; status: string; ms: number }[];
+  attempts: { copyIndex: number; httpStatus: number; replayed: boolean; transferId: string; status: string; ms: number }[];
   distinctTransfers: number;
   transferId: string | null;
   status: 'COMPLETED' | 'REJECTED' | null;

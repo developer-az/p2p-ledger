@@ -1,4 +1,5 @@
 import type { LedgerReader } from './ledger.js';
+import { FallbackChainProvider } from './providers/fallback-chain.js';
 import type { ChatTurn, LlmProvider, ToolCallRecord } from './providers/types.js';
 import { executeTool, TOOL_SPECS } from './tools.js';
 
@@ -36,7 +37,7 @@ export interface AssistantReply {
   provider: string;
   model: string;
   /** How the BFF routed this answer (UI + debugging). */
-  route?: 'gemini' | 'anthropic' | 'ledger-fallback';
+  route?: 'gemini' | 'anthropic' | 'openrouter' | 'ledger-fallback';
   /** Set when route is ledger-fallback. */
   fallbackReason?: string;
 }
@@ -61,7 +62,12 @@ export async function runAssistant(opts: {
   const answer = result.truncated || !result.answer.trim()
     ? "Sorry, I couldn't finish answering that. Try asking a narrower question."
     : result.answer.trim();
-  const route = opts.provider.name === 'gemini' ? 'gemini' : opts.provider.name === 'anthropic' ? 'anthropic' : undefined;
+  let route: AssistantReply['route'];
+  if (opts.provider instanceof FallbackChainProvider) {
+    route = opts.provider.lastUsed === 'secondary' ? 'openrouter' : 'gemini';
+  } else if (opts.provider.name === 'gemini') route = 'gemini';
+  else if (opts.provider.name === 'anthropic') route = 'anthropic';
+  else if (opts.provider.name === 'openrouter') route = 'openrouter';
   return {
     answer,
     toolCalls: result.toolCalls,

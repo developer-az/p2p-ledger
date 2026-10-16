@@ -17,7 +17,9 @@ Optional:
 
 | Tool | Purpose |
 |------|---------|
-| **GEMINI_API_KEY** | AUDIT/MSG chat with tool-calling ([Google AI Studio](https://aistudio.google.com/apikey)) |
+| **GEMINI_API_KEY** | Primary chat ([Google AI Studio](https://aistudio.google.com/apikey)); free tier hits **429 / daily quota** quickly |
+| **OPENROUTER_API_KEY** | [OpenRouter](https://openrouter.ai/keys) — set **with** `GEMINI_API_KEY` for automatic failover on 429; or `LLM_PROVIDER=openrouter` alone |
+| **OPENROUTER_MODEL** | e.g. `google/gemini-2.0-flash-001` (default) or any tool-capable model on OpenRouter |
 | **ANTHROPIC_API_KEY** | Set `LLM_PROVIDER=anthropic` instead of Gemini |
 | **gh** | PRs, Actions, deployment hooks ([docs/GITHUB.md](GITHUB.md)) |
 | **Terraform** | AWS SQS FIFO in `infra/aws/` (production events) |
@@ -51,7 +53,8 @@ cp .env.example .env.local
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `LEDGER_URL` | For live mode | Default `http://localhost:8080` when using Docker |
-| `GEMINI_API_KEY` | For LLM chat | Without it, chat uses read-only tool fallback |
+| `GEMINI_API_KEY` | Primary LLM | Optional if `OPENROUTER_API_KEY` is set |
+| `OPENROUTER_API_KEY` | Backup / alternate LLM | Auto-failover when Gemini returns 429 |
 | `LLM_PROVIDER` | No | `gemini` (default) or `anthropic` |
 | `LLM_MODEL` | No | Override default model id |
 

@@ -31,6 +31,64 @@ export interface LedgerEntry {
   createdAt: string;
 }
 
+export interface LedgerEvent {
+  eventId: string;
+  eventType: string;
+  createdAt: string;
+  publishedAt: string | null;
+}
+
+export interface TransferTrail {
+  transfer: Transfer;
+  idempotencyKey: string;
+  requestHash: string;
+  entries: LedgerEntry[];
+  events: LedgerEvent[];
+}
+
+export interface Integrity {
+  checkedAt: string;
+  entryCount: number;
+  entriesSumMinor: number;
+  transferCount: number;
+  unbalancedTransfers: number;
+  rejectedWithEntries: number;
+  accountCount: number;
+  accountsDrifted: number;
+  outbox: { total: number; pending: number; oldestPendingAt: string | null; p95DeliveryMs: number | null };
+  balanced: boolean;
+}
+
+export interface TamperReport {
+  transferId: string;
+  accountId: string;
+  attempts: { attempt: string; sql: string; refused: boolean; databaseSaid: string }[];
+}
+
+/** What the ledger answered to a write, including whether it was a replay of a stored result. */
+export interface WriteResult {
+  status: number;
+  replayed: boolean;
+  transfer: Transfer;
+}
+
+export type TransferRequest = {
+  sourceAccountId: string;
+  destinationAccountId: string;
+  amountMinor: number;
+  currency: string;
+  memo?: string;
+};
+
+/** Operator reads and raw writes used by the console. */
+export interface LedgerAuditor {
+  trail(transferId: string): Promise<TransferTrail | null>;
+  integrity(): Promise<Integrity>;
+  tamperChecks(transferId: string): Promise<TamperReport | null>;
+  postTransfer(req: TransferRequest, idempotencyKey: string): Promise<WriteResult>;
+  postDeposit(accountId: string, body: { amountMinor: number; memo?: string }, idempotencyKey: string): Promise<WriteResult>;
+}
+
 export interface LedgerReader {
   getAccount(id: string): Promise<Account | null>;
   accountsByOwner(ownerId: string): Promise<Account[]>;
@@ -42,10 +100,7 @@ export interface LedgerReader {
 export interface LedgerWriter {
   openAccount(ownerId: string, currency: string): Promise<Account>;
   deposit(accountId: string, amountMinor: number, idempotencyKey: string): Promise<Transfer>;
-  transfer(
-    req: { sourceAccountId: string; destinationAccountId: string; amountMinor: number; currency: string; memo?: string },
-    idempotencyKey: string,
-  ): Promise<Transfer>;
+  transfer(req: TransferRequest, idempotencyKey: string): Promise<Transfer>;
 }
 
 export class LedgerError extends Error {
@@ -54,7 +109,7 @@ export class LedgerError extends Error {
   }
 }
 
-export class HttpLedgerClient implements LedgerReader, LedgerWriter {
+export class HttpLedgerClient implements LedgerReader, LedgerWriter, LedgerAuditor {
   constructor(
     private readonly baseUrl: string,
     private readonly timeoutMs = 20_000,
@@ -94,6 +149,40 @@ export class HttpLedgerClient implements LedgerReader, LedgerWriter {
     return this.request<Transfer>('POST', '/v1/transfers', req, idempotencyKey);
   }
 
+  trail(transferId: string) {
+    return this.getOrNull<TransferTrail>(`/v1/transfers/${encodeURIComponent(transferId)}/trail`);
+  }
+
+  integrity() {
+    return this.request<Integrity>('GET', '/v1/ledger/integrity');
+  }
+
+  async tamperChecks(transferId: string) {
+    try {
+      return await this.request<TamperReport>('POST', `/v1/ledger/tamper-checks?transferId=${encodeURIComponent(transferId)}`);
+    } catch (e) {
+      if (e instanceof LedgerError && (e.status === 404 || e.status === 400)) return null;
+      throw e;
+    }
+  }
+
+  postTransfer(req: TransferRequest, idempotencyKey: string) {
+    return this.write('/v1/transfers', req, idempotencyKey);
+  }
+
+  postDeposit(accountId: string, body: { amountMinor: number; memo?: string }, idempotencyKey: string) {
+    return this.write(`/v1/accounts/${encodeURIComponent(accountId)}/deposits`, body, idempotencyKey);
+  }
+
+  private async write(path: string, body: unknown, idempotencyKey: string): Promise<WriteResult> {
+    const res = await this.send('POST', path, body, idempotencyKey);
+    return {
+      status: res.status,
+      replayed: res.headers.get('Idempotent-Replayed') === 'true',
+      transfer: (await res.json()) as Transfer,
+    };
+  }
+
   private async getOrNull<T>(path: string): Promise<T | null> {
     try {
       return await this.request<T>('GET', path);
@@ -105,6 +194,11 @@ export class HttpLedgerClient implements LedgerReader, LedgerWriter {
   }
 
   private async request<T>(method: string, path: string, body?: unknown, idempotencyKey?: string): Promise<T> {
+    return (await (await this.send(method, path, body, idempotencyKey)).json()) as T;
+  }
+
+  /** Writes are safe to retry here because every one carries an idempotency key. */
+  private async send(method: string, path: string, body?: unknown, idempotencyKey?: string): Promise<Response> {
     const headers: Record<string, string> = {};
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
@@ -124,7 +218,7 @@ export class HttpLedgerClient implements LedgerReader, LedgerWriter {
         const detail = await res.text().catch(() => '');
         throw new LedgerError(res.status, `Ledger ${method} ${path} failed: ${res.status} ${detail.slice(0, 200)}`);
       }
-      return (await res.json()) as T;
+      return res;
     }
   }
 }

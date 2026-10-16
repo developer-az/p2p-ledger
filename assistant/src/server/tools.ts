@@ -189,7 +189,11 @@ export async function loadAccountView(ledger: LedgerReader, accountId: string, l
   if (!account || account.type !== 'USER') return null;
   const recent = await ledger.transfersForAccount(accountId, 50);
   const names = await ownerNames({ ledger, accountId, now: () => new Date() }, recent);
-  const described = recent.map((t) => describe(accountId, t, names));
+  const described = recent.map((t) => ({
+    ...describe(accountId, t, names),
+    counterpartyAccountId: t.sourceAccountId === accountId ? t.destinationAccountId : t.sourceAccountId,
+    kind: t.kind,
+  }));
   return {
     id: account.id,
     owner: account.ownerId,

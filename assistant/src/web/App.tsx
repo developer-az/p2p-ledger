@@ -1,741 +1,806 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { formatMoney, MAX_DOLLARS_UI, parseDollarsToMinor } from '../server/money.js';
-import { loadSavedWallets, rememberWallet } from './wallet-store.js';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   api,
   type AccountActivity,
   type AccountRef,
   type AccountView,
   type BootstrapResponse,
-  type LedgerEntryRow,
+  type Integrity,
+  type PaymentTrail,
+  type RaceResult,
+  type ReplayResult,
+  type TamperReport,
   type Turn,
 } from './api.js';
-import { LedgerWorld } from './LedgerWorld.js';
-import { OFFLINE_BOOTSTRAP } from './practice-fixture.js';
+import { GuidedLedgerStory } from './GuidedLedgerStory.js';
+import { LedgerCharts } from './LedgerCharts.js';
+import { PipelineStage } from './pipeline/PipelineStage.js';
+import { mapTrailToPipelineSteps } from './pipeline/pipeline-script.js';
+import { OFFLINE_BOOTSTRAP, PRACTICE_ALEX_ID } from './practice-fixture.js';
+import { clearStoryComplete, isStoryComplete } from './tour-storage.js';
 
-const PRACTICE_PREFIX = '01111111-1111-7111-8111-';
+const REPO = 'https://github.com/developer-az/p2p-ledger';
 
-type Tab = 'world' | 'overview' | 'ledger' | 'send' | 'activity' | 'ask';
+const SUGGESTIONS = [
+  'Why was my rent payment declined?',
+  "What's my balance?",
+  'How much have I sent to each person this month?',
+  'Send $50 to sam',
+];
 
-function displayName(owner: string): string {
+const GUARANTEES = [
+  ['Double-entry, enforced by Postgres', 'Every payment posts a debit and a credit. A deferred trigger refuses any commit whose legs do not sum to zero.'],
+  ['Retries cannot charge twice', 'The idempotency key is a unique column. Identical requests in flight together resolve to one payment.'],
+  ['Posted money cannot be edited', 'Entries are append-only at the database level, so a bug in application code cannot rewrite history.'],
+  ['Every payment emits an event', 'A transactional outbox relays events to SQS or Kafka. Nothing is lost, and nothing is sent for a rolled-back payment.'],
+] as const;
+
+function personName(owner: string): string {
+  if (owner.startsWith('Bank funding')) return 'Bank';
   const base = owner.split('-')[0] || owner;
   return base.charAt(0).toUpperCase() + base.slice(1);
 }
 
-function accountFromUrl(): string | null {
-  const id = new URLSearchParams(window.location.search).get('id');
-  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return null;
-  return id;
+function when(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function syncAccountUrl(id: string | null): void {
-  const url = new URL(window.location.href);
-  if (id) url.searchParams.set('id', id);
-  else url.searchParams.delete('id');
-  window.history.replaceState(null, '', url);
+function clock(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+}
+
+function count(n: number, noun: string, plural = `${noun}s`): string {
+  return `${n.toLocaleString()} ${n === 1 ? noun : plural}`;
+}
+
+function shortId(id: string): string {
+  return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
+}
+
+function useAction<T>() {
+  const [result, setResult] = useState<T | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function run(fn: () => Promise<T>) {
+    setBusy(true);
+    setError('');
+    try {
+      setResult(await fn());
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return { result, busy, error, run };
+}
+
+function Badge({ tone, children }: { tone: 'ok' | 'bad' | 'neutral'; children: ReactNode }) {
+  return <span className={`badge ${tone}`}>{children}</span>;
 }
 
 export function App() {
   const [account, setAccount] = useState<AccountRef | null>(null);
-  const [stoppedId, setStoppedId] = useState<string | null>(null);
-  const [booting, setBooting] = useState(() => accountFromUrl() !== null);
-  const [bootError, setBootError] = useState('');
+  const [stoppedTransferId, setStoppedTransferId] = useState<string | null>(null);
+  const [booksVersion, setBooksVersion] = useState(0);
+  const [showStory, setShowStory] = useState(() => !isStoryComplete());
+  const [tourHighlight, setTourHighlight] = useState<string | null>(null);
+  const [auditLive, setAuditLive] = useState<boolean | null>(null);
 
   useEffect(() => {
-    let id = accountFromUrl();
-    if (!id) {
-      const saved = loadSavedWallets()[0];
-      if (saved) {
-        id = saved.id;
-        syncAccountUrl(id);
-      }
-    }
-    if (!id) {
-      setBooting(false);
-      return;
-    }
-    let cancelled = false;
-    void api.account(id).then((v) => {
-      if (!cancelled) {
-        setAccount({ id: v.id, owner: v.owner });
-        rememberWallet({ id: v.id, owner: v.owner, live: !v.id.startsWith(PRACTICE_PREFIX), savedAt: new Date().toISOString() });
-        setBooting(false);
-      }
-    }).catch(() => {
-      if (!cancelled) {
-        syncAccountUrl(null);
-        setBootError('session expired — sign in again below');
-        setBooting(false);
-      }
-    });
-    return () => { cancelled = true; };
+    void api.bootstrap().then((b) => setAuditLive(b.ledger?.auditCapabilities ?? false)).catch(() => setAuditLive(false));
   }, []);
-
-  function signIn(a: AccountRef, stopped?: string, live = false) {
-    setStoppedId(stopped ?? null);
-    setAccount(a);
-    setBootError('');
-    syncAccountUrl(a.id);
-    rememberWallet({ id: a.id, owner: a.owner, live, savedAt: new Date().toISOString() });
-  }
-
-  function signOut() {
-    setAccount(null);
-    setStoppedId(null);
-    syncAccountUrl(null);
-  }
-
-  return (
-    <div className="root">
-      <header className="topbar">
-        <div>
-          <span className="topbar-title">p2p-ledger</span>
-          <span className="topbar-sub">/ corporate ledger terminal</span>
-        </div>
-        {account && (
-          <button type="button" className="t-btn-inline" onClick={signOut}>[ sign out ]</button>
-        )}
-      </header>
-      <main className="main">
-        {booting && <p className="dim wait">loading…</p>}
-        {bootError && !account && <p className="err">{bootError}</p>}
-        {!booting && !account && (
-          <>
-            <LedgerWorld />
-            <SignIn onSignIn={signIn} />
-          </>
-        )}
-        {!booting && account && (
-          <Wallet account={account} stoppedTransferId={stoppedId} onSignOut={signOut} />
-        )}
-      </main>
-    </div>
-  );
-}
-
-function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string, live?: boolean) => void }) {
-  const [boot, setBoot] = useState<BootstrapResponse>(OFFLINE_BOOTSTRAP);
-  const [err, setErr] = useState('');
-  const [owner, setOwner] = useState(() => loadSavedWallets()[0]?.owner ?? '');
-  const [busy, setBusy] = useState('');
-  const [apiUp, setApiUp] = useState(false);
-  const [saved, setSaved] = useState(() => loadSavedWallets());
-
-  useEffect(() => {
-    void api.bootstrap()
-      .then((b) => {
-        setBoot(b);
-        setApiUp(true);
-        setErr('');
-      })
-      .catch((e) => {
-        setApiUp(false);
-        setErr((e as Error).message);
-      });
-  }, []);
-
-  const practice = boot?.practice;
-
-  async function createWallet() {
-    const id = owner.trim().toLowerCase().replace(/\s+/g, '-');
-    if (!id) return;
-    setBusy('create');
-    setErr('');
-    try {
-      const a = await api.openAccount(id);
-      onSignIn(a, undefined, boot.live);
-      setSaved(loadSavedWallets());
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy('');
-    }
-  }
-
-  async function seedLive() {
-    setBusy('seed');
-    setErr('');
-    try {
-      const seeded = await api.seedDemo();
-      const focus = seeded.accounts.find((a) => a.id === seeded.focusAccountId) ?? seeded.accounts[0];
-      if (focus) onSignIn(focus, seeded.stopped.transferId, true);
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy('');
-    }
-  }
-
-  function openPractice(a: AccountRef) {
-    if (!practice) return;
-    const stopped = a.id === practice.focusAccountId ? practice.stoppedTransferId : undefined;
-    onSignIn(a, stopped, false);
-  }
 
   return (
     <>
-      <p className="status-line">
-        ledger-service:{' '}
-        {!apiUp ? (
-          <span className="off">API starting — practice accounts below work offline</span>
-        ) : boot.live ? (
-          <span className="live">ledger online</span>
-        ) : (
-          <span className="off">ledger offline — practice network</span>
-        )}
-        {boot.chat && (
-          <span style={{ marginLeft: 12 }}>
-            ask: {boot.chat.configured ? `${boot.chat.provider} ready` : `${boot.chat.provider} key missing — tool-only answers`}
-          </span>
-        )}
-      </p>
-      {boot.ledger?.persistence && (
-        <p className="dim" style={{ fontSize: '11px', margin: '0 0 12px' }}>{boot.ledger.persistence}</p>
-      )}
-
-      <div className="help">
-        <strong>ledger-service · system of record</strong>
-        <p>
-          PostgreSQL double-entry, idempotent HTTP API, fraud rules, outbox events.
-          The assistant is a terminal over that API — not a second ledger.
-        </p>
-        {boot.ledger && (
-          <ul className="cap-list">
-            {boot.ledger.capabilities.map((c) => (
-              <li key={c}>{c}</li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {err && <p className="err" role="alert">{err}</p>}
-
-      {saved.length > 0 && (
-        <section className="pane">
-          <div className="pane-hd"><strong>saved wallets</strong> · this browser</div>
-          <div className="pane-bd">
-            {saved.map((w) => (
-              <button
-                key={w.id}
-                type="button"
-                className="t-btn"
-                onClick={() => onSignIn({ id: w.id, owner: w.owner }, undefined, w.live)}
-              >
-                {displayName(w.owner)} <span className="desc">{w.live ? 'PostgreSQL' : 'practice'} · {w.id.slice(0, 8)}…</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section className="pane">
-        <div className="pane-hd"><strong>create wallet</strong></div>
-        <div className="pane-bd">
-          <div className="field">
-            <label htmlFor="owner">owner id (your handle)</label>
-            <input id="owner" type="text" value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="e.g. riley.ap" />
-            <p className="dim" style={{ fontSize: '11px', margin: '6px 0 0' }}>
-              When ledger is online, wallet is stored in PostgreSQL and appears under saved wallets.
-            </p>
-          </div>
-          <button type="button" className="t-btn recommended" disabled={busy !== '' || !owner.trim()} onClick={() => void createWallet()}>
-            [ create &amp; open ]
-          </button>
+      <header className="appbar">
+        <div className="appbar-inner">
+          <a className="brand" href="/" onClick={(e) => { e.preventDefault(); setAccount(null); setStoppedTransferId(null); }}>
+            <span className="brand-mark" aria-hidden>L</span>
+            Ledger
+          </a>
+          <nav className="nav">
+            <a href="#books">Reconciliation</a>
+            <a href="#workspace">Payments</a>
+            <a href="#architecture">Architecture</a>
+            <a href={REPO} target="_blank" rel="noreferrer">GitHub</a>
+          </nav>
         </div>
-      </section>
-
-      {boot?.live && (
-        <section className="pane">
-          <div className="pane-hd"><strong>live demo world</strong></div>
-          <div className="pane-bd">
-            <button type="button" className="t-btn" disabled={busy !== ''} onClick={() => void seedLive()}>
-              [ seed live household on PostgreSQL ]
-            </button>
-            <p className="dim" style={{ fontSize: '11px', margin: '8px 0 0' }}>
-              Creates distinct wallets (alex-/sam-/jordan-*) with deposits, P2P, utilities, reimbursements, and a declined rent.
-            </p>
-          </div>
-        </section>
-      )}
-
-      <section className="pane">
-        <div className="pane-hd"><strong>practice network</strong> · works offline</div>
-        <div className="pane-bd">
-          {practice?.accounts.map((a, i) => (
-            <button
-              key={a.id}
-              type="button"
-              className={a.id === practice.focusAccountId ? 't-btn recommended' : 't-btn'}
-              onClick={() => openPractice(a)}
-            >
-              <span className="key">[{i + 1}]</span> {displayName(a.owner)}
-              <span className="desc">{a.role} — {a.blurb}</span>
-            </button>
-          ))}
-        </div>
-      </section>
+      </header>
+      <main className="shell">
+        {!account && showStory && (
+          <GuidedLedgerStory
+            onComplete={() => setShowStory(false)}
+            onHandoff={(hook) => setTourHighlight(hook)}
+          />
+        )}
+        {!account && !showStory && (
+          <Hero
+            tourHighlight={tourHighlight}
+            onReplayStory={() => {
+              clearStoryComplete();
+              setTourHighlight(null);
+              setShowStory(true);
+            }}
+            onPick={(a, stoppedId) => { setStoppedTransferId(stoppedId ?? null); setAccount(a); }}
+          />
+        )}
+        <Books version={booksVersion} auditLive={auditLive} />
+        {account && (
+          <AccountScreen
+            account={account}
+            stoppedTransferId={stoppedTransferId}
+            onChanged={() => setBooksVersion((v) => v + 1)}
+            onSwitch={() => { setAccount(null); setStoppedTransferId(null); }}
+          />
+        )}
+        <Architecture />
+      </main>
     </>
   );
 }
 
-function Wallet({
-  account,
-  stoppedTransferId,
-  onSignOut,
+function Hero({
+  onPick,
+  tourHighlight,
+  onReplayStory,
 }: {
-  account: AccountRef;
-  stoppedTransferId: string | null;
-  onSignOut: () => void;
+  onPick: (a: AccountRef, stoppedTransferId?: string) => void;
+  tourHighlight?: string | null;
+  onReplayStory?: () => void;
 }) {
-  const [tab, setTab] = useState<Tab>('world');
-  const [view, setView] = useState<AccountView | null>(null);
-  const [peers, setPeers] = useState<AccountRef[]>([]);
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState(true);
+  const [boot, setBoot] = useState<BootstrapResponse>(OFFLINE_BOOTSTRAP);
+  const [owner, setOwner] = useState('');
+  const [found, setFound] = useState<AccountRef[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
-  const reload = useCallback(async () => {
+  useEffect(() => {
+    void api.bootstrap().then(setBoot).catch(() => setBoot(OFFLINE_BOOTSTRAP));
+  }, []);
+
+  async function demo() {
     setBusy(true);
-    setErr('');
+    setError('');
     try {
-      const [v, p] = await Promise.all([
-        api.account(account.id, 50),
-        api.peers(account.id),
-      ]);
-      setView(v);
-      setPeers(p);
+      const seeded = await api.seedDemo();
+      const sender = seeded.accounts.find((a) => a.id === seeded.focusAccountId) ?? seeded.accounts[0];
+      if (sender) onPick(sender, seeded.stopped.transferId);
     } catch (e) {
-      setErr((e as Error).message);
+      setError((e as Error).message);
     } finally {
       setBusy(false);
     }
-  }, [account.id]);
+  }
 
-  useEffect(() => { void reload(); }, [reload]);
-
-  const owner = displayName(view?.owner ?? account.owner);
-  const live = !account.id.startsWith(PRACTICE_PREFIX);
+  async function find(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      setFound(await api.findAccounts(owner));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <>
-      <p className="status-line">
-        signed in as <strong>{owner}</strong> · {live ? 'live ledger' : 'practice ledger'}
-        <button type="button" className="t-btn-inline" style={{ marginLeft: 12 }} onClick={() => void reload()}>[ refresh ]</button>
-      </p>
-
-      <nav className="tabs" aria-label="Sections">
-        {(['world', 'overview', 'ledger', 'send', 'activity', 'ask'] as Tab[]).map((t) => (
-          <button
-            key={t}
-            type="button"
-            className={tab === t ? 'tab on' : 'tab'}
-            onClick={() => setTab(t)}
-          >
-            {t}
-          </button>
-        ))}
-      </nav>
-
-      {busy && tab !== 'ask' && tab !== 'world' && <p className="dim wait">syncing…</p>}
-      {err && <p className="err" role="alert">{err}</p>}
-
-      {tab === 'world' && (
-        <LedgerWorld onJump={(t) => setTab(t === 'send' ? 'send' : t === 'ledger' ? 'ledger' : 'ask')} />
-      )}
-      {view && tab === 'overview' && <Overview view={view} live={live} />}
-      {view && tab === 'ledger' && <LedgerStatement accountId={account.id} currency={view.currency} />}
-      {view && tab === 'send' && (
-        <SendPayment
-          accountId={account.id}
-          live={live}
-          peers={peers}
-          onDone={() => void reload()}
-        />
-      )}
-      {view && tab === 'activity' && (
-        <ActivityList transfers={view.transfers} stoppedTransferId={stoppedTransferId} />
-      )}
-      {tab === 'ask' && <SupportChat accountId={account.id} owner={owner} />}
-    </>
-  );
-}
-
-function Overview({ view, live }: { view: AccountView; live: boolean }) {
-  return (
-    <section className="pane">
-      <div className="pane-hd">
-        <strong>cashflow</strong> · last 30 days · {live ? 'ledger-service' : 'practice mirror'}
-      </div>
-      <div className="pane-bd">
-        <dl className="kv">
-          <dt>available</dt>
-          <dd>{view.balance}</dd>
-          <dt>account</dt>
-          <dd className="mono-id">{view.id}</dd>
-          <dt>opened</dt>
-          <dd>{new Date(view.openedAt).toLocaleString()}</dd>
-        </dl>
-        <div className="kv-row">
-          <dl className="kv"><dt>money in</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.inflow}</dd></dl>
-          <dl className="kv"><dt>deposits</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.deposited}</dd></dl>
-          <dl className="kv"><dt>from people</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.received}</dd></dl>
-        </div>
-        <div className="kv-row">
-          <dl className="kv"><dt>sent out</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.sent}</dd></dl>
-          <dl className="kv"><dt>declined</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.stopped}</dd></dl>
-          <dl className="kv"><dt>count</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.declinedCount}</dd></dl>
-        </div>
-        <p className="dim" style={{ fontSize: '11px', margin: 0 }}>
-          Income questions in Ask use these totals (summed in cents on the server).
+    <section className="hero">
+      <div className="hero-copy">
+        <p className="kicker">Payments infrastructure</p>
+        <h1>A ledger that can prove every number it shows.</h1>
+        <p className="lede">
+          Double-entry books on PostgreSQL behind a Java service, with a support assistant that can only quote
+          what the ledger recorded. Balances are not simulated in the browser.
         </p>
+        {onReplayStory && (
+          <p className="muted small">
+            <button type="button" className="btn ghost small" onClick={onReplayStory}>Replay visual intro</button>
+          </p>
+        )}
+        <div className="hero-actions">
+          <button
+            className={tourHighlight === 'tour-seed-live' ? 'btn primary tour-pulse' : 'btn primary'}
+            disabled={busy || !boot.live}
+            onClick={() => void demo()}
+          >
+            {busy ? 'Opening accounts…' : 'Run the live demo'}
+          </button>
+          <span className="muted small">Opens three wallets on PostgreSQL. One payment is stopped by fraud rules.</span>
+        </div>
+        {boot.practice?.accounts.length > 0 && (
+          <ul className="found practice-pick">
+            {boot.practice.accounts.map((a, i) => (
+              <li key={a.id}>
+                <button
+                  className={tourHighlight === 'tour-practice-alex' && a.id === PRACTICE_ALEX_ID ? 'tour-pulse' : ''}
+                  onClick={() => onPick(a, a.id === boot.practice.focusAccountId ? boot.practice.stoppedTransferId : undefined)}
+                >
+                  <strong>[{i + 1}] {personName(a.owner)}</strong>
+                  <span className="mono muted">{a.role}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <form className="lookup" onSubmit={(e) => void find(e)}>
+          <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="Look up an existing owner id" aria-label="Owner id" />
+          <button className="btn" disabled={busy || !owner.trim()}>Find</button>
+        </form>
+        {found && (found.length === 0
+          ? <p className="muted small">No accounts for that owner.</p>
+          : (
+            <ul className="found">
+              {found.map((a) => (
+                <li key={a.id}>
+                  <button onClick={() => onPick(a)}>
+                    <strong>{personName(a.owner)}</strong>
+                    <span className="mono muted">{a.owner}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ))}
+        {error && <p className="error" role="alert">{error}</p>}
       </div>
+      <ol className="guarantees">
+        {GUARANTEES.map(([title, body], i) => (
+          <li key={title}>
+            <span className="index mono">0{i + 1}</span>
+            <div>
+              <strong>{title}</strong>
+              <p>{body}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }
 
-function LedgerStatement({ accountId, currency }: { accountId: string; currency: string }) {
-  const [rows, setRows] = useState<LedgerEntryRow[]>([]);
-  const [err, setErr] = useState('');
-  const [loading, setLoading] = useState(true);
+function Books({ version, auditLive }: { version: number; auditLive: boolean | null }) {
+  const [books, setBooks] = useState<Integrity | null>(null);
+  const [problem, setProblem] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void api.entries(accountId, 60).then((r) => {
-      if (!cancelled) {
-        setRows(r.entries);
-        setErr('');
-        setLoading(false);
-      }
-    }).catch((e) => {
-      if (!cancelled) {
-        setErr((e as Error).message);
-        setLoading(false);
-      }
-    });
-    return () => { cancelled = true; };
-  }, [accountId]);
+  async function check() {
+    setBusy(true);
+    try {
+      setBooks(await api.integrity());
+      setProblem('');
+    } catch (e) {
+      setProblem((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => { void check(); }, [version]);
+
+  const delivery = books?.outbox.p95DeliveryMs ?? null;
+  return (
+    <section className="books" id="books" aria-busy={busy}>
+      <div className="books-head">
+        <div className="books-title">
+          <h2>Reconciliation</h2>
+          {books && <Badge tone={books.balanced ? 'ok' : 'bad'}>{books.balanced ? 'Balanced' : 'Out of balance'}</Badge>}
+          {!books && problem && <Badge tone="neutral">Unavailable</Badge>}
+          {auditLive === false && <Badge tone="neutral">Partial proof · redeploy ledger on Render</Badge>}
+          {auditLive === true && <Badge tone="ok">Full live proof</Badge>}
+        </div>
+        <div className="books-meta">
+          <span className="muted small">
+            {books ? `Recomputed from raw entries at ${clock(books.checkedAt)}` : problem || 'Reconciling…'}
+          </span>
+          <button className="btn ghost small" onClick={() => void check()} disabled={busy}>{busy ? 'Running…' : 'Run again'}</button>
+        </div>
+      </div>
+      {books && (
+        <dl className="metrics">
+          <Metric label="Sum of all entries" value={books.entriesSum} note={count(books.entryCount, 'entry', 'entries')} />
+          <Metric label="Balance drift" value={`${books.accountsDrifted}`} note={`of ${count(books.accountCount, 'account')}`} />
+          <Metric label="Unbalanced payments" value={`${books.unbalancedTransfers}`} note={`of ${count(books.transferCount, 'payment')}`} />
+          <Metric label="Declines that moved money" value={`${books.rejectedWithEntries}`} note="must stay zero" />
+          <Metric
+            label="Events delivered"
+            value={(books.outbox.total - books.outbox.pending).toLocaleString()}
+            note={[delivery === null ? null : `p95 ${Math.round(delivery)} ms`, books.outbox.pending ? `${books.outbox.pending} queued` : null].filter(Boolean).join(' · ') || 'none yet'}
+          />
+        </dl>
+      )}
+    </section>
+  );
+}
+
+function Metric({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="metric">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+      {note && <span className="metric-note">{note}</span>}
+    </div>
+  );
+}
+
+function AccountScreen({ account, stoppedTransferId, onChanged, onSwitch }: {
+  account: AccountRef;
+  stoppedTransferId: string | null;
+  onChanged: () => void;
+  onSwitch: () => void;
+}) {
+  const [view, setView] = useState<AccountView | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(true);
+  const [open, setOpen] = useState<string | null>(stoppedTransferId);
+
+  async function load(quiet = false) {
+    if (!quiet) setBusy(true);
+    setError('');
+    try {
+      setView(await api.account(account.id));
+    } catch (e) {
+      if (!quiet) setView(null);
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => { void load(); }, [account.id]);
+  useEffect(() => { setOpen(stoppedTransferId); }, [stoppedTransferId]);
+
+  const name = personName(view?.owner ?? account.owner);
+  const transfers = view ? orderStoppedFirst(view.transfers, stoppedTransferId) : [];
+  const people = view?.transfers.filter((t) => t.kind === 'TRANSFER') ?? [];
+  const payer = people.find((t) => t.direction === 'received' && t.status === 'COMPLETED')
+    ?? people.find((t) => t.status === 'COMPLETED')
+    ?? people[0];
 
   return (
-    <section className="pane">
-      <div className="pane-hd">
-        <strong>statement</strong> · GET /v1/accounts/…/entries · append-only lines
-      </div>
-      <div className="pane-bd">
-        {loading && <p className="dim wait">loading entries…</p>}
-        {err && <p className="err">{err}</p>}
-        <p style={{ margin: '0 0 10px' }}>
-          <a className="t-btn-inline" href={api.statementDownloadUrl(accountId)} download>
-            [ download statement .txt ]
-          </a>
-          <button type="button" className="t-btn-inline" style={{ marginLeft: 8 }} onClick={() => window.print()}>
-            [ print / save PDF ]
-          </button>
-        </p>
-        {!loading && !err && rows.length === 0 && (
-          <p className="dim">No posted lines yet — complete a deposit or transfer.</p>
+    <div className="workspace" id="workspace">
+      <div className="main-col" aria-busy={busy}>
+        <div className="account-head">
+          <div>
+            <p className="kicker">Customer account</p>
+            <h2 className="account-name">{name}</h2>
+            <p className="mono muted small">{view?.owner ?? account.owner} · {shortId(account.id)}</p>
+          </div>
+          <button className="btn" onClick={onSwitch}>Switch customer</button>
+        </div>
+
+        {busy && <div className="loading" aria-label="Loading account"><span /></div>}
+        {!busy && error && !view && (
+          <div className="inline-error">
+            <p className="error" role="alert">{error}</p>
+            <button className="btn small" onClick={() => void load()}>Try again</button>
+          </div>
         )}
-        {rows.length > 0 && (
-          <table className="stmt">
-            <thead>
-              <tr>
-                <th>when</th>
-                <th>transfer</th>
-                <th>Δ</th>
-                <th>balance</th>
-              </tr>
-            </thead>
+        {!busy && view && (
+          <>
+            <dl className="kpis">
+              <div className="kpi lead"><dt>Available balance</dt><dd>{view.balance}</dd></div>
+              <div className="kpi"><dt>Sent · 30 days</dt><dd>{view.summary.sent}</dd></div>
+              <div className="kpi"><dt>Received · 30 days</dt><dd>{view.summary.received}</dd></div>
+              <div className="kpi"><dt>Stopped by rules</dt><dd className={view.summary.declinedCount ? 'bad-text' : ''}>{view.summary.stopped}</dd></div>
+            </dl>
+            <LedgerCharts view={view} accountId={account.id} />
+
+            <div className="section-head">
+              <h3>Payments</h3>
+              <span className="muted small">Select a payment to inspect what the database holds for it.</span>
+            </div>
+            {transfers.length === 0
+              ? <p className="muted">No payments yet.</p>
+              : (
+                <div className="table" role="table" aria-label="Payments">
+                  <div className="thead" role="row">
+                    <span role="columnheader">Description</span>
+                    <span role="columnheader">Counterparty</span>
+                    <span role="columnheader">Date</span>
+                    <span role="columnheader">Status</span>
+                    <span role="columnheader" className="num">Amount</span>
+                  </div>
+                  {transfers.map((t) => (
+                    <div key={t.transferId} className={open === t.transferId ? 'tgroup open' : 'tgroup'}>
+                      <PaymentRow transfer={t} open={open === t.transferId} onToggle={() => setOpen(open === t.transferId ? null : t.transferId)} />
+                      {open === t.transferId && (
+                        <PaymentDetail
+                          accountId={account.id}
+                          transferId={t.transferId}
+                          onChanged={() => { void load(true); onChanged(); }}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+            {payer && (
+              <RetryStorm
+                accountId={account.id}
+                fromAccountId={payer.counterpartyAccountId}
+                fromName={personName(payer.counterparty)}
+                onDone={(transferId) => { void load(true); setOpen(transferId); onChanged(); }}
+              />
+            )}
+          </>
+        )}
+      </div>
+      <Chat account={account} name={name} />
+    </div>
+  );
+}
+
+function orderStoppedFirst(transfers: AccountActivity[], stoppedTransferId: string | null): AccountActivity[] {
+  if (!stoppedTransferId) return transfers;
+  return [...transfers].sort((a, b) => Number(b.transferId === stoppedTransferId) - Number(a.transferId === stoppedTransferId));
+}
+
+function PaymentRow({ transfer, open, onToggle }: { transfer: AccountActivity; open: boolean; onToggle: () => void }) {
+  const declined = transfer.status === 'REJECTED';
+  const sign = transfer.direction === 'sent' ? '−' : '+';
+  return (
+    <button className="trow" role="row" onClick={onToggle} aria-expanded={open}>
+      <span className="cell desc" role="cell">
+        <strong>{transfer.memo || (transfer.direction === 'deposit' ? 'Bank deposit' : 'Payment')}</strong>
+        {declined && transfer.declineExplanation && <span className="reason">{transfer.declineExplanation}</span>}
+      </span>
+      <span className="cell" role="cell">
+        <span className="muted">{transfer.direction === 'sent' ? 'To ' : transfer.direction === 'received' ? 'From ' : ''}</span>
+        {transfer.direction === 'deposit' ? 'Bank funding' : personName(transfer.counterparty)}
+      </span>
+      <span className="cell muted" role="cell">{when(transfer.createdAt)}</span>
+      <span className="cell" role="cell">
+        <Badge tone={declined ? 'bad' : 'ok'}>{declined ? 'Declined' : 'Completed'}</Badge>
+      </span>
+      <span className={`cell num amount ${declined ? 'struck' : transfer.direction}`} role="cell">
+        {declined ? transfer.amount : `${sign}${transfer.amount}`}
+      </span>
+    </button>
+  );
+}
+
+function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
+  return (
+    <li className="step">
+      <span className="step-n mono">{n}</span>
+      <div className="step-body">
+        <h4>{title}</h4>
+        {children}
+      </div>
+    </li>
+  );
+}
+
+function PaymentDetail({ accountId, transferId, onChanged }: { accountId: string; transferId: string; onChanged: () => void }) {
+  const [trail, setTrail] = useState<PaymentTrail | null>(null);
+  const [error, setError] = useState('');
+  const replay = useAction<ReplayResult>();
+  const tamper = useAction<TamperReport>();
+
+  useEffect(() => {
+    let live = true;
+    setTrail(null);
+    setError('');
+    api.trail(accountId, transferId)
+      .then((t) => { if (live) setTrail(t); })
+      .catch((e: Error) => { if (live) setError(e.message); });
+    return () => { live = false; };
+  }, [accountId, transferId]);
+
+  if (error) return <div className="detail"><p className="error">{error}</p></div>;
+  if (!trail) return <div className="detail"><div className="loading"><span /></div></div>;
+
+  const declined = trail.status === 'REJECTED';
+  const event = trail.events[0];
+  const request = [
+    `${trail.request.method} ${trail.request.path}`,
+    trail.audited ? `Idempotency-Key: ${trail.request.idempotencyKey}` : 'Idempotency-Key: <stored with the transfer>',
+    'Content-Type: application/json',
+    '',
+    JSON.stringify(trail.request.body, null, 2),
+  ].join('\n');
+
+  const pipelineScene = mapTrailToPipelineSteps(trail);
+
+  return (
+    <div className="detail">
+      <div className="detail-head">
+        <span className="mono muted small">Transfer {trail.transferId}</span>
+        {!trail.audited && <Badge tone="neutral">Partial view · ledger update pending deploy</Badge>}
+      </div>
+      <PipelineStage
+        scene={pipelineScene}
+        actors={[{ cast: 'alex', x: 50 }, { cast: 'sam', x: 180 }]}
+        proofCaption={`GET /api/trail · ${trail.from} → ${trail.to} · ${trail.amount}`}
+      />
+      <ol className="steps">
+        <Step n={1} title="Decision">
+          {declined ? (
+            <p>
+              Declined by <code>{trail.decline?.code}</code>. {trail.decline?.explanation}{' '}
+              <span className="muted">The rule ran while both account rows were locked, so parallel requests cannot slip past a limit together.</span>
+            </p>
+          ) : (
+            <p>
+              {trail.amount} moved from {personName(trail.from)} to {personName(trail.to)}.{' '}
+              <span className="muted">Both rows were locked in id order first, so two people paying each other at the same instant cannot deadlock.</span>
+            </p>
+          )}
+        </Step>
+
+        <Step n={2} title="Ledger entries">
+          {trail.legs.length === 0 ? (
+            <p>
+              None posted. A declined payment moves no money.{' '}
+              <span className="muted">Reconciliation counts any decline with entries, and that count stays at zero.</span>
+            </p>
+          ) : (
+            <>
+              <table className="grid">
+                <thead><tr><th>Entry</th><th>Account</th><th className="num">Debit</th><th className="num">Credit</th><th className="num">Balance after</th></tr></thead>
+                <tbody>
+                  {trail.legs.map((l) => (
+                    <tr key={l.entryId}>
+                      <td className="mono muted">#{l.entryId}</td>
+                      <td>{personName(l.account)}</td>
+                      <td className="num">{l.side === 'debit' ? l.amount : '—'}</td>
+                      <td className="num">{l.side === 'credit' ? l.amount : '—'}</td>
+                      <td className="num muted">{l.balanceAfter}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot><tr><td /><td>Net</td><td colSpan={3} className="num"><Badge tone="ok">{trail.legsSum}</Badge></td></tr></tfoot>
+              </table>
+              <p className="muted small">A deferred Postgres trigger refuses to commit any payment whose entries do not net to zero.</p>
+            </>
+          )}
+        </Step>
+
+        <Step n={3} title="Event">
+          {event ? (
+            <p>
+              <code>{event.type}</code> was written to the outbox in the same transaction as the money
+              {event.publishedAt ? <>, then delivered to the queue <strong>{event.deliveryMs} ms</strong> later.</> : <>, and is queued for the relay.</>}{' '}
+              <span className="muted">A failed commit leaves no event. A broker outage delays delivery but cannot lose it.</span>
+            </p>
+          ) : (
+            <p className="muted">{trail.audited ? 'No event recorded.' : 'Shown once the updated ledger build is deployed.'}</p>
+          )}
+        </Step>
+
+        <Step n={4} title="Request">
+          <pre className="code">{request}</pre>
+          {trail.audited ? (
+            <>
+              <div className="actions">
+                <button className="btn" disabled={replay.busy} onClick={() => void replay.run(async () => {
+                  const r = await api.replay(accountId, transferId);
+                  onChanged();
+                  return r;
+                })}>
+                  {replay.busy ? 'Sending…' : 'Send this exact request again'}
+                </button>
+                <span className="muted small mono">body SHA-256 {trail.request.requestHash.slice(0, 12)}… · same key, different body → 422</span>
+              </div>
+              {replay.error && <p className="error">{replay.error}</p>}
+              {replay.result && (
+                <div className="result">
+                  <Badge tone={replay.result.replayed && replay.result.sameTransfer ? 'ok' : 'bad'}>
+                    {replay.result.httpStatus} · Idempotent-Replayed: {String(replay.result.replayed)}
+                  </Badge>
+                  <span>
+                    Stored result returned{declined ? ', same decline, not re-evaluated' : ''}. Entries {replay.result.entriesBefore} → {replay.result.entriesAfter} ·
+                    balance {replay.result.balanceBefore} → {replay.result.balanceAfter}
+                  </span>
+                </div>
+              )}
+            </>
+          ) : <p className="muted small">Replay is enabled once the updated ledger build is deployed.</p>}
+        </Step>
+
+        {!declined && trail.audited && (
+          <Step n={5} title="Try to change the books">
+            <p className="muted">Four forbidden writes against these entries, each in a transaction that is always rolled back. The refusals come from Postgres, not the Java code.</p>
+            <div className="actions">
+              <button className="btn" disabled={tamper.busy} onClick={() => void tamper.run(() => api.tamper(accountId, transferId))}>
+                {tamper.busy ? 'Attempting…' : 'Attempt the writes'}
+              </button>
+            </div>
+            {tamper.error && <p className="error">{tamper.error}</p>}
+            {tamper.result && (
+              <ul className="attempts">
+                {tamper.result.attempts.map((a) => (
+                  <li key={a.attempt}>
+                    <div className="attempt-head">
+                      <strong>{a.attempt}</strong>
+                      <Badge tone={a.refused ? 'ok' : 'bad'}>{a.refused ? 'Refused' : 'Not refused'}</Badge>
+                    </div>
+                    <code className="sql">{a.sql}</code>
+                    <span className="db-said mono">{a.databaseSaid}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Step>
+        )}
+      </ol>
+    </div>
+  );
+}
+
+function RetryStorm({ accountId, fromAccountId, fromName, onDone }: {
+  accountId: string;
+  fromAccountId: string;
+  fromName: string;
+  onDone: (transferId: string | null) => void;
+}) {
+  const race = useAction<RaceResult>();
+  const r = race.result;
+  return (
+    <section className="storm">
+      <div className="section-head">
+        <h3>Retry storm</h3>
+        <span className="muted small">Concurrency test against the live database</span>
+      </div>
+      <p className="storm-copy">
+        {fromName}&apos;s phone drops signal mid-payment and the app fires the same $5.00 request five times at once,
+        all with one idempotency key. Postgres admits one and makes the others wait, then return the stored result.
+      </p>
+      <div className="actions">
+        <button className="btn primary" disabled={race.busy} onClick={() => void race.run(async () => {
+          const result = await api.race(accountId, fromAccountId);
+          onDone(result.transferId);
+          return result;
+        })}>
+          {race.busy ? 'Sending five copies…' : 'Send five identical requests'}
+        </button>
+      </div>
+      {race.error && <p className="error">{race.error}</p>}
+      {r && (
+        <>
+          <table className="grid copies">
+            <thead><tr><th>Copy</th><th>HTTP</th><th>Outcome</th><th className="num">Latency</th></tr></thead>
             <tbody>
-              {rows.map((e) => (
-                <tr key={`${e.id}-${e.transferId}`}>
-                  <td>{new Date(e.createdAt).toLocaleString()}</td>
-                  <td className="mono-id">{e.transferId.slice(0, 8)}…</td>
-                  <td className={e.amountMinor >= 0 ? 'pos' : 'neg'}>
-                    {formatMoney(e.amountMinor, currency)}
-                  </td>
-                  <td>{formatMoney(e.balanceAfterMinor, currency)}</td>
+              {r.attempts.map((a, i) => (
+                <tr key={i}>
+                  <td className="mono muted">#{i + 1}</td>
+                  <td className="mono">{a.httpStatus}</td>
+                  <td>{a.replayed ? 'Returned the stored payment' : a.status === 'REJECTED' ? 'Processed · declined' : 'Processed · money moved'}</td>
+                  <td className="num mono muted">{a.ms} ms</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        )}
-      </div>
+          <div className="result">
+            <Badge tone={r.distinctTransfers === 1 ? 'ok' : 'bad'}>
+              {r.copies} requests → {r.distinctTransfers} payment{r.distinctTransfers === 1 ? '' : 's'}
+            </Badge>
+            <span>
+              {r.entriesPosted !== null && <>{r.entriesPosted} ledger entries posted.</>}
+              {r.declineExplanation && <> Declined: {r.declineExplanation}</>}
+            </span>
+          </div>
+        </>
+      )}
     </section>
   );
 }
 
-function SendPayment({
-  accountId,
-  live,
-  peers,
-  onDone,
-}: {
-  accountId: string;
-  live: boolean;
-  peers: AccountRef[];
-  onDone: () => void;
-}) {
-  const [to, setTo] = useState(peers[0]?.id ?? '');
-  const [handleLookup, setHandleLookup] = useState('');
-  const [amount, setAmount] = useState('');
-  const [memo, setMemo] = useState('');
-  const [depositAmt, setDepositAmt] = useState('');
-  const [msg, setMsg] = useState('');
-  const [err, setErr] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (!to && peers[0]) setTo(peers[0].id);
-  }, [peers, to]);
-
-  async function pay(e: FormEvent) {
-    e.preventDefault();
-    const minor = parseDollarsToMinor(amount);
-    if (!to || !minor) {
-      setErr('pick a recipient and enter a valid amount');
-      return;
-    }
-    setBusy(true);
-    setErr('');
-    setMsg('');
-    try {
-      const t = await api.transfer({
-        sourceAccountId: accountId,
-        destinationAccountId: to,
-        amountMinor: minor,
-        memo: memo.trim() || undefined,
-      });
-      setMsg(t.status === 'REJECTED'
-        ? `declined: ${t.rejectionReason ?? 'unknown'}`
-        : `sent · transfer ${t.id.slice(0, 8)}`);
-      setAmount('');
-      onDone();
-    } catch (ex) {
-      setErr((ex as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function addFunds(e: FormEvent) {
-    e.preventDefault();
-    const minor = parseDollarsToMinor(depositAmt);
-    if (!minor) {
-      setErr('enter a valid deposit amount');
-      return;
-    }
-    setBusy(true);
-    setErr('');
-    setMsg('');
-    try {
-      await api.deposit(accountId, minor);
-      setMsg('deposit posted');
-      setDepositAmt('');
-      onDone();
-    } catch (ex) {
-      setErr((ex as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
+function Architecture() {
   return (
-    <div className="split">
-      <section className="pane">
-        <div className="pane-hd"><strong>send</strong> · POST /api/transfers</div>
-        <form className="pane-bd" onSubmit={(e) => void pay(e)}>
-          <div className="field">
-            <label htmlFor="to">to</label>
-            <select id="to" value={to} onChange={(e) => setTo(e.target.value)} disabled={peers.length === 0}>
-              {peers.length === 0 && <option value="">no recipients yet</option>}
-              {peers.map((p) => (
-                <option key={p.id} value={p.id}>{displayName(p.owner)} ({p.owner})</option>
-              ))}
-            </select>
-            {peers.length === 0 && live && (
-              <p className="dim" style={{ fontSize: '11px', margin: '6px 0 0' }}>
-                No history yet — use exact owner id from live seed (e.g. <code>sam-abc123</code>) below, or seed the household first.
-              </p>
-            )}
-          </div>
-          {live && (
-            <div className="field">
-              <label htmlFor="handle">pay by owner id (live ledger)</label>
-              <input
-                id="handle"
-                type="text"
-                value={handleLookup}
-                onChange={(e) => setHandleLookup(e.target.value)}
-                placeholder="sam-3f2a1b"
-              />
-              <button
-                type="button"
-                className="t-btn-inline"
-                style={{ marginTop: 8 }}
-                disabled={busy || !handleLookup.trim()}
-                onClick={() => {
-                  void (async () => {
-                    setErr('');
-                    try {
-                      const matches = await api.findAccounts(handleLookup.trim());
-                      if (matches.length === 0) throw new Error('No wallet with that owner id');
-                      const hit = matches[0];
-                      if (!hit) throw new Error('No wallet with that owner id');
-                      if (matches.length > 1) throw new Error('Multiple wallets — use UUID from ledger tab');
-                      setTo(hit.id);
-                      setMsg(`recipient set · ${hit.owner}`);
-                    } catch (ex) {
-                      setErr((ex as Error).message);
-                    }
-                  })();
-                }}
-              >
-                [ resolve owner ]
-              </button>
-            </div>
-          )}
-          <div className="field">
-            <label htmlFor="amt">amount (USD)</label>
-            <input id="amt" type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={`25.00 (max ${MAX_DOLLARS_UI.toLocaleString()})`} />
-          </div>
-          <div className="field">
-            <label htmlFor="memo">memo</label>
-            <input id="memo" type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="dinner split" />
-          </div>
-          <button type="submit" className="t-btn recommended" disabled={busy || !to}>[ send payment ]</button>
-        </form>
-      </section>
-      <section className="pane">
-        <div className="pane-hd"><strong>add funds</strong> · bank deposit</div>
-        <form className="pane-bd" onSubmit={(e) => void addFunds(e)}>
-          <div className="field">
-            <label htmlFor="dep">amount (USD)</label>
-            <input id="dep" type="text" inputMode="decimal" value={depositAmt} onChange={(e) => setDepositAmt(e.target.value)} placeholder="100.00" />
-          </div>
-          <button type="submit" className="t-btn" disabled={busy}>[ deposit ]</button>
-        </form>
-      </section>
-      {msg && <p className="ok" style={{ color: 'var(--action)' }}>{msg}</p>}
-      {err && <p className="err">{err}</p>}
-    </div>
-  );
-}
-
-function ActivityList({
-  transfers,
-  stoppedTransferId,
-}: {
-  transfers: AccountActivity[];
-  stoppedTransferId: string | null;
-}) {
-  const sorted = [...transfers].sort((a, b) => rank(a, stoppedTransferId) - rank(b, stoppedTransferId));
-  return (
-    <section className="pane">
-      <div className="pane-hd"><strong>activity</strong> · {sorted.length} rows</div>
-      <div className="pane-bd">
-        <table className="ledger">
-          <thead>
-            <tr><th>state</th><th>amount</th><th>type</th><th>detail</th></tr>
-          </thead>
-          <tbody>
-            {sorted.map((t) => (
-              <TxRow key={t.transferId} t={t} mark={stoppedTransferId === t.transferId} />
-            ))}
-          </tbody>
-        </table>
+    <footer className="architecture" id="architecture">
+      <div className="section-head">
+        <h3>Architecture</h3>
+        <a className="link small" href={REPO} target="_blank" rel="noreferrer">Design notes on GitHub →</a>
       </div>
-    </section>
+      <dl className="stack">
+        <div><dt>Ledger service</dt><dd>Java 21 and Spring Boot with plain SQL over JDBC, compiled to a GraalVM native image and deployed as a container on Render.</dd></div>
+        <div><dt>Database</dt><dd>PostgreSQL. Append-only entries, a deferred balance trigger, a non-negative balance constraint, and the idempotency key as a unique column.</dd></div>
+        <div><dt>Events</dt><dd>Transactional outbox relayed to AWS SQS FIFO (Kafka locally). At-least-once with per-transfer ordering. Queue, DLQ and IAM in Terraform.</dd></div>
+        <div><dt>Web and assistant</dt><dd>React and TypeScript with a Hono API on Vercel. The assistant uses read-only tools scoped to the open account, with evals checking every amount.</dd></div>
+      </dl>
+
+      <div className="section-head">
+        <h3>Measured under load</h3>
+        <span className="muted small">k6 · open-model arrival · 10% replayed keys · 1 CPU / 512 MB container</span>
+      </div>
+      <table className="grid perf">
+        <thead><tr><th>Build and rate</th><th className="num">p50</th><th className="num">p99</th><th className="num">Errors</th><th className="num">Memory</th></tr></thead>
+        <tbody>
+          <tr><td>Native · 500 req/s</td><td className="num">4.5 ms</td><td className="num">30 ms</td><td className="num">0%</td><td className="num">54 MB</td></tr>
+          <tr><td>Native · 800 req/s</td><td className="num">6.3 ms</td><td className="num">109 ms</td><td className="num">0%</td><td className="num">80 MB</td></tr>
+          <tr><td>Native · 1,000 req/s</td><td className="num">224 ms</td><td className="num">518 ms</td><td className="num">10.9% shed as 503</td><td className="num">181 MB</td></tr>
+        </tbody>
+      </table>
+      <p className="muted small footnote">
+        The first JVM build was killed for running out of memory at 500 req/s because virtual threads queued every request on the heap.
+        The service now caps in-flight requests and answers overflow with a fast 503 and Retry-After, which is safe because every write is idempotent.
+        Totals summed to exactly zero after every run.
+      </p>
+    </footer>
   );
 }
 
-function TxRow({ t, mark }: { t: AccountActivity; mark: boolean }) {
-  const fail = t.status === 'REJECTED';
-  return (
-    <tr className={`${mark ? 'marked' : ''} ${fail ? 'fail' : ''}`}>
-      <td>{fail ? 'REJECTED' : 'POSTED'}</td>
-      <td>{t.amount}</td>
-      <td>{t.direction}</td>
-      <td>
-        {t.memo ?? displayName(t.counterparty)}
-        {t.declineExplanation && <><br /><span className="err" style={{ fontSize: '11px' }}>{t.declineExplanation}</span></>}
-      </td>
-    </tr>
-  );
-}
-
-function SupportChat({ accountId, owner }: { accountId: string; owner: string }) {
+function Chat({ account, name }: { account: AccountRef; name: string }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
+  const [error, setError] = useState('');
   const end = useRef<HTMLDivElement>(null);
-  const lock = useRef(false);
+  const sending = useRef(false);
 
-  useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth' }); }, [turns, busy]);
+  useEffect(() => {
+    // Chrome 150+ makes scrollIntoView() return a Promise. Returning that from an
+    // effect makes React call the Promise as cleanup, which throws "is not a function".
+    end.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [turns, busy, error]);
 
   async function send(text: string) {
-    const q = text.trim();
-    if (!q || lock.current) return;
-    lock.current = true;
-    const next = [...turns, { role: 'user' as const, text: q }];
+    const trimmed = text.trim();
+    if (!trimmed || sending.current) return;
+    sending.current = true;
+    const next: Turn[] = [...turns, { role: 'user', text: trimmed }];
     setTurns(next);
     setInput('');
     setBusy(true);
-    setErr('');
+    setError('');
     try {
-      const reply = await api.chat(accountId, next.slice(-12));
+      const reply = await api.chat(account.id, next.slice(-10));
       setTurns([...next, { role: 'assistant', text: reply.answer, toolCalls: reply.toolCalls, model: reply.model }]);
     } catch (e) {
-      setErr((e as Error).message);
+      setError((e as Error).message);
     } finally {
-      lock.current = false;
+      sending.current = false;
       setBusy(false);
     }
   }
 
   return (
-    <section className="pane">
-      <div className="pane-hd"><strong>ask</strong> · free text · {owner}</div>
-      <div className="pane-bd">
-        <p className="dim" style={{ margin: '0 0 8px', fontSize: '11px' }}>
-          Examples: &quot;how much is my income this month&quot;, &quot;who paid me&quot;, &quot;why was rent declined&quot;, &quot;list last 5 payments&quot;
+    <aside className="chat" aria-label={`Assistant for ${name}`}>
+      <div className="chat-head">
+        <h2>Support assistant</h2>
+        <p className="muted small">
+          Answers from {name}&apos;s records through read-only lookups scoped to this account. It cannot move money,
+          read other customers, or take instructions from a memo.
         </p>
-        <div className="chat-log">
-          {turns.map((t, i) => (
-            <div key={i}>
-              <div className={t.role === 'user' ? 'line-user' : 'line-bot'}>{t.text}</div>
-              {t.toolCalls?.map((c, j) => (
-                <details key={j} className="tool-block">
-                  <summary>{c.tool}</summary>
-                  <pre>{JSON.stringify(c.result, null, 2)}</pre>
-                </details>
-              ))}
-            </div>
-          ))}
-          {busy && <p className="dim wait">…</p>}
-          {err && <p className="err">{err}</p>}
-          <div ref={end} />
-        </div>
-        <form
-          className="input-row"
-          onSubmit={(e) => { e.preventDefault(); void send(input); }}
-        >
-          <label htmlFor="ask">›</label>
-          <input
-            id="ask"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="ask anything about this account…"
-            maxLength={2000}
-          />
-          <button type="submit" className="t-btn-inline" disabled={busy || !input.trim()}>[ send ]</button>
-        </form>
       </div>
-    </section>
+      <div className="log">
+        {turns.length === 0 && (
+          <div className="suggestions">
+            {SUGGESTIONS.map((s) => <button key={s} className="chip" onClick={() => void send(s)}>{s}</button>)}
+          </div>
+        )}
+        {turns.map((t, i) => (
+          <div key={i} className={`msg ${t.role}`}>
+            <p className="line">{t.text}</p>
+            {t.toolCalls && t.toolCalls.length > 0 && (
+              <details className="trace">
+                <summary>Checked the ledger · {t.toolCalls.length} lookup{t.toolCalls.length > 1 ? 's' : ''}</summary>
+                {t.toolCalls.map((c, j) => (
+                  <div key={j} className="call">
+                    <code>{c.tool}</code> <span className="muted">{c.ms} ms</span>
+                    <pre>{JSON.stringify(c.result, null, 2)}</pre>
+                  </div>
+                ))}
+              </details>
+            )}
+          </div>
+        ))}
+        {busy && <p className="muted small thinking">Looking through the ledger…</p>}
+        {error && <p className="error" role="alert">{error}</p>}
+        <div ref={end} />
+      </div>
+      <form className="composer" onSubmit={(e) => { e.preventDefault(); void send(input); }}>
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={`Ask about ${name}'s account`} aria-label="Message" maxLength={2000} />
+        <button className="btn primary small" disabled={busy || !input.trim()}>Send</button>
+      </form>
+    </aside>
   );
-}
-
-function rank(t: AccountActivity, stoppedId: string | null): number {
-  if (stoppedId && t.transferId === stoppedId) return 0;
-  if (t.status === 'REJECTED') return 1;
-  return 2;
 }

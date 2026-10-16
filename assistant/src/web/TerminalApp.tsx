@@ -35,7 +35,7 @@ import {
   downloadStatementTxt,
   integrityLegend,
   integrityPlainEnglish,
-  printStatementPdf,
+  printStatement,
 } from './integrity-display.js';
 import { loadSavedWallets, rememberWallet } from './wallet-store.js';
 
@@ -391,6 +391,11 @@ export function TerminalApp() {
       append(`ERR no peer matching ${ownerTok}`);
       return;
     }
+    if (selectedPeerId === p.id) {
+      setSelectedPeerId(null);
+      append('PEER focus cleared');
+      return;
+    }
     setSelectedPeerId(p.id);
     append(`PEER focus ${p.owner}`);
   }
@@ -580,7 +585,6 @@ export function TerminalApp() {
     if (skipDeleteConfirm) setDeleteConfirmSkip(1);
     hideTransferFromBlotter(pendingHideId);
   }
-  const bilateral = selectedPeer ? transfers : [];
   const liveTag = boot.live ? 'LIVE' : 'OFFLINE';
   const auditTag = boot.ledger?.auditCapabilities ? 'AUDIT OK' : 'AUDIT PENDING';
 
@@ -633,70 +637,72 @@ export function TerminalApp() {
         <div className="bb-grid">
           <section className="bb-panel bb-watch">
             <h2 className="bb-hd">WATCH</h2>
-            <div className="bb-watch-body">
-            <table className="bb-tbl">
-              <tbody>
-                <tr><td className="bb-k">OWNER</td><td>{view.owner}</td></tr>
-                <tr><td className="bb-k">ID</td><td className="bb-mono">{shortId(account.id)}</td></tr>
-                <tr><td className="bb-k">BAL</td><td className="bb-hi">{view.balance}</td></tr>
-                <tr><td className="bb-k">30D OUT</td><td colSpan={2}>{view.summary.sent}</td></tr>
-                <tr><td className="bb-k">30D DEP</td><td>{view.summary.deposited}</td></tr>
-                <tr>
-                  <td className="bb-k">30D IN</td>
-                  <td>{view.summary.received}</td>
-                </tr>
-                <tr><td colSpan={2} className="bb-dim bb-watch-hint">DEP = bank/+DEP · IN = peer payments only</td></tr>
-                <tr><td className="bb-k">30D ALL IN</td><td>{view.summary.inflow}</td></tr>
-                <tr><td className="bb-k">STOPPED</td><td>{view.summary.stopped}</td></tr>
-              </tbody>
-            </table>
-            <div className="bb-actions bb-actions-inline">
-              <BbLink onClick={() => downloadStatementTxt(account.id)} disabled={busy !== ''}>DL TXT</BbLink>
-              <BbLink onClick={() => void printStatementPdf(account.id).catch((e) => append(`ERR ${(e as Error).message}`))} disabled={busy !== ''}>
-                PRINT PDF
-              </BbLink>
-              <BbLink onClick={() => void loadAccount(account.id)} disabled={busy !== ''}>REFRESH</BbLink>
-            </div>
-            <h3 className="bb-subhd">PEERS · P2P WALLETS</h3>
-            {peers.length === 0
-              ? <p className="bb-dim">None yet — ONBOARD or receive a payment.</p>
-              : (
-                <ul className="bb-list">
-                  {peers.map((p) => (
-                    <li key={p.id} className={selectedPeerId === p.id ? 'bb-peer-on' : undefined}>
-                      <BbLink onClick={() => selectPeer(p.owner)} disabled={busy !== ''}>
+            <div className="bb-panel-main">
+              <table className="bb-tbl bb-summary-tbl">
+                <tbody>
+                  <tr><td className="bb-k">BAL</td><td className="bb-hi">{view.balance}</td></tr>
+                  <tr><td className="bb-k">OWNER</td><td>{personName(view.owner)}</td></tr>
+                  <tr><td className="bb-k">30D</td><td className="bb-dim">out {view.summary.sent} · dep {view.summary.deposited} · in {view.summary.received}</td></tr>
+                </tbody>
+              </table>
+              <h3 className="bb-subhd">PEERS</h3>
+              {peers.length === 0
+                ? <p className="bb-dim bb-pad">None yet — F2 ONBOARD or ACH IN.</p>
+                : (
+                  <div className="bb-peer-chips bb-pad">
+                    {peers.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className={`bb-btn-chip${selectedPeerId === p.id ? ' bb-btn-chip-on' : ''}`}
+                        disabled={busy !== ''}
+                        onClick={() => selectPeer(p.owner)}
+                      >
                         {personName(p.owner)}
-                      </BbLink>
-                      <span className="bb-dim"> {shortId(p.id)}</span>
-                    </li>
-                  ))}
-                </ul>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              {selectedPeer && (
+                <PeerPanel
+                  accountId={account.id}
+                  peer={selectedPeer}
+                  busy={busy !== ''}
+                  onPay={(amount, memo) => void runPay(`${selectedPeer.owner} ${amount} ${memo}`)}
+                  onRaceFromPeer={() => void runRaceFromPeer(selectedPeer.id)}
+                  onClearFocus={() => {
+                    setSelectedPeerId(null);
+                    append('PEER focus cleared');
+                  }}
+                />
               )}
-            {account && selectedPeer && (
-              <PeerPanel
-                accountId={account.id}
-                peer={selectedPeer}
-                bilateral={bilateral}
-                busy={busy !== ''}
-                onPay={(amount, memo) => void runPay(`${selectedPeer.owner} ${amount} ${memo}`)}
-                onRaceFromPeer={() => void runRaceFromPeer(selectedPeer.id)}
-                onSelectTransfer={(id) => void pickPayment(id)}
-              />
-            )}
-            <h3 className="bb-subhd">SIM BANK · CORRIDORS</h3>
-            <p className="bb-dim">Inbound/outbound opens a new counterparty wallet, posts a real transfer, then they go dormant in PEERS.</p>
-            <div className="bb-actions">
-              <BbLink onClick={() => void runBankInbound()} disabled={busy !== ''}>ACH IN</BbLink>
-              <BbLink onClick={() => void runBankOutbound()} disabled={busy !== ''}>ACH OUT</BbLink>
-              <BbLink onClick={() => void runDeposit('100')} disabled={busy !== ''}>+DEP $100</BbLink>
-              <BbLink onClick={() => void runRace()} disabled={busy !== ''}>RACE</BbLink>
-              <BbLink onClick={signOut}>OUT</BbLink>
             </div>
+            <div className="bb-watch-dock">
+              <p className="bb-dock-label">BANK &amp; ACTIONS</p>
+              <div className="bb-dock-row">
+                <BbLink onClick={() => void runBankInbound()} disabled={busy !== ''}>ACH IN</BbLink>
+                <BbLink onClick={() => void runBankOutbound()} disabled={busy !== ''}>ACH OUT</BbLink>
+                <BbLink onClick={() => void runDeposit('100')} disabled={busy !== ''}>+DEP $100</BbLink>
+                <BbLink onClick={() => void runRace()} disabled={busy !== ''}>RACE</BbLink>
+              </div>
+              <div className="bb-dock-row">
+                <BbLink onClick={() => downloadStatementTxt(account.id)} disabled={busy !== ''}>DL TXT</BbLink>
+                <BbLink
+                  onClick={() => void printStatement(account.id).catch((e) => append(`ERR ${(e as Error).message}`))}
+                  disabled={busy !== ''}
+                  title="Opens print dialog — choose Save as PDF"
+                >
+                  PRINT
+                </BbLink>
+                <BbLink onClick={() => void loadAccount(account.id)} disabled={busy !== ''}>REFRESH</BbLink>
+                <BbLink onClick={signOut}>OUT</BbLink>
+              </div>
             </div>
           </section>
 
           <section className="bb-panel bb-blotter">
             <h2 className="bb-hd">BLOTTER{selectedPeer ? ` · ${personName(selectedPeer.owner)}` : ''}</h2>
+            <div className="bb-panel-main">
             <table className="bb-tbl bb-blotter-tbl">
               <thead>
                 <tr>
@@ -792,10 +798,12 @@ export function TerminalApp() {
                 ))}
               </tbody>
             </table>
+            </div>
           </section>
 
           <section className="bb-panel bb-audit">
             <h2 className="bb-hd">AUDIT / MSG</h2>
+            <div className="bb-panel-main bb-audit-scroll">
             <BbLink onClick={() => void runIntegrity()} disabled={busy !== ''}>CHECK ALL ACCOUNTS (F3)</BbLink>
             {integrity && (
               <div className="bb-audit-body">
@@ -838,6 +846,7 @@ export function TerminalApp() {
               ))}
             </div>
             <pre className="bb-log">{log.slice(-6).join('\n')}</pre>
+            </div>
           </section>
         </div>
       )}

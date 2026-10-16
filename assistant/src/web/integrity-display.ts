@@ -46,15 +46,41 @@ export function downloadStatementTxt(accountId: string): void {
   a.click();
 }
 
-export async function printStatementPdf(accountId: string): Promise<void> {
-  const res = await fetch(`/api/accounts/${encodeURIComponent(accountId)}/statement.txt`);
+/** Opens the system print dialog (user can choose “Save as PDF”). Avoids pop-up blockers. */
+export async function printStatement(accountId: string): Promise<void> {
+  const res = await fetch(`/api/accounts/${encodeURIComponent(accountId)}/statement.txt`, {
+    credentials: 'same-origin',
+  });
   if (!res.ok) throw new Error(`Statement ${res.status}`);
   const text = await res.text();
-  const win = window.open('', '_blank', 'noopener,noreferrer');
-  if (!win) throw new Error('Allow pop-ups to print PDF');
-  win.document.title = 'Ledger statement';
-  win.document.body.innerHTML = `<pre style="font:12px monospace;padding:1rem">${escapeHtml(text)}</pre>`;
-  win.document.close();
+
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument ?? iframe.contentWindow?.document;
+  const win = iframe.contentWindow;
+  if (!doc || !win) {
+    iframe.remove();
+    throw new Error('Print not available in this browser');
+  }
+
+  const safe = escapeHtml(text);
+  doc.open();
+  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ledger statement</title>
+<style>
+  body { font: 12px/1.45 ui-monospace, monospace; margin: 16px; color: #111; background: #fff; }
+  pre { white-space: pre-wrap; word-break: break-word; margin: 0; }
+  @media print { body { margin: 0.5in; } }
+</style></head><body><pre>${safe}</pre></body></html>`);
+  doc.close();
+
+  const cleanup = () => {
+    setTimeout(() => iframe.remove(), 500);
+  };
+
+  win.addEventListener('afterprint', cleanup, { once: true });
   win.focus();
   win.print();
 }

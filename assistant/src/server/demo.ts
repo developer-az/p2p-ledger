@@ -19,12 +19,13 @@ export async function seedDemo(ledger: LedgerWriter) {
   await ledger.deposit(sam.id, 120_000, key());
   const send = (from: string, to: string, amountMinor: number, memo: string) =>
     ledger.transfer({ sourceAccountId: from, destinationAccountId: to, amountMinor, currency: 'USD', memo }, key());
+  // Keep ≤3 outbound TRANSFERs from Alex in the fraud velocity window (5/min) so CMD pays still work after onboard.
   await send(alex.id, sam.id, 4_250, 'Pizza night 🍕');
   const rent = await send(alex.id, jordan.id, RENT_AMOUNT_MINOR, RENT_MEMO);
   await send(sam.id, alex.id, 1_800, 'Uber split');
   await send(alex.id, sam.id, 150_000, 'Concert tickets');
-  await send(alex.id, jordan.id, 2_599, 'Groceries');
-  await send(alex.id, jordan.id, 8_900, 'Utilities · electric + water');
+  await send(sam.id, jordan.id, 2_599, 'Groceries');
+  await send(sam.id, jordan.id, 8_900, 'Utilities · electric + water');
   await send(sam.id, alex.id, 22_500, 'Reimbursement · team offsite travel');
   return {
     accounts: [alex, sam, jordan].map((a) => ({ id: a.id, owner: a.ownerId })),

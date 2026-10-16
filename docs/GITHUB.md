@@ -43,6 +43,48 @@ If keep-warm was **skipped** before, it was because this variable was empty. The
 | `assistant-eval.yml` | Manual | Real-model evals when Gemini quota allows (workflow_dispatch) |
 | `keep-warm.yml` | Cron every 10 min | `GET {LEDGER_URL}/actuator/health`, optional assistant health |
 
+## Redacting AI commit trailers (Co-Authored-By / Claude-Session)
+
+Some AI coding tools append **git commit trailers** such as `Co-Authored-By:` and `Claude-Session:` (a link to a Claude Code session). Those lines are stored in **git history forever** on GitHub until you rewrite history. They do not expose your full chat by default, but the session URL is still metadata you may not want public.
+
+**In this repo (as of last scan):** five early commits on `main` contain the same `Claude-Session:` URL. No other branches add new ones unless your tool keeps appending them.
+
+### Stop future commits
+
+In **Claude Code** (or whichever tool added the trailers), turn off commit co-author / session attribution in that product’s settings or environment variables before your next `git commit`. Cursor commits from this assistant do not add those trailers unless your local hook or another tool does.
+
+Optional: add a **commit-msg hook** that rejects lines starting with `Claude-Session:` or unwanted `Co-Authored-By:`.
+
+### Remove from existing history (rewrite + force push)
+
+This **changes every commit hash** after the edited commits. You must **force-push** all branches you care about (`main`, feature branches). Anyone with a clone must re-clone or reset. Open PRs may need to be recreated.
+
+1. **Backup:** `git clone --mirror <repo-url> p2p-ledger-backup.git`
+2. From a clean working tree on your machine:
+
+```bash
+cd p2p-ledger
+git filter-branch -f --msg-filter "python scripts/strip-commit-trailers.py" -- --all
+```
+
+3. Verify:
+
+```bash
+git log --all --grep="Claude-Session" --oneline   # should print nothing
+git log --all --grep="Co-Authored-By: Claude" --oneline
+```
+
+4. Push (requires permission on protected `main`):
+
+```bash
+git push --force-with-lease origin main
+# repeat for other remote branches you use, e.g. feat/guided-visual-ledger
+```
+
+**Alternative (recommended for large repos):** install [git-filter-repo](https://github.com/newren/git-filter-repo) and run a `--commit-callback` that calls the same line-stripping logic as `scripts/strip-commit-trailers.py`.
+
+**GitHub caveats:** Merged PR discussion may still quote old SHAs; forks taken before the rewrite keep old history; GitHub Support cannot “edit” commit messages in place—only a force-pushed rewrite removes them from the default branch history.
+
 ## Forks
 
 Forks without secrets skip Render deploy by design. Keep-warm still needs `LEDGER_URL` if you want cron pings for **your** deployment.

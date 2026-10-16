@@ -160,7 +160,7 @@ export async function racePayment(ledger: Ledger, accountId: string, fromAccount
   const started = Date.now();
   const results = await Promise.all(Array.from({ length: RACE_COPIES }, async (_, copyIndex) => {
     const r = await ledger.postTransfer(req, key);
-    const row = {
+    return {
       copyIndex: copyIndex + 1,
       httpStatus: r.status,
       replayed: r.replayed,
@@ -168,38 +168,7 @@ export async function racePayment(ledger: Ledger, accountId: string, fromAccount
       status: r.transfer.status,
       ms: Date.now() - started,
     };
-    // #region agent log
-    fetch('http://127.0.0.1:7662/ingest/7f9970e2-18d0-4d08-862d-4fbb88c57ac7', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '8f37b7' },
-      body: JSON.stringify({
-        sessionId: '8f37b7',
-        hypothesisId: 'H1-H2',
-        location: 'console.ts:racePayment',
-        message: 'race attempt finished',
-        data: row,
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-    return row;
   }));
-  const processed = results.filter((r) => !r.replayed).length;
-  const replays = results.filter((r) => r.replayed).length;
-  // #region agent log
-  fetch('http://127.0.0.1:7662/ingest/7f9970e2-18d0-4d08-862d-4fbb88c57ac7', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '8f37b7' },
-    body: JSON.stringify({
-      sessionId: '8f37b7',
-      hypothesisId: 'H1',
-      location: 'console.ts:racePayment',
-      message: 'race summary',
-      data: { processed, replays, distinctTransfers: [...new Set(results.map((r) => r.transferId))].length },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
   const sorted = [...results].sort((a, b) => a.copyIndex - b.copyIndex);
   const ids = [...new Set(results.map((r) => r.transferId))];
   const winner = results.find((r) => !r.replayed) ?? results[0];

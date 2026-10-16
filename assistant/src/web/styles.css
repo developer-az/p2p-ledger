@@ -624,6 +624,11 @@ code { font-size: .92em; padding: 0 4px; background: var(--sunken); color: var(-
 .bb-link:hover { color: var(--accent-hover); }
 .bb-link:disabled { opacity: 0.35; cursor: default; }
 .bb-blotter { overflow: auto; }
+.bb-detail-row td { padding: 0; border-top: none; vertical-align: top; }
+.bb-detail-inline { margin: 0; border-top: 1px solid var(--bb-amber-dim, #5c4a20); }
+.bb-confirm { margin-top: 0.5rem; padding: 0.5rem; border: 1px dashed #5c4a20; background: #14120f; }
+.bb-check { display: flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; color: #a89a7a; cursor: pointer; }
+.bb-peer-on { background: #1a1814; }
 .bb-detail {
   padding: 8px;
   border-top: 1px solid var(--line-strong);

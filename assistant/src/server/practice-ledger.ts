@@ -420,15 +420,32 @@ export class CompositeLedger implements LedgerReader, LedgerWriter, LedgerAudito
     if (liveUp) {
       try {
         const i = await this.live.integrity();
-        return { ...i, source: 'live' };
+        return { ...i, source: 'live', auditAvailable: true };
       } catch (e) {
         if (e instanceof LedgerError && (e.status === 404 || e.status === 503 || e.status === 502 || e.status === 504)) {
-          return { ...this.practice.practiceIntegritySnapshot(), source: 'practice' };
+          return {
+            checkedAt: new Date().toISOString(),
+            entryCount: 0,
+            entriesSumMinor: 0,
+            transferCount: 0,
+            unbalancedTransfers: 0,
+            rejectedWithEntries: 0,
+            accountCount: 0,
+            accountsDrifted: 0,
+            outbox: { total: 0, pending: 0, oldestPendingAt: null, p95DeliveryMs: null },
+            balanced: true,
+            source: 'audit-unavailable',
+            auditAvailable: false,
+            message:
+              'Your money is in live PostgreSQL, but this host has no GET /v1/ledger/integrity yet. ' +
+              'Redeploy ledger-service from this repo to see company-wide reconciliation. ' +
+              'Use the blotter and ONBOARD (F2) to exercise real transfers now.',
+          };
         }
         throw e;
       }
     }
-    return { ...this.practice.practiceIntegritySnapshot(), source: 'practice' };
+    return { ...this.practice.practiceIntegritySnapshot(), source: 'practice', auditAvailable: false };
   }
 
   async tamperChecks(transferId: string): Promise<TamperReport | null> {

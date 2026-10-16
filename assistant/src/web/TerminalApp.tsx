@@ -1,6 +1,15 @@
-import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import {
   api,
+  dollarsToMinor,
   type AccountActivity,
   type AccountRef,
   type AccountView,
@@ -16,6 +25,7 @@ import { OFFLINE_BOOTSTRAP } from './practice-fixture.js';
 import { loadSavedWallets, rememberWallet } from './wallet-store.js';
 
 const REPO = 'https://github.com/developer-az/p2p-ledger';
+const OPENING_DEPOSIT_MINOR = 500_00;
 
 function personName(owner: string): string {
   if (owner.startsWith('Bank funding')) return 'Bank';
@@ -27,230 +37,285 @@ function shortId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
 }
 
-function clock(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+function when(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-function TermLink({
-  children,
-  onClick,
-  disabled,
-}: {
-  children: ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
+function BbLink({ children, onClick, disabled }: { children: ReactNode; onClick: () => void; disabled?: boolean }) {
   return (
-    <button type="button" className="term-link" onClick={onClick} disabled={disabled}>
-      [{children}]
+    <button type="button" className="bb-link" onClick={onClick} disabled={disabled}>
+      {children}
     </button>
   );
 }
 
 export function TerminalApp() {
-  const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const chatLock = useRef(false);
-  const lineId = useId();
 
   const [boot, setBoot] = useState<BootstrapResponse>(OFFLINE_BOOTSTRAP);
   const [account, setAccount] = useState<AccountRef | null>(null);
   const [stoppedTransferId, setStoppedTransferId] = useState<string | null>(null);
   const [view, setView] = useState<AccountView | null>(null);
-  const [household, setHousehold] = useState<AccountRef[]>([]);
+  const [peers, setPeers] = useState<AccountRef[]>([]);
   const [busy, setBusy] = useState('');
   const [input, setInput] = useState('');
   const [chatTurns, setChatTurns] = useState<Turn[]>([]);
   const [integrity, setIntegrity] = useState<Integrity | null>(null);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [trailCache, setTrailCache] = useState<Record<string, PaymentTrail>>({});
-  const [replayCache, setReplayCache] = useState<Record<string, ReplayResult>>({});
-  const [tamperCache, setTamperCache] = useState<Record<string, TamperReport>>({});
+  const [selectedPay, setSelectedPay] = useState<string | null>(null);
+  const [trail, setTrail] = useState<PaymentTrail | null>(null);
+  const [replay, setReplay] = useState<ReplayResult | null>(null);
+  const [tamper, setTamper] = useState<TamperReport | null>(null);
   const [raceResult, setRaceResult] = useState<RaceResult | null>(null);
   const [log, setLog] = useState<string[]>([]);
+  const [clock, setClock] = useState(() => new Date());
 
   const append = useCallback((line: string) => {
     const ts = new Date().toISOString().slice(11, 19);
-    setLog((prev) => [...prev.slice(-120), `${ts}  ${line}`]);
+    setLog((prev) => [...prev.slice(-80), `${ts} ${line}`]);
   }, []);
-
-  const scrollEnd = useCallback(() => {
-    requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }));
-  }, []);
-
-  useEffect(() => { scrollEnd(); }, [log, chatTurns, expanded, integrity, view, raceResult, scrollEnd]);
 
   useEffect(() => {
-    append('GET /api/bootstrap');
+    const t = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    append('BOOT /api/bootstrap');
     void api.bootstrap().then((b) => {
       setBoot(b);
-      append(`bootstrap · live=${b.live} · audit=${b.ledger?.auditCapabilities ? 'postgres' : 'mirror-or-offline'}`);
+      append(`BOOT live=${b.live} audit=${b.ledger?.auditCapabilities ? 'POSTGRES' : 'PENDING'}`);
     }).catch(() => setBoot(OFFLINE_BOOTSTRAP));
   }, [append]);
 
   const chatMeta = boot.chat ?? { provider: 'gemini', configured: false };
 
-  async function loadAccount(id: string, quiet = false) {
-    if (!quiet) setBusy('account');
-    append(`GET /api/accounts?id=${id.slice(0, 8)}…`);
+  async function loadAccount(id: string) {
+    setBusy('SYNC');
+    append(`GET /api/accounts ${shortId(id)}`);
     try {
       const v = await api.account(id);
       setView(v);
-      append(`account · balance=${v.balance} · payments=${v.transfers.length}`);
+      const p = await api.peers(id);
+      setPeers(p);
+      append(`SYNC bal=${v.balance} tx=${v.transfers.length} peers=${p.length}`);
     } catch (e) {
       setView(null);
-      append(`error · ${(e as Error).message}`);
+      setPeers([]);
+      append(`ERR ${(e as Error).message}`);
     } finally {
-      if (!quiet) setBusy('');
+      setBusy('');
     }
   }
 
   useEffect(() => {
     if (account) void loadAccount(account.id);
-    else setView(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- account id only
+    else {
+      setView(null);
+      setPeers([]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account?.id]);
 
   function signIn(a: AccountRef, stoppedId?: string) {
     setAccount(a);
     setStoppedTransferId(stoppedId ?? null);
     setChatTurns([]);
-    setExpanded({});
+    setIntegrity(null);
+    setRaceResult(null);
+    setSelectedPay(null);
+    setTrail(null);
     rememberWallet({ id: a.id, owner: a.owner, live: true, savedAt: new Date().toISOString() });
-    append(`session · ${personName(a.owner)} · ${shortId(a.id)}`);
+    append(`SESS ${personName(a.owner)} ${shortId(a.id)}`);
   }
 
   function signOut() {
     setAccount(null);
     setStoppedTransferId(null);
-    setView(null);
-    setChatTurns([]);
-    setIntegrity(null);
-    setRaceResult(null);
-    append('session · signed out');
+    append('SESS OUT');
+  }
+
+  async function fundAccount(accountId: string, amountMinor: number, label: string) {
+    append(`POST /api/accounts/.../deposits ${label}`);
+    await api.deposit(accountId, amountMinor);
+    append(`FUND +${(amountMinor / 100).toFixed(2)} USD`);
+  }
+
+  async function openWallet(ownerRaw: string, fund = true) {
+    const ownerId = ownerRaw.trim().toLowerCase().replace(/\s+/g, '-');
+    if (!ownerId || !boot.live) {
+      append(boot.live ? 'ERR empty owner id' : 'ERR ledger offline');
+      return;
+    }
+    setBusy('OPEN');
+    try {
+      const existing = await api.findAccounts(ownerId);
+      const prior = existing[0];
+      if (prior) {
+        signIn(prior);
+        append(`OPEN existing ${ownerId}`);
+        return;
+      }
+      append(`POST /api/accounts ${ownerId}`);
+      const a = await api.openAccount(ownerId);
+      signIn(a);
+      if (fund) await fundAccount(a.id, OPENING_DEPOSIT_MINOR, 'opening ACH');
+      await loadAccount(a.id);
+    } catch (e) {
+      append(`ERR ${(e as Error).message}`);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function onboard() {
+    setBusy('ONBOARD');
+    append('POST /api/demo treasury scenario');
+    try {
+      const seeded = await api.seedDemo();
+      const focus = seeded.accounts.find((a) => a.id === seeded.focusAccountId) ?? seeded.accounts[0];
+      if (focus) signIn(focus, seeded.stopped.transferId);
+      append(`ONBOARD ${seeded.accounts.length} accounts + payments on PostgreSQL`);
+    } catch (e) {
+      append(`ERR ${(e as Error).message}`);
+    } finally {
+      setBusy('');
+    }
   }
 
   async function runIntegrity() {
-    setBusy('integrity');
+    setBusy('AUDIT');
     append('GET /api/integrity');
     try {
       const result = await api.integrity();
       setIntegrity(result);
-      setExpanded((e) => ({ ...e, integrity: true }));
-      append(
-        `integrity · source=${result.source ?? '?'} · balanced=${result.balanced} · entries=${result.entryCount} · sum=${result.entriesSum}`,
-      );
+      if (result.auditAvailable === false || result.source === 'audit-unavailable') {
+        append('AUDIT endpoint not on ledger — use blotter for your real balance');
+      } else {
+        append(`AUDIT live balanced=${result.balanced} entries=${result.entryCount}`);
+      }
     } catch (e) {
-      append(`integrity failed · ${(e as Error).message}`);
+      append(`ERR ${(e as Error).message}`);
     } finally {
       setBusy('');
     }
   }
 
-  async function seedHousehold() {
-    setBusy('seed');
-    append('POST /api/demo');
-    try {
-      const seeded = await api.seedDemo();
-      setHousehold(seeded.accounts);
-      const focus = seeded.accounts.find((a) => a.id === seeded.focusAccountId) ?? seeded.accounts[0];
-      if (focus) signIn(focus, seeded.stopped.transferId);
-    } catch (e) {
-      append(`error · ${(e as Error).message}`);
-    } finally {
-      setBusy('');
-    }
-  }
-
-  async function createWallet(ownerRaw: string) {
-    const ownerId = ownerRaw.trim().toLowerCase().replace(/\s+/g, '-');
-    if (!ownerId) return;
-    if (!boot.live) {
-      append('error · live ledger not reachable');
+  async function runDeposit(amountStr: string) {
+    if (!account) return;
+    const minor = dollarsToMinor(amountStr);
+    if (minor === null) {
+      append('ERR amount — use :deposit 100 or :deposit 25.50');
       return;
     }
-    setBusy('create');
-    append(`POST /api/accounts · ownerId=${ownerId}`);
+    setBusy('DEP');
     try {
-      signIn(await api.openAccount(ownerId));
+      await fundAccount(account.id, minor, 'user deposit');
+      await loadAccount(account.id);
     } catch (e) {
-      append(`error · ${(e as Error).message}`);
+      append(`ERR ${(e as Error).message}`);
     } finally {
       setBusy('');
     }
   }
 
-  async function openPayment(transferId: string) {
+  async function runPay(args: string) {
     if (!account) return;
-    const key = `pay:${transferId}`;
-    setExpanded((e) => ({ ...e, [key]: !e[key] }));
-    if (trailCache[transferId]) return;
-    setBusy('trail');
-    append(`GET /api/trail · ${transferId.slice(0, 8)}…`);
+    const m = /^(\S+)\s+(\S+)(?:\s+(.+))?$/.exec(args.trim());
+    if (!m) {
+      append('ERR :pay <peer> <amount> [memo]');
+      return;
+    }
+    const peerTok = m[1];
+    const amtTok = m[2];
+    const memo = m[3];
+    if (!peerTok || !amtTok) {
+      append('ERR :pay <peer> <amount> [memo]');
+      return;
+    }
+    const minor = dollarsToMinor(amtTok);
+    if (minor === null) {
+      append('ERR bad amount');
+      return;
+    }
+    let dest = peers.find((p) => p.id === peerTok || p.owner === peerTok || p.owner.startsWith(peerTok));
+    if (!dest) {
+      const found = await api.findAccounts(peerTok);
+      dest = found[0] ?? undefined;
+    }
+    if (!dest) {
+      append('ERR unknown peer — try ONBOARD (F2) or :pay <uuid>');
+      return;
+    }
+    setBusy('PAY');
+    append(`POST /api/transfers → ${dest.owner}`);
     try {
-      const trail = await api.trail(account.id, transferId);
-      setTrailCache((c) => ({ ...c, [transferId]: trail }));
-      append(`trail · ${trail.status} · legs=${trail.legs.length}`);
+      const t = await api.transfer({
+        sourceAccountId: account.id,
+        destinationAccountId: dest.id,
+        amountMinor: minor,
+        currency: 'USD',
+        memo: memo?.trim() || undefined,
+      });
+      append(`PAY ${t.status} id=${shortId(t.id)}`);
+      await loadAccount(account.id);
+      setSelectedPay(t.id);
+      void loadTrail(account.id, t.id);
     } catch (e) {
-      append(`error · ${(e as Error).message}`);
+      append(`ERR ${(e as Error).message}`);
     } finally {
       setBusy('');
     }
   }
 
-  async function runReplay(transferId: string) {
-    if (!account) return;
-    setBusy('replay');
-    append('POST /api/replay');
+  async function loadTrail(accountId: string, transferId: string) {
+    setBusy('TRAIL');
+    setTrail(null);
+    setReplay(null);
+    setTamper(null);
     try {
-      const r = await api.replay(account.id, transferId);
-      setReplayCache((c) => ({ ...c, [transferId]: r }));
-      append(`replay · ${r.httpStatus} · replayed=${r.replayed}`);
-      void loadAccount(account.id, true);
+      const t = await api.trail(accountId, transferId);
+      setTrail(t);
+      append(`TRAIL ${t.status} legs=${t.legs.length}`);
     } catch (e) {
-      append(`error · ${(e as Error).message}`);
+      append(`ERR ${(e as Error).message}`);
     } finally {
       setBusy('');
     }
   }
 
-  async function runTamper(transferId: string) {
-    if (!account) return;
-    setBusy('tamper');
-    append('POST /api/tamper');
-    try {
-      const report = await api.tamper(account.id, transferId);
-      setTamperCache((c) => ({ ...c, [transferId]: report }));
-    } catch (e) {
-      append(`error · ${(e as Error).message}`);
-    } finally {
-      setBusy('');
-    }
+  async function pickPayment(transferId: string) {
+    setSelectedPay(transferId);
+    if (account) void loadTrail(account.id, transferId);
   }
 
   async function runRace() {
-    if (!account || !view) return;
-    const people = view.transfers.filter((t) => t.kind === 'TRANSFER');
-    const payer = people.find((t) => t.direction === 'received' && t.status === 'COMPLETED')
-      ?? people.find((t) => t.status === 'COMPLETED')
-      ?? people[0];
-    if (!payer) {
-      append('error · no counterparty for race demo');
+    if (!account) return;
+    let fromId: string | null = null;
+    if (view) {
+      const fromTx = view.transfers.find((t) => t.kind === 'TRANSFER' && t.direction === 'received' && t.status === 'COMPLETED');
+      if (fromTx) fromId = fromTx.counterpartyAccountId;
+    }
+    if (!fromId && peers[0]) fromId = peers[0].id;
+    if (!fromId) {
+      append('ERR no sender — F2 ONBOARD or :pay a peer first');
       return;
     }
-    setBusy('race');
-    append('POST /api/race · 5 parallel transfers · one idempotency key');
+    setBusy('RACE');
+    append('POST /api/race ×5 same Idempotency-Key');
     try {
-      const r = await api.race(account.id, payer.counterpartyAccountId);
+      const r = await api.race(account.id, fromId);
       setRaceResult(r);
-      setExpanded((e) => ({ ...e, race: true }));
-      append(`race · distinct=${r.distinctTransfers}`);
-      void loadAccount(account.id, true);
-      if (r.transferId) setExpanded((e) => ({ ...e, [`pay:${r.transferId}`]: true }));
+      append(`RACE ${r.distinctTransfers} payment(s) from ${r.from}`);
+      await loadAccount(account.id);
+      if (r.transferId) {
+        setSelectedPay(r.transferId);
+        void loadTrail(account.id, r.transferId);
+      }
     } catch (e) {
-      append(`error · ${(e as Error).message}`);
+      append(`ERR ${(e as Error).message}`);
     } finally {
       setBusy('');
     }
@@ -258,348 +323,286 @@ export function TerminalApp() {
 
   async function sendChat(text: string) {
     if (!account || chatLock.current) return;
-    const q = text.trim();
-    if (!q) return;
     chatLock.current = true;
-    const next = [...chatTurns, { role: 'user' as const, text: q }];
+    const next = [...chatTurns, { role: 'user' as const, text }];
     setChatTurns(next);
     setInput('');
-    setBusy('chat');
-    append(`POST /api/chat · ${q.slice(0, 48)}${q.length > 48 ? '…' : ''}`);
+    setBusy('CHAT');
     try {
       const reply = await api.chat(account.id, next.slice(-12));
-      const routeLabel = reply.route === 'ledger-fallback' || reply.provider === 'ledger'
-        ? 'ledger tools (no Gemini)'
-        : `${reply.provider} · ${reply.model}`;
-      append(`chat · route=${reply.route ?? reply.provider} · ${routeLabel}`);
-      if (reply.fallbackReason) append(`chat · fallback · ${reply.fallbackReason}`);
-      for (const c of reply.toolCalls ?? []) append(`tool · ${c.tool} · ${c.ms}ms`);
-      setChatTurns([
-        ...next,
-        {
-          role: 'assistant',
-          text: reply.answer,
-          toolCalls: reply.toolCalls,
-          model: reply.model,
-          provider: reply.provider,
-        },
-      ]);
+      append(`CHAT via ${reply.route ?? reply.provider}`);
+      if (reply.fallbackReason) append(`CHAT ${reply.fallbackReason}`);
+      setChatTurns([...next, {
+        role: 'assistant',
+        text: reply.answer,
+        toolCalls: reply.toolCalls,
+        model: reply.model,
+        provider: reply.provider,
+      }]);
     } catch (e) {
-      append(`chat error · ${(e as Error).message}`);
+      append(`ERR ${(e as Error).message}`);
     } finally {
       chatLock.current = false;
       setBusy('');
     }
   }
 
-  function handleCommand(raw: string) {
+  function runCommand(raw: string) {
     const line = raw.trim();
+    if (!line) return;
     const lower = line.toLowerCase();
-    if (lower === ':help' || lower === 'help') {
-      append(
-        'commands: :seed :integrity :payments :race :refresh :signout · or type a question (needs signed-in wallet)',
-      );
+    if (lower === 'help' || lower === ':help') {
+      append('CMD F1 help | F2 onboard | F3 audit | F4 race | :deposit :pay :open :go');
       return;
     }
-    if (lower === ':seed') {
-      void seedHousehold();
+    if (lower === ':onboard' || lower === ':seed') {
+      void onboard();
       return;
     }
-    if (lower === ':integrity') {
+    if (lower === ':audit' || lower === ':integrity') {
       void runIntegrity();
-      return;
-    }
-    if (lower === ':payments') {
-      setExpanded((e) => ({ ...e, payments: true }));
       return;
     }
     if (lower === ':race') {
       void runRace();
       return;
     }
-    if (lower === ':refresh' && account) {
-      void loadAccount(account.id);
+    if (lower.startsWith(':deposit ')) {
+      void runDeposit(line.slice(9));
+      return;
+    }
+    if (lower.startsWith(':pay ')) {
+      void runPay(line.slice(5));
+      return;
+    }
+    if (lower.startsWith(':open ')) {
+      void openWallet(line.slice(6), true);
       return;
     }
     if (lower === ':signout') {
       signOut();
       return;
     }
-    if (lower.startsWith(':wallet ')) {
-      void createWallet(line.slice(8));
+    if (lower === ':refresh' && account) {
+      void loadAccount(account.id);
       return;
     }
     if (account) void sendChat(line);
-    else append('error · sign in first (:seed or open a saved wallet)');
+    else append('ERR sign in — F2 ONBOARD or :open yourname');
   }
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    handleCommand(input);
+    runCommand(input);
+    setInput('');
+  }
+
+  function onKeyDown(e: KeyboardEvent) {
+    if (e.key === 'F1') { e.preventDefault(); runCommand(':help'); }
+    if (e.key === 'F2') { e.preventDefault(); void onboard(); }
+    if (e.key === 'F3') { e.preventDefault(); void runIntegrity(); }
+    if (e.key === 'F4') { e.preventDefault(); void runRace(); }
   }
 
   const saved = loadSavedWallets().filter((w) => w.live);
-  const transfers = view
-    ? orderStoppedFirst(view.transfers, stoppedTransferId)
-    : [];
+  const transfers = view ? orderStoppedFirst(view.transfers, stoppedTransferId) : [];
+  const liveTag = boot.live ? 'LIVE' : 'OFFLINE';
+  const auditTag = boot.ledger?.auditCapabilities ? 'AUDIT OK' : 'AUDIT PENDING';
 
   return (
-    <div className="term-root">
-      <header className="term-hd">
-        <span>p2p-ledger</span>
-        <span className="dim"> · treasury terminal</span>
-        <a className="term-link quiet" href={REPO} target="_blank" rel="noreferrer">github</a>
+    <div className="bb" onKeyDown={onKeyDown}>
+      <header className="bb-top">
+        <span className="bb-logo">P2P</span>
+        <span className="bb-ticker">
+          <span className={boot.live ? 'bb-up' : 'bb-down'}>{liveTag}</span>
+          <span>{auditTag}</span>
+          <span>PG</span>
+          {account && view && (
+            <>
+              <span className="bb-hi">{personName(view.owner)}</span>
+              <span className="bb-hi">{view.balance}</span>
+            </>
+          )}
+          <span className="bb-dim">{clock.toLocaleTimeString()}</span>
+        </span>
+        <span className="bb-fn">F1 HELP · F2 ONBOARD · F3 AUDIT · F4 RACE</span>
+        <a className="bb-dim" href={REPO} target="_blank" rel="noreferrer">SRC</a>
       </header>
 
-      <div className="term-scroll" ref={scrollRef} role="log" aria-live="polite">
-        <p className="term-line">
-          One stream. Click a <span className="dim">[link]</span> to load detail inline — nothing runs until you ask.
-        </p>
-        <p className="term-line dim">
-          Reconciliation checks whether every ledger entry nets to $0 across the company. It is not a live ticker;
-          run <TermLink onClick={() => void runIntegrity()} disabled={busy !== ''}>integrity</TermLink> after transfers to refresh.
-        </p>
-        <p className="term-line">
-          Assistant routing:{' '}
-          {chatMeta.configured
-            ? <><strong>{chatMeta.provider}</strong>{chatMeta.model ? ` (${chatMeta.model})` : ''} — questions go to the model with ledger tools.</>
-            : <><strong>ledger tools only</strong>. {chatMeta.configHint ?? 'Set GEMINI_API_KEY on the server to use Gemini.'}</>}
-        </p>
-        <p className="term-line dim">ledger {boot.live ? 'live · PostgreSQL' : 'offline'} · audit API {boot.ledger?.auditCapabilities ? 'on' : 'mirror or not deployed'}</p>
-
-        {!account && (
-          <section className="term-block">
-            <p className="term-line">Start:</p>
-            <p className="term-line">
-              <TermLink onClick={() => void seedHousehold()} disabled={busy !== '' || !boot.live}>seed demo household</TermLink>
-              {' '}
-              <TermLink onClick={() => inputRef.current?.focus()} disabled={!boot.live}>new wallet</TermLink>
-              <span className="dim"> → type </span>
-              <code>:wallet alex.finance</code>
+      {!account && (
+        <div className="bb-landing">
+          <p>This is a real double-entry ledger on PostgreSQL — not a slideshow.</p>
+          <p className="bb-dim">
+            <BbLink onClick={() => void onboard()} disabled={!boot.live || busy !== ''}>ONBOARD</BbLink>
+            loads three treasury accounts, deposits, transfers, and one declined payment you can inspect.
+            <BbLink onClick={() => void openWallet('treasurer', true)} disabled={!boot.live || busy !== ''}>OPEN</BbLink>
+            creates your wallet with a $500 simulated bank deposit.
+          </p>
+          {saved.length > 0 && (
+            <p>
+              Resume:{' '}
+              {saved.map((w) => (
+                <BbLink key={w.id} onClick={() => signIn({ id: w.id, owner: w.owner })} disabled={busy !== ''}>
+                  {personName(w.owner)}
+                </BbLink>
+              ))}
             </p>
-            {saved.length > 0 && (
-              <p className="term-line">
-                Saved:{' '}
-                {saved.map((w) => (
-                  <TermLink key={w.id} onClick={() => signIn({ id: w.id, owner: w.owner })} disabled={busy !== ''}>
-                    {personName(w.owner)}
-                  </TermLink>
+          )}
+          <p className="bb-dim">
+            Assistant: {chatMeta.configured ? `${chatMeta.provider} ready` : `ledger-only — ${chatMeta.configHint ?? 'set GEMINI_API_KEY'}`}
+          </p>
+        </div>
+      )}
+
+      {account && view && (
+        <div className="bb-grid">
+          <section className="bb-panel bb-watch">
+            <h2 className="bb-hd">WATCH</h2>
+            <table className="bb-tbl">
+              <tbody>
+                <tr><td className="bb-k">OWNER</td><td>{view.owner}</td></tr>
+                <tr><td className="bb-k">ID</td><td className="bb-mono">{shortId(account.id)}</td></tr>
+                <tr><td className="bb-k">BAL</td><td className="bb-hi">{view.balance}</td></tr>
+                <tr><td className="bb-k">30D OUT</td><td>{view.summary.sent}</td></tr>
+                <tr><td className="bb-k">30D IN</td><td>{view.summary.received}</td></tr>
+                <tr><td className="bb-k">STOPPED</td><td>{view.summary.stopped}</td></tr>
+              </tbody>
+            </table>
+            <h3 className="bb-subhd">PEERS</h3>
+            {peers.length === 0
+              ? <p className="bb-dim">None yet — ONBOARD or receive a payment.</p>
+              : (
+                <ul className="bb-list">
+                  {peers.map((p) => (
+                    <li key={p.id}>
+                      <BbLink onClick={() => runCommand(`:pay ${p.owner} 5 tip`)} disabled={busy !== ''}>
+                        {personName(p.owner)}
+                      </BbLink>
+                      <span className="bb-dim"> {shortId(p.id)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            <div className="bb-actions">
+              <BbLink onClick={() => void runDeposit('100')} disabled={busy !== ''}>+DEP $100</BbLink>
+              <BbLink onClick={() => void runRace()} disabled={busy !== ''}>RACE</BbLink>
+              <BbLink onClick={signOut}>OUT</BbLink>
+            </div>
+          </section>
+
+          <section className="bb-panel bb-blotter">
+            <h2 className="bb-hd">BLOTTER</h2>
+            <table className="bb-tbl bb-blotter-tbl">
+              <thead>
+                <tr>
+                  <th>TIME</th>
+                  <th>MEMO</th>
+                  <th>CP</th>
+                  <th>STS</th>
+                  <th className="bb-r">AMT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transfers.length === 0 && (
+                  <tr><td colSpan={5} className="bb-dim">No movements — :deposit 500 or F2 ONBOARD</td></tr>
+                )}
+                {transfers.map((t) => (
+                  <tr
+                    key={t.transferId}
+                    className={selectedPay === t.transferId ? 'bb-row-on' : undefined}
+                    onClick={() => void pickPayment(t.transferId)}
+                  >
+                    <td>{when(t.createdAt)}</td>
+                    <td>{t.memo || '—'}</td>
+                    <td>{t.direction === 'deposit' ? 'BANK' : personName(t.counterparty)}</td>
+                    <td>{t.status === 'REJECTED' ? 'REJ' : 'OK'}</td>
+                    <td className="bb-r">{t.amount}</td>
+                  </tr>
                 ))}
-              </p>
+              </tbody>
+            </table>
+            {selectedPay && trail && (
+              <div className="bb-detail">
+                <p className="bb-mono">{trail.from} → {trail.to} · {trail.amount} · {trail.status}</p>
+                <pre className="bb-pre">{trail.legs.map((l) =>
+                  `#${l.entryId} ${l.account} ${l.side} ${l.amount}`,
+                ).join('\n') || '(no entries)'}</pre>
+                {trail.audited && (
+                  <p>
+                    <BbLink onClick={() => account && void api.replay(account.id, selectedPay).then((r) => {
+                      setReplay(r);
+                      append(`REPLAY ${r.httpStatus}`);
+                    })} disabled={busy !== ''}>REPLAY</BbLink>
+                    {trail.status === 'COMPLETED' && (
+                      <>
+                        {' · '}
+                        <BbLink onClick={() => account && void api.tamper(account.id, selectedPay).then((r) => {
+                          setTamper(r);
+                          append('TAMPER checks');
+                        })} disabled={busy !== ''}>TAMPER</BbLink>
+                      </>
+                    )}
+                  </p>
+                )}
+                {replay && <p className="bb-dim">Replay {replay.httpStatus} replayed={replay.replayed}</p>}
+                {tamper && (
+                  <pre className="bb-pre">{tamper.attempts.map((a) => `${a.attempt}: ${a.refused ? 'REFUSED' : 'FAIL'}`).join('\n')}</pre>
+                )}
+              </div>
             )}
-            {household.length > 0 && (
-              <p className="term-line">
-                Open role:{' '}
-                {household.map((a) => (
-                  <TermLink key={a.id} onClick={() => signIn(a)} disabled={busy !== ''}>
-                    {personName(a.owner)}
-                  </TermLink>
-                ))}
-              </p>
+          </section>
+
+          <section className="bb-panel bb-audit">
+            <h2 className="bb-hd">AUDIT / MSG</h2>
+            <BbLink onClick={() => void runIntegrity()} disabled={busy !== ''}>RUN COMPANY RECONCILIATION</BbLink>
+            {integrity && (
+              <div className="bb-audit-body">
+                {integrity.source === 'audit-unavailable' || integrity.auditAvailable === false ? (
+                  <p className="bb-warn">{integrity.message ?? 'Audit API not deployed on ledger host.'}</p>
+                ) : (
+                  <pre className="bb-pre">
+                    {[
+                      `BALANCED  ${integrity.balanced}`,
+                      `ENTRIES   ${integrity.entryCount}`,
+                      `SUM       ${integrity.entriesSum}`,
+                      `DRIFT     ${integrity.accountsDrifted}`,
+                      `OUTBOX    ${integrity.outbox.p95DeliveryMs ?? '—'} ms p95`,
+                    ].join('\n')}
+                  </pre>
+                )}
+              </div>
             )}
-          </section>
-        )}
-
-        {account && view && (
-          <section className="term-block">
-            <p className="term-line">
-              <strong>{personName(view.owner)}</strong>
-              <span className="dim"> · {view.owner} · {shortId(account.id)} · balance {view.balance}</span>
-              {' '}
-              <TermLink onClick={signOut}>sign out</TermLink>
-              {' '}
-              <TermLink onClick={() => void loadAccount(account.id)} disabled={busy !== ''}>refresh</TermLink>
-            </p>
-            <p className="term-line">
-              <TermLink onClick={() => void runIntegrity()} disabled={busy !== ''}>integrity</TermLink>
-              {' '}
-              <TermLink onClick={() => setExpanded((e) => ({ ...e, payments: !e.payments }))}>payments ({transfers.length})</TermLink>
-              {' '}
-              <TermLink onClick={() => void runRace()} disabled={busy !== ''}>retry storm</TermLink>
-            </p>
-          </section>
-        )}
-
-        {integrity && expanded.integrity && (
-          <IntegrityBlock books={integrity} onClose={() => setExpanded((e) => ({ ...e, integrity: false }))} />
-        )}
-
-        {account && expanded.payments && view && (
-          <section className="term-expand">
-            <p className="term-line dim">payments · click id for trail / replay / tamper</p>
-            {transfers.length === 0 && <p className="term-line dim">none yet</p>}
-            {transfers.map((t) => (
-              <PaymentLine
-                key={t.transferId}
-                transfer={t}
-                highlight={t.transferId === stoppedTransferId}
-                open={!!expanded[`pay:${t.transferId}`]}
-                trail={trailCache[t.transferId]}
-                replay={replayCache[t.transferId]}
-                tamper={tamperCache[t.transferId]}
-                onToggle={() => void openPayment(t.transferId)}
-                onReplay={() => void runReplay(t.transferId)}
-                onTamper={() => void runTamper(t.transferId)}
-                busy={busy !== ''}
-              />
-            ))}
-          </section>
-        )}
-
-        {raceResult && expanded.race && (
-          <section className="term-expand">
-            <p className="term-line">
-              retry storm · {raceResult.copies} requests → {raceResult.distinctTransfers} payment(s)
-              {raceResult.entriesPosted !== null ? ` · ${raceResult.entriesPosted} entries` : ''}
-            </p>
-            <pre className="term-pre">{raceResult.attempts.map((a, i) =>
-              `#${i + 1}  HTTP ${a.httpStatus}  ${a.replayed ? 'stored replay' : a.status}  ${a.ms}ms`,
-            ).join('\n')}</pre>
-          </section>
-        )}
-
-        {chatTurns.map((t, i) => (
-          <div key={`${lineId}-${i}`} className="term-chat-turn">
-            <p className={t.role === 'user' ? 'term-line term-user' : 'term-line term-bot'}>
-              {t.role === 'user' ? '› ' : '← '}{t.text}
-            </p>
-            {t.role === 'assistant' && t.provider && (
-              <p className="term-line dim">
-                via {t.provider === 'ledger' ? 'ledger tools' : `${t.provider}${t.model ? ` · ${t.model}` : ''}`}
-              </p>
+            {raceResult && (
+              <pre className="bb-pre">{raceResult.attempts.map((a, i) =>
+                `#${i + 1} ${a.httpStatus} ${a.replayed ? 'REPLAY' : 'NEW'} ${a.ms}ms`,
+              ).join('\n')}</pre>
             )}
-            {t.toolCalls?.map((c, j) => (
-              <details key={j} className="term-details">
-                <summary>{c.tool} · {c.ms}ms</summary>
-                <pre className="term-pre">{JSON.stringify(c.result, null, 2)}</pre>
-              </details>
-            ))}
-          </div>
-        ))}
+            <div className="bb-chat">
+              {chatTurns.slice(-4).map((t, i) => (
+                <p key={i} className={t.role === 'user' ? 'bb-chat-u' : 'bb-chat-a'}>
+                  {t.role === 'user' ? 'Q: ' : 'A: '}{t.text}
+                </p>
+              ))}
+            </div>
+            <pre className="bb-log">{log.slice(-6).join('\n')}</pre>
+          </section>
+        </div>
+      )}
 
-        {log.length > 0 && (
-          <details className="term-details trace-details">
-            <summary>trace ({log.length})</summary>
-            <pre className="term-pre dim">{log.join('\n')}</pre>
-          </details>
-        )}
-      </div>
-
-      <form className="term-prompt" onSubmit={onSubmit}>
-        <label htmlFor="term-in" className="dim">›</label>
+      <form className="bb-cmd" onSubmit={onSubmit}>
+        <span className="bb-cmd-label">CMD&gt;</span>
         <input
-          id="term-in"
           ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={account ? 'question or :help' : ':seed or :wallet name'}
-          maxLength={2000}
-          disabled={busy === 'chat'}
+          placeholder={account ? ':pay sam 10 lunch · or ask a question' : ':open name · F2 onboard'}
+          disabled={busy === 'CHAT'}
           autoComplete="off"
+          spellCheck={false}
         />
-        <button type="submit" className="term-link quiet" disabled={!input.trim() || busy === 'chat'}>send</button>
+        <button type="submit" className="bb-go" disabled={!input.trim()}>GO</button>
       </form>
-      {busy && <p className="term-busy dim" aria-live="polite">{busy}…</p>}
-    </div>
-  );
-}
-
-function IntegrityBlock({ books, onClose }: { books: Integrity; onClose: () => void }) {
-  const source = books.source === 'live'
-    ? 'live PostgreSQL audit (GET /v1/ledger/integrity)'
-    : 'practice mirror — static snapshot when live audit is unavailable; numbers change only after real ledger activity + refresh';
-  const delivery = books.outbox.p95DeliveryMs;
-  return (
-    <section className="term-expand">
-      <p className="term-line">
-        integrity · {books.balanced ? 'balanced' : 'OUT OF BALANCE'} · checked {clock(books.checkedAt)}
-        {' '}
-        <TermLink onClick={onClose}>hide</TermLink>
-      </p>
-      <p className="term-line dim">{source}</p>
-      <pre className="term-pre">
-        {[
-          `entries sum     ${books.entriesSum}`,
-          `entry count     ${books.entryCount}`,
-          `account drift   ${books.accountsDrifted}`,
-          `declines w/ $   ${books.rejectedWithEntries}`,
-          `outbox p95      ${delivery === null ? '—' : `${Math.round(delivery)} ms`}`,
-        ].join('\n')}
-      </pre>
-    </section>
-  );
-}
-
-function PaymentLine({
-  transfer,
-  highlight,
-  open,
-  trail,
-  replay,
-  tamper,
-  onToggle,
-  onReplay,
-  onTamper,
-  busy,
-}: {
-  transfer: AccountActivity;
-  highlight: boolean;
-  open: boolean;
-  trail?: PaymentTrail;
-  replay?: ReplayResult;
-  tamper?: TamperReport;
-  onToggle: () => void;
-  onReplay: () => void;
-  onTamper: () => void;
-  busy: boolean;
-}) {
-  const declined = transfer.status === 'REJECTED';
-  return (
-    <div className={highlight ? 'term-pay highlight' : 'term-pay'}>
-      <p className="term-line">
-        <TermLink onClick={onToggle} disabled={busy}>
-          {shortId(transfer.transferId)}
-        </TermLink>
-        {' '}
-        {transfer.memo || 'Payment'}
-        <span className="dim"> · {declined ? 'declined' : transfer.direction} · {transfer.amount}</span>
-      </p>
-      {open && (
-        <div className="term-expand nested">
-          {!trail && <p className="term-line dim">loading trail…</p>}
-          {trail && (
-            <>
-              <p className="term-line dim">{trail.from} → {trail.to} · {trail.status} · legs net {trail.legsSum}</p>
-              <pre className="term-pre">
-                {trail.legs.map((l) =>
-                  `#${l.entryId}  ${l.account}  ${l.side} ${l.amount}  bal ${l.balanceAfter}`,
-                ).join('\n') || '(no entries — decline with no money moved)'}
-              </pre>
-              {trail.audited && (
-                <p className="term-line">
-                  <TermLink onClick={onReplay} disabled={busy}>replay idempotency</TermLink>
-                  {trail.status === 'COMPLETED' && (
-                    <>
-                      {' '}
-                      <TermLink onClick={onTamper} disabled={busy}>tamper checks</TermLink>
-                    </>
-                  )}
-                </p>
-              )}
-              {replay && (
-                <p className="term-line dim">
-                  replay {replay.httpStatus} · Idempotent-Replayed={replay.replayed} · entries {replay.entriesBefore}→{replay.entriesAfter}
-                </p>
-              )}
-              {tamper && (
-                <pre className="term-pre">{tamper.attempts.map((a) =>
-                  `${a.attempt}: ${a.refused ? 'refused' : 'ALLOWED'} — ${a.databaseSaid}`,
-                ).join('\n')}</pre>
-              )}
-            </>
-          )}
-        </div>
-      )}
+      {busy && <div className="bb-status">{busy}</div>}
     </div>
   );
 }

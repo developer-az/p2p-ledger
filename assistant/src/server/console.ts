@@ -158,21 +158,61 @@ export async function racePayment(ledger: Ledger, accountId: string, fromAccount
     memo: 'Coffee',
   };
   const started = Date.now();
-  const results = await Promise.all(Array.from({ length: RACE_COPIES }, async () => {
+  const results = await Promise.all(Array.from({ length: RACE_COPIES }, async (_, copyIndex) => {
     const r = await ledger.postTransfer(req, key);
-    return { httpStatus: r.status, replayed: r.replayed, transferId: r.transfer.id, status: r.transfer.status, ms: Date.now() - started };
+    const row = {
+      copyIndex: copyIndex + 1,
+      httpStatus: r.status,
+      replayed: r.replayed,
+      transferId: r.transfer.id,
+      status: r.transfer.status,
+      ms: Date.now() - started,
+    };
+    // #region agent log
+    fetch('http://127.0.0.1:7662/ingest/7f9970e2-18d0-4d08-862d-4fbb88c57ac7', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '8f37b7' },
+      body: JSON.stringify({
+        sessionId: '8f37b7',
+        hypothesisId: 'H1-H2',
+        location: 'console.ts:racePayment',
+        message: 'race attempt finished',
+        data: row,
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    return row;
   }));
+  const processed = results.filter((r) => !r.replayed).length;
+  const replays = results.filter((r) => r.replayed).length;
+  // #region agent log
+  fetch('http://127.0.0.1:7662/ingest/7f9970e2-18d0-4d08-862d-4fbb88c57ac7', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '8f37b7' },
+    body: JSON.stringify({
+      sessionId: '8f37b7',
+      hypothesisId: 'H1',
+      location: 'console.ts:racePayment',
+      message: 'race summary',
+      data: { processed, replays, distinctTransfers: [...new Set(results.map((r) => r.transferId))].length },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+  const sorted = [...results].sort((a, b) => a.copyIndex - b.copyIndex);
   const ids = [...new Set(results.map((r) => r.transferId))];
+  const winner = results.find((r) => !r.replayed) ?? results[0];
   const trail = ids.length === 1 ? await ledger.trail(ids[0]!) : null;
   return {
     idempotencyKey: key,
     from: from.ownerId,
     amount: formatMoney(RACE_AMOUNT_MINOR, to.currency),
     copies: RACE_COPIES,
-    attempts: results,
+    attempts: sorted,
     distinctTransfers: ids.length,
-    transferId: ids[0] ?? null,
-    status: results[0]?.status ?? null,
+    transferId: winner?.transferId ?? ids[0] ?? null,
+    status: winner?.status ?? null,
     entriesPosted: trail?.entries.length ?? null,
     declineExplanation: trail?.transfer.rejectionReason ? DECLINE_REASONS[trail.transfer.rejectionReason] ?? null : null,
   };

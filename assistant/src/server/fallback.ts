@@ -26,8 +26,8 @@ export async function answerFromLedger(opts: {
   });
 
   const q = opts.question.toLowerCase();
-  if (/\b(send|transfer|pay)\b/.test(q) && /\$\s?\d/.test(q)) {
-    return finish("I can't send money. I can only read this account.");
+  if (/\b(send|transfer|pay)\b/.test(q) && (/\$\s?\d/.test(q) || /\b\d+(\.\d{1,2})?\b/.test(q))) {
+    return finish("I can't send money from chat. Use CMD: pay sam 10 lunch (or :pay sam 10 lunch).");
   }
   if (/credit score|social security|password/.test(q)) {
     return finish("I don't have access to that. I can only read this account's payments.");

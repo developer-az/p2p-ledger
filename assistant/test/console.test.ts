@@ -161,14 +161,16 @@ describe('against a ledger build without the audit endpoints', () => {
     expect(body.legs.map((l) => l.side)).toEqual(['debit', 'credit']);
   });
 
-  it('reports reconciliation as unavailable instead of failing', async () => {
+  it('falls back to practice mirror when live integrity is missing', async () => {
     const { ledger } = await setup();
     const { LedgerError } = await import('../src/server/ledger.js');
     ledger.integrity = () => Promise.reject(new LedgerError(404, 'not found'));
     const app = appWith(ledger);
     const res = await app.request('/api/integrity');
-    expect(res.status).toBe(503);
-    expect(await res.json()).toMatchObject({ code: 'LEDGER_OUTDATED' });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { source: string; balanced: boolean; entriesSum: string };
+    expect(body).toMatchObject({ source: 'practice', balanced: true });
+    expect(body.entriesSum).toBe('$0.00');
   });
 });
 

@@ -57,6 +57,8 @@ export interface Integrity {
   accountsDrifted: number;
   outbox: { total: number; pending: number; oldestPendingAt: string | null; p95DeliveryMs: number | null };
   balanced: boolean;
+  /** Set by the BFF when serving composite ledger integrity. */
+  source?: 'live' | 'practice';
 }
 
 export interface TamperReport {

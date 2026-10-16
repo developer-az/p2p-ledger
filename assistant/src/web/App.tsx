@@ -10,12 +10,14 @@ import {
   type LedgerEntryRow,
   type Turn,
 } from './api.js';
-import { LedgerWorld } from './LedgerWorld.js';
-import { OFFLINE_BOOTSTRAP } from './practice-fixture.js';
+import { GuidedLedgerStory } from './GuidedLedgerStory.js';
+import { LedgerCharts } from './LedgerCharts.js';
+import { OFFLINE_BOOTSTRAP, PRACTICE_ALEX_ID } from './practice-fixture.js';
+import { clearStoryComplete, isStoryComplete } from './tour-storage.js';
 
 const PRACTICE_PREFIX = '01111111-1111-7111-8111-';
 
-type Tab = 'world' | 'overview' | 'ledger' | 'send' | 'activity' | 'ask';
+type Tab = 'overview' | 'ledger' | 'send' | 'activity' | 'ask';
 
 function displayName(owner: string): string {
   const base = owner.split('-')[0] || owner;
@@ -40,6 +42,8 @@ export function App() {
   const [stoppedId, setStoppedId] = useState<string | null>(null);
   const [booting, setBooting] = useState(() => accountFromUrl() !== null);
   const [bootError, setBootError] = useState('');
+  const [showStory, setShowStory] = useState(() => !isStoryComplete());
+  const [tourHighlight, setTourHighlight] = useState<string | null>(null);
 
   useEffect(() => {
     let id = accountFromUrl();
@@ -99,11 +103,22 @@ export function App() {
       <main className="main">
         {booting && <p className="dim wait">loading…</p>}
         {bootError && !account && <p className="err">{bootError}</p>}
-        {!booting && !account && (
-          <>
-            <LedgerWorld />
-            <SignIn onSignIn={signIn} />
-          </>
+        {!booting && !account && showStory && (
+          <GuidedLedgerStory
+            onComplete={() => setShowStory(false)}
+            onHandoff={(hook) => setTourHighlight(hook)}
+          />
+        )}
+        {!booting && !account && !showStory && (
+          <SignIn
+            onSignIn={signIn}
+            tourHighlight={tourHighlight}
+            onReplayStory={() => {
+              clearStoryComplete();
+              setTourHighlight(null);
+              setShowStory(true);
+            }}
+          />
         )}
         {!booting && account && (
           <Wallet account={account} stoppedTransferId={stoppedId} onSignOut={signOut} />
@@ -113,7 +128,15 @@ export function App() {
   );
 }
 
-function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string, live?: boolean) => void }) {
+function SignIn({
+  onSignIn,
+  tourHighlight,
+  onReplayStory,
+}: {
+  onSignIn: (a: AccountRef, stopped?: string, live?: boolean) => void;
+  tourHighlight?: string | null;
+  onReplayStory?: () => void;
+}) {
   const [boot, setBoot] = useState<BootstrapResponse>(OFFLINE_BOOTSTRAP);
   const [err, setErr] = useState('');
   const [owner, setOwner] = useState(() => loadSavedWallets()[0]?.owner ?? '');
@@ -210,6 +233,19 @@ function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string, live
 
       {err && <p className="err" role="alert">{err}</p>}
 
+      {onReplayStory && (
+        <p className="dim" style={{ fontSize: '11px', margin: '0 0 12px' }}>
+          <button type="button" className="t-btn-inline" onClick={onReplayStory}>[ replay visual intro ]</button>
+        </p>
+      )}
+
+      {tourHighlight === 'tour-activity-hint' && (
+        <p className="tour-callout">After sign-in, open the <strong>activity</strong> tab to see declined transfers.</p>
+      )}
+      {tourHighlight === 'tour-ledger-hint' && (
+        <p className="tour-callout">After sign-in, open the <strong>ledger</strong> tab for append-only lines and statement download.</p>
+      )}
+
       {saved.length > 0 && (
         <section className="pane">
           <div className="pane-hd"><strong>saved wallets</strong> · this browser</div>
@@ -248,7 +284,13 @@ function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string, live
         <section className="pane">
           <div className="pane-hd"><strong>live demo world</strong></div>
           <div className="pane-bd">
-            <button type="button" className="t-btn" disabled={busy !== ''} onClick={() => void seedLive()}>
+            <button
+              type="button"
+              className={tourHighlight === 'tour-seed-live' ? 't-btn tour-pulse' : 't-btn'}
+              data-tour-target="tour-seed-live"
+              disabled={busy !== ''}
+              onClick={() => void seedLive()}
+            >
               [ seed live household on PostgreSQL ]
             </button>
             <p className="dim" style={{ fontSize: '11px', margin: '8px 0 0' }}>
@@ -265,7 +307,11 @@ function SignIn({ onSignIn }: { onSignIn: (a: AccountRef, stopped?: string, live
             <button
               key={a.id}
               type="button"
-              className={a.id === practice.focusAccountId ? 't-btn recommended' : 't-btn'}
+              data-tour-target={a.id === PRACTICE_ALEX_ID ? 'tour-practice-alex' : undefined}
+              className={[
+                a.id === practice.focusAccountId ? 't-btn recommended' : 't-btn',
+                tourHighlight === 'tour-practice-alex' && a.id === PRACTICE_ALEX_ID ? 'tour-pulse' : '',
+              ].filter(Boolean).join(' ')}
               onClick={() => openPractice(a)}
             >
               <span className="key">[{i + 1}]</span> {displayName(a.owner)}
@@ -287,7 +333,7 @@ function Wallet({
   stoppedTransferId: string | null;
   onSignOut: () => void;
 }) {
-  const [tab, setTab] = useState<Tab>('world');
+  const [tab, setTab] = useState<Tab>('overview');
   const [view, setView] = useState<AccountView | null>(null);
   const [peers, setPeers] = useState<AccountRef[]>([]);
   const [err, setErr] = useState('');
@@ -323,7 +369,7 @@ function Wallet({
       </p>
 
       <nav className="tabs" aria-label="Sections">
-        {(['world', 'overview', 'ledger', 'send', 'activity', 'ask'] as Tab[]).map((t) => (
+        {(['overview', 'ledger', 'send', 'activity', 'ask'] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -335,13 +381,10 @@ function Wallet({
         ))}
       </nav>
 
-      {busy && tab !== 'ask' && tab !== 'world' && <p className="dim wait">syncing…</p>}
+      {busy && tab !== 'ask' && <p className="dim wait">syncing…</p>}
       {err && <p className="err" role="alert">{err}</p>}
 
-      {tab === 'world' && (
-        <LedgerWorld onJump={(t) => setTab(t === 'send' ? 'send' : t === 'ledger' ? 'ledger' : 'ask')} />
-      )}
-      {view && tab === 'overview' && <Overview view={view} live={live} />}
+      {view && tab === 'overview' && <Overview view={view} live={live} accountId={account.id} />}
       {view && tab === 'ledger' && <LedgerStatement accountId={account.id} currency={view.currency} />}
       {view && tab === 'send' && (
         <SendPayment
@@ -359,36 +402,39 @@ function Wallet({
   );
 }
 
-function Overview({ view, live }: { view: AccountView; live: boolean }) {
+function Overview({ view, live, accountId }: { view: AccountView; live: boolean; accountId: string }) {
   return (
-    <section className="pane">
-      <div className="pane-hd">
-        <strong>cashflow</strong> · last 30 days · {live ? 'ledger-service' : 'practice mirror'}
-      </div>
-      <div className="pane-bd">
-        <dl className="kv">
-          <dt>available</dt>
-          <dd>{view.balance}</dd>
-          <dt>account</dt>
-          <dd className="mono-id">{view.id}</dd>
-          <dt>opened</dt>
-          <dd>{new Date(view.openedAt).toLocaleString()}</dd>
-        </dl>
-        <div className="kv-row">
-          <dl className="kv"><dt>money in</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.inflow}</dd></dl>
-          <dl className="kv"><dt>deposits</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.deposited}</dd></dl>
-          <dl className="kv"><dt>from people</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.received}</dd></dl>
+    <>
+      <section className="pane">
+        <div className="pane-hd">
+          <strong>cashflow</strong> · last 30 days · {live ? 'ledger-service' : 'practice mirror'}
         </div>
-        <div className="kv-row">
-          <dl className="kv"><dt>sent out</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.sent}</dd></dl>
-          <dl className="kv"><dt>declined</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.stopped}</dd></dl>
-          <dl className="kv"><dt>count</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.declinedCount}</dd></dl>
+        <div className="pane-bd">
+          <dl className="kv">
+            <dt>available</dt>
+            <dd>{view.balance}</dd>
+            <dt>account</dt>
+            <dd className="mono-id">{view.id}</dd>
+            <dt>opened</dt>
+            <dd>{new Date(view.openedAt).toLocaleString()}</dd>
+          </dl>
+          <div className="kv-row">
+            <dl className="kv"><dt>money in</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.inflow}</dd></dl>
+            <dl className="kv"><dt>deposits</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.deposited}</dd></dl>
+            <dl className="kv"><dt>from people</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.received}</dd></dl>
+          </div>
+          <div className="kv-row">
+            <dl className="kv"><dt>sent out</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.sent}</dd></dl>
+            <dl className="kv"><dt>declined</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.stopped}</dd></dl>
+            <dl className="kv"><dt>count</dt><dd style={{ fontSize: '13px', color: 'var(--fg)' }}>{view.summary.declinedCount}</dd></dl>
+          </div>
+          <p className="dim" style={{ fontSize: '11px', margin: 0 }}>
+            Income questions in Ask use these totals (summed in cents on the server).
+          </p>
         </div>
-        <p className="dim" style={{ fontSize: '11px', margin: 0 }}>
-          Income questions in Ask use these totals (summed in cents on the server).
-        </p>
-      </div>
-    </section>
+      </section>
+      <LedgerCharts view={view} accountId={accountId} />
+    </>
   );
 }
 

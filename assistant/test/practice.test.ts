@@ -81,6 +81,42 @@ describe('practice ledger', () => {
     expect(body.entries[0]?.balanceAfterMinor).toBeGreaterThan(0);
   });
 
+  it('shows VELOCITY_LIMIT decline on activity', async () => {
+    const res = await app.request(`/api/accounts?id=${PRACTICE_ALEX}`);
+    const body = await res.json() as { transfers: { status: string; memo: string | null; declineExplanation: string | null }[] };
+    const velocity = body.transfers.find((t) => t.memo?.includes('Concert'));
+    expect(velocity).toMatchObject({ status: 'REJECTED' });
+    expect(velocity?.declineExplanation).toMatch(/5 transfers|60/i);
+  });
+
+  it('applies VELOCITY_LIMIT on burst sends', async () => {
+    for (let i = 0; i < 5; i++) {
+      await app.request('/api/transfers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `vel-${i}` },
+        body: JSON.stringify({
+          sourceAccountId: PRACTICE_SAM,
+          destinationAccountId: PRACTICE_ALEX,
+          amountMinor: 10,
+          currency: 'USD',
+        }),
+      });
+    }
+    const blocked = await app.request('/api/transfers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'vel-block' },
+      body: JSON.stringify({
+        sourceAccountId: PRACTICE_SAM,
+        destinationAccountId: PRACTICE_ALEX,
+        amountMinor: 10,
+        currency: 'USD',
+      }),
+    });
+    expect(blocked.status).toBe(201);
+    const row = await blocked.json() as { status: string; rejectionReason: string | null };
+    expect(row).toMatchObject({ status: 'REJECTED', rejectionReason: 'VELOCITY_LIMIT' });
+  });
+
   it('loads Alex with a declined rent payment', async () => {
     const res = await app.request(`/api/accounts?id=${PRACTICE_ALEX}`);
     expect(res.status).toBe(200);

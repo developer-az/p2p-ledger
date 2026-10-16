@@ -114,7 +114,8 @@ export interface LedgerEntryRow {
 export interface BootstrapResponse {
   live: boolean;
   practice: PracticeBootstrap;
-  ledger?: LedgerMeta;
+  ledger?: LedgerMeta & { persistence?: string };
+  chat?: { provider: string; configured: boolean };
 }
 
 export const api = {
@@ -130,6 +131,8 @@ export const api = {
     call<{ accountId: string; currency: string; entries: LedgerEntryRow[] }>(
       `/api/accounts/${encodeURIComponent(accountId)}/entries?limit=${limit}`,
     ),
+  statementDownloadUrl: (accountId: string) =>
+    `/api/accounts/${encodeURIComponent(accountId)}/statement.txt`,
   deposit: (accountId: string, amountMinor: number) =>
     call<TransferResult>(`/api/accounts/${encodeURIComponent(accountId)}/deposits`, {
       method: 'POST',

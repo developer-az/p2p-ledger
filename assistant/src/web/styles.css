@@ -169,3 +169,9 @@ table.stmt th {
 table.stmt td { padding: 6px 4px; border-bottom: 1px solid #1a1a1a; }
 table.stmt .pos { color: var(--action); }
 table.stmt .neg { color: var(--red); }
+
+@media print {
+  .topbar, .tabs, .t-btn-inline, .status-line button { display: none !important; }
+  body { background: #fff; color: #000; }
+  .pane { border: 1px solid #ccc; }
+}

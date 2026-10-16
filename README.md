@@ -148,7 +148,7 @@ Vercel (assistant/) → LEDGER_URL + GEMINI_API_KEY
 | Compute | Render free web service (native image, 0.1 CPU) |
 | Database | Supabase Postgres (session pooler) |
 | Events | SQS FIFO (`infra/aws`) or Kafka locally |
-| UI | Vercel (`assistant/`, `api/[...path].ts`) |
+| UI | Vercel (`assistant/`, `api/index.ts` + `/api/*` rewrite) |
 | Keep-warm | `keep-warm.yml` → `LEDGER_URL` / optional `ASSISTANT_URL` |
 
 Setup checklist: [docs/GITHUB.md](docs/GITHUB.md) · Security model: [docs/SECURITY.md](docs/SECURITY.md).

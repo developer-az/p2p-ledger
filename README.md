@@ -1,15 +1,15 @@
 # p2p-ledger
 
-**A production-style peer-to-peer payments ledger with an LLM support layer** — double-entry money movement in Java, a TypeScript app API and UI, and deterministic evals over real account data.
+**Production-style peer-to-peer payments ledger with an LLM support layer** — double-entry money movement in Java, a TypeScript terminal and BFF, and deterministic evals over real account data.
 
 <p align="center">
-  <a href="https://p2p-ledger-pi.vercel.app"><strong>Live assistant</strong></a>
+  <a href="https://p2p-ledger-pi.vercel.app"><strong>Live demo</strong></a>
   ·
-  <a href="docs/API.md">API reference</a>
+  <a href="docs/API.md">API</a>
   ·
-  <a href="docs/ARCHITECTURE.md">Ledger deep-dive</a>
+  <a href="docs/ARCHITECTURE.md">Architecture</a>
   ·
-  <a href="docs/P2P-SOLIDITY-AND-SCALE.md">P2P &amp; on-chain</a>
+  <a href="docs/BRIEFING.md">Ops briefing</a>
 </p>
 
 <p align="center">
@@ -17,99 +17,73 @@
   <a href="https://github.com/developer-az/p2p-ledger/actions/workflows/assistant-ci.yml"><img src="https://github.com/developer-az/p2p-ledger/actions/workflows/assistant-ci.yml/badge.svg" alt="assistant CI"></a>
 </p>
 
+<p align="center">
+  <img src="docs/images/terminal-workstation.png" alt="P2P ledger terminal — WATCH, BLOTTER, AUDIT/MSG, and command line on PostgreSQL" width="900">
+</p>
+<p align="center"><sub>Terminal workstation on live PostgreSQL · <a href="https://p2p-ledger-pi.vercel.app">open demo</a> · F2 ONBOARD to seed wallets</sub></p>
+
 ---
 
 ## Overview
 
-**Problem.** Moving money between people needs a single source of truth: balances that stay correct under concurrency, safe retries, auditable history, and explainable declines — not ad hoc balances in an app server.
-
-**Approach.** `ledger-service` implements that core as a Spring Boot service on PostgreSQL (idempotent transfers, row-level locking, fraud rules, transactional outbox). `assistant` is the product surface: a **terminal UI**, Hono `/api` BFF, **P2P peer lane**, **simulated bank corridors**, and read-only LLM tools bound to the signed-in wallet. Writes (send, deposit, bank flows) go through explicit HTTP routes that proxy the Java API.
-
-**Scope.** This repo is an end-to-end system: Docker local stack, native-image CI, $0 deployment path (Render, Supabase, SQS via Terraform, Vercel for the UI), load tests, and property-style integration tests. It is a **demo / portfolio** deployment, not a regulated bank — see [docs/SECURITY.md](docs/SECURITY.md).
-
-## Live demo
-
-| Surface | URL |
+| | |
 |---|---|
-| **Assistant (UI + `/api`)** | [p2p-ledger-pi.vercel.app](https://p2p-ledger-pi.vercel.app) |
-| **Ledger API** | Your Render `LEDGER_URL` (set in Vercel env for live mode) |
+| **Problem** | P2P money needs one source of truth: correct balances under concurrency, safe retries, auditable history, explainable declines. |
+| **Approach** | `ledger-service` (Spring Boot + PostgreSQL) is the system of record. `assistant` is the product: Bloomberg-style **terminal UI**, Hono **`/api` BFF**, **simulated bank corridors**, **peer lane**, and read-only **LLM tools** on the signed-in wallet. |
+| **Scope** | End-to-end portfolio system: Docker, native-image CI, Render + Vercel deploy path, k6 load tests, integration tests. Not a licensed bank — [SECURITY.md](docs/SECURITY.md). |
 
-Open the assistant → **F2 ONBOARD** seeds Alex / Sam / Jordan on PostgreSQL when `LEDGER_URL` is live, or use the in-memory practice ledger offline. Full setup: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**.
+## Live surfaces
 
-### Terminal UI (product surface)
+| Surface | URL / config |
+|---------|----------------|
+| **Assistant** (UI + `/api`) | [p2p-ledger-pi.vercel.app](https://p2p-ledger-pi.vercel.app) |
+| **Ledger API** | Render service → Vercel `LEDGER_URL` |
 
-The React app is a **Bloomberg-style ledger terminal**: ticker, **WATCH** (wallet + simulated bank), **BLOTTER**, **AUDIT/MSG** (Gemini tools), **CMD>** with **GO**, and **F1–F4** shortcuts.
+**Try it:** open the demo → **F2 ONBOARD** (live Postgres when `LEDGER_URL` is set) or resume a saved wallet. Command line: `pay sam 10 lunch`, `bank in`, **F3** company audit. Setup: [DEVELOPMENT.md](docs/DEVELOPMENT.md) · Troubleshooting: [BRIEFING.md](docs/BRIEFING.md).
 
-```mermaid
-flowchart TB
-  subgraph watch["WATCH"]
-    BAL[Balance · cashflow]
-    BANK[SIM BANK · ACH IN / OUT]
-    PEER[PEERS · pay shortcuts]
-  end
-  subgraph cmd["CMD"]
-    PAY[pay sam 10 lunch]
-    BIN[bank in · bank out]
-    FN[F1 help · F2 onboard · F3 audit · F4 race]
-  end
-  watch --> PG[(PostgreSQL ledger)]
-  cmd --> API["/api BFF"]
-  API --> PG
-```
+## Terminal UI
 
-### Simulated bank · corridor peers
+Three panes plus a fixed **CMD** bar:
 
-There is no separate “bank database.” **`bank-sim`** models ACH-style traffic on the **same ledger**:
+| Pane | Purpose |
+|------|---------|
+| **WATCH** | Balance, 30-day flow (deposits vs peer inflow), peer chips, **bank dock** (ACH IN/OUT, +DEP, export) |
+| **BLOTTER** | Transfers; click a row to expand/collapse ledger detail |
+| **AUDIT / MSG** | Company-wide integrity (F3) and AI Q&A via CMD |
 
-1. Each **inbound** or **outbound** flow **opens a new counterparty wallet** (`payroll-*`, `vendor-*`, `client-*`, …).
-2. Inbound corridors **fund** that wallet, then **transfer** to you; outbound corridors **debit** you and credit the vendor wallet.
-3. Counterparties **stay in PEERS** as dormant history (they “came,” settled, then go quiet — like real rails).
-4. **New wallet** open runs **`POST /api/bank/welcome`**: $500 deposit plus one inbound corridor so balances are never empty.
+Shortcuts: **F1** help · **F2** onboard · **F3** audit · **F4** idempotency race.
 
 ```mermaid
-sequenceDiagram
-  participant U as Your wallet
-  participant B as bank-sim
-  participant P as payroll-abc123
-  participant L as ledger-service
-  U->>B: bank in (or welcome)
-  B->>L: openAccount payroll-abc123
-  B->>L: deposit → peer
-  B->>L: transfer peer → U
-  Note over P: Appears in PEERS until history ages out
+flowchart LR
+  UI[Terminal UI] --> API[Hono /api]
+  API --> PG[(PostgreSQL)]
+  API --> LLM[Gemini / OpenRouter]
+  subgraph ledger["ledger-service"]
+    PG
+  end
 ```
 
-### Figures & screenshots
+### Simulated bank (same ledger)
 
-| Asset | Description |
-|-------|-------------|
-| [docs/images/terminal-watch.png](docs/images/terminal-watch.png) | Terminal shell (offline / pre-sign-in) |
-| [docs/images/terminal-blotter.png](docs/images/terminal-blotter.png) | *(optional)* BLOTTER after F2 ONBOARD |
-| Legacy guided UI | [docs/images/assistant-signin.png](docs/images/assistant-signin.png) etc. — older screenshots |
-
-<p align="center">
-  <img src="docs/images/terminal-watch.png" alt="P2P ledger terminal" width="720">
-</p>
-
-See [docs/images/README.md](docs/images/README.md) for more capture steps after `npm run dev:stack`.
+`bank-sim` models ACH-style flows without a second database: each corridor **opens a counterparty wallet**, posts deposits/transfers, then leaves the peer in **PEERS** as history. New wallets get **`/api/bank/welcome`** ($500 + one inbound corridor).
 
 ## System context
 
 ```mermaid
 flowchart LR
   subgraph client["Browser"]
-    UI[React UI]
+    UI[React]
   end
   subgraph vercel["assistant · Vercel"]
     API[Hono /api]
-    LLM[Gemini / Claude]
+    LLM[Gemini / OpenRouter]
   end
   subgraph render["ledger-service · Render"]
-    JVM[Native Spring Boot]
+    JVM[Spring Boot native]
   end
   subgraph data["Data & events"]
-    PG[(Supabase Postgres)]
-    Q[[SQS FIFO / Kafka]]
+    PG[(PostgreSQL)]
+    Q[[SQS / Kafka]]
   end
   UI --> API
   API --> JVM
@@ -119,104 +93,66 @@ flowchart LR
 ```
 
 | Component | Role | Stack |
-|---|---|---|
-| **ledger-service** | System of record — accounts, transfers, fraud, outbox | Java 21, Spring Boot 4, PostgreSQL, GraalVM native, Kafka / SQS |
-| **assistant** | App API, UI, support chat | React, Vite, Hono, TypeScript, Vitest |
-| **CI/CD** | Test, native image → GHCR, deploy hooks | GitHub Actions, Render, Vercel |
+|-----------|------|--------|
+| **ledger-service** | Accounts, transfers, fraud, outbox | Java 21, Spring Boot 4, GraalVM native |
+| **assistant** | UI, BFF, chat tools | React, Vite, Hono, TypeScript |
+| **CI/CD** | Test, image, deploy | GitHub Actions, Render, Vercel |
 
-Transfer path (simplified): idempotency check → lock accounts in PK order → fraud + balance → double-entry rows + outbox in one transaction. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Transfer path: idempotency → row locks (PK order) → fraud + balance → double-entry + outbox in one transaction. [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Quick start
 
-Prerequisites: **Node 22+**, **Docker Desktop** (live ledger), **Java 21** + Maven/`mvnw` (ledger tests). Details: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**.
-
-**Ledger only (Docker)**
+Prerequisites: **Node 22+**, **Docker** (live ledger), **Java 21** + `./mvnw` (ledger tests). [DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ```bash
-docker compose up --build    # Postgres, Kafka, ledger :8080
+# Practice UI only (in-memory ledger)
+cd assistant && cp .env.example .env.local && npm install && npm run dev
+
+# Live ledger + terminal (recommended)
+cd assistant && npm run dev:stack
+
+# Tests
+cd ledger-service && ./mvnw verify
+cd assistant && npm test && npm run build
 ```
 
-**Full stack (ledger + assistant image)**
+Smoke the deployed app: `cd assistant && npm run smoke:api -- https://p2p-ledger-pi.vercel.app`
 
-```bash
-docker compose up --build    # adds assistant :8787 when configured
-```
+## Assistant API
 
-**Assistant dev (practice ledger, no Docker)**
+Browser → **`/api/*` only**. Live traffic uses `ledger-service` when healthy; otherwise **practice** mode. Notable routes: `/api/peers`, `/api/peer-ledger`, `/api/bank/*`, `/api/chat` (read-only tools). OpenAPI: [assistant/openapi.yaml](assistant/openapi.yaml).
 
-```bash
-cd assistant && cp .env.example .env.local   # optional GEMINI_API_KEY for AUDIT/MSG chat
-npm install && npm run dev                   # UI :5173, /api embedded
-```
+**Quality:** 80+ Vitest tests in CI; optional Gemini evals via Actions ([GITHUB.md](docs/GITHUB.md)).
 
-**Assistant + live ledger (recommended)**
-
-```bash
-cd assistant && npm run dev:stack            # Docker ledger + Vite terminal
-```
-
-**Tests**
-
-```bash
-cd ledger-service && ./mvnw verify           # integration + concurrency (Docker)
-cd assistant && npm test && npm run build      # 68 unit tests, no API key
-```
-
-## Assistant layer
-
-The browser talks only to **`/api/*`**. That layer:
-
-- Routes **live** traffic to `ledger-service` when `LEDGER_URL` is healthy.
-- Falls back to an in-memory **practice** network for offline demos.
-- **`GET /api/peers`** and **`GET /api/peer-ledger`** — bilateral P2P history for the terminal PEERS panel.
-- **`/api/bank/*`** — simulated ACH corridors (ephemeral counterparties on the real ledger).
-- Exposes **chat** with tools scoped to the session account (no send-money tool; P2P uses `POST /api/transfers` or CMD `pay …`).
-
-OpenAPI: [assistant/openapi.yaml](assistant/openapi.yaml) · Integration map: [docs/API.md](docs/API.md) · Dev setup: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
-
-**Quality**
-
-- **Unit tests** — terminal commands, bank-sim, peer ledger, tools, practice ledger, HTTP API (CI gate).
-- **Evals** — 8 deterministic cases over a fixture ledger; run locally or via **Actions → assistant eval (Gemini)** when free-tier quota allows ([docs/GITHUB.md](docs/GITHUB.md)).
-
-## Deployment ($0)
+## Deployment
 
 ```
-GitHub Actions → tests → native image → GHCR → Render deploy hook
-Render (native) → Supabase Postgres
-               → AWS SQS FIFO (Terraform in infra/aws)
-Vercel (assistant/) → LEDGER_URL + GEMINI_API_KEY
+GitHub Actions → tests → native image → GHCR → Render
+Vercel (assistant/) → LEDGER_URL, GEMINI_API_KEY / OPENROUTER_*
+PostgreSQL (Supabase) · SQS FIFO optional (infra/aws)
 ```
 
-| Piece | Choice |
-|---|---|
-| Compute | Render free web service (native image, 0.1 CPU) |
-| Database | Supabase Postgres (session pooler) |
-| Events | SQS FIFO (`infra/aws`) or Kafka locally |
-| UI | Vercel (`assistant/`, `api/index.ts` + `/api/*` rewrite) |
-| Keep-warm | `keep-warm.yml` → `LEDGER_URL` / optional `ASSISTANT_URL` |
-
-Setup checklist: [docs/GITHUB.md](docs/GITHUB.md) · Security model: [docs/SECURITY.md](docs/SECURITY.md).
+Checklist: [GITHUB.md](docs/GITHUB.md).
 
 ## Repository map
 
 | Path | Contents |
-|---|---|
+|------|----------|
 | `ledger-service/` | Java ledger, migrations, native build |
-| `assistant/` | UI, Hono API, evals, Vercel config |
+| `assistant/` | Terminal UI, Hono API, evals |
 | `infra/aws/` | SQS, IAM, budget alarm |
-| `loadtest/` | k6 transfer workload |
-| `docs/` | Architecture, API, **DEVELOPMENT.md**, GitHub setup, screenshots |
-
-## Engineering notes
-
-- **Performance:** Native image ~3.6s startup vs ~144s JVM on 0.1 CPU; k6 tables in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-- **AI-assisted development:** Implementation and benchmarks were built with AI coding tools under author review; load tests exposed JVM OOM under virtual-thread burst; native smoke caught frozen `@ConditionalOnProperty` for event sinks. Metrics in docs are reproduced from scripts in-repo.
+| `loadtest/` | k6 |
+| `docs/` | Architecture, API, briefing, images |
 
 ## Roadmap
 
-- [x] Ledger core, fraud, outbox, CI, native deploy pipeline
-- [x] Assistant: P2P UI, BFF API, tool-calling chat, evals
-- [x] Terminal UI, simulated bank corridors, peer lane, documentation
-- [ ] Refresh `docs/images/terminal-*.png` on Vercel after deploy
-- [ ] OAuth and session-bound wallets for a non-demo deployment
+- [x] Ledger core, fraud, outbox, native CI/CD
+- [x] Terminal UI, bank sim, peers, LLM tools, evals
+- [x] Ops briefing and README figures
+- [ ] Owner prefix search (Java)
+- [ ] OAuth / session-bound wallets
+- [ ] On-chain attestation bridge (optional) — [P2P-SOLIDITY-AND-SCALE.md](docs/P2P-SOLIDITY-AND-SCALE.md)
+
+## Engineering notes
+
+Native image ~3.6s cold start vs ~144s JVM on 0.1 CPU (see [ARCHITECTURE.md](docs/ARCHITECTURE.md)). Load tests drove in-flight limits and GraalVM-native event-sink wiring. Metrics are reproducible from scripts in-repo.

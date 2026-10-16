@@ -6,7 +6,7 @@
 |--------|----------------|
 | **ledger-service** | System of record: accounts, transfers, deposits, **ledger_entries**, fraud rules, idempotency, outbox |
 | **assistant `/api`** | Public BFF + terminal UI; no shadow balances |
-| **assistant UI** | Operator terminal: **guided visual intro** (pre-sign-in), overview + **SVG analytics**, ledger statement, send, activity, ask |
+| **assistant UI** | Bloomberg-style **terminal**: WATCH, BLOTTER, AUDIT/MSG, CMD; optional guided intro pre-sign-in |
 
 Practice mode mirrors stories in-memory; **live mode** is always PostgreSQL on Render.
 

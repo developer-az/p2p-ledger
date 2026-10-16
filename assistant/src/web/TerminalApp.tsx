@@ -27,8 +27,6 @@ import { parseTerminalInput } from './terminal-command.js';
 import { loadSavedWallets, rememberWallet } from './wallet-store.js';
 
 const REPO = 'https://github.com/developer-az/p2p-ledger';
-const OPENING_DEPOSIT_MINOR = 500_00;
-
 function personName(owner: string): string {
   if (owner.startsWith('Bank funding')) return 'Bank';
   const base = owner.split('-')[0] || owner;
@@ -165,7 +163,12 @@ export function TerminalApp() {
       append(`POST /api/accounts ${ownerId}`);
       const a = await api.openAccount(ownerId);
       signIn(a);
-      if (fund) await fundAccount(a.id, OPENING_DEPOSIT_MINOR, 'opening ACH');
+      if (fund) {
+        append('POST /api/bank/welcome · deposit + inbound corridor peer');
+        const welcome = await api.bankWelcome(a.id);
+        append(`BANK ${welcome.corridor.peer.owner} → you ${welcome.corridor.amount}`);
+        setSelectedPeerId(welcome.corridor.peer.id);
+      }
       await loadAccount(a.id);
     } catch (e) {
       append(`ERR ${(e as Error).message}`);
@@ -200,6 +203,42 @@ export function TerminalApp() {
       } else {
         append(`AUDIT live balanced=${result.balanced} entries=${result.entryCount}`);
       }
+    } catch (e) {
+      append(`ERR ${(e as Error).message}`);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function runBankInbound() {
+    if (!account) return;
+    setBusy('BANK');
+    append('POST /api/bank/inbound · new corridor peer');
+    try {
+      const r = await api.bankInbound(account.id);
+      append(`BANK IN ${r.amount} from ${r.peer.owner} · ${r.status}`);
+      setSelectedPeerId(r.peer.id);
+      await loadAccount(account.id);
+      setSelectedPay(r.transferId);
+      void loadTrail(account.id, r.transferId);
+    } catch (e) {
+      append(`ERR ${(e as Error).message}`);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function runBankOutbound() {
+    if (!account) return;
+    setBusy('BANK');
+    append('POST /api/bank/outbound · pay vendor corridor');
+    try {
+      const r = await api.bankOutbound(account.id);
+      append(`BANK OUT ${r.amount} → ${r.peer.owner} · ${r.status}`);
+      setSelectedPeerId(r.peer.id);
+      await loadAccount(account.id);
+      setSelectedPay(r.transferId);
+      void loadTrail(account.id, r.transferId);
     } catch (e) {
       append(`ERR ${(e as Error).message}`);
     } finally {
@@ -398,7 +437,13 @@ export function TerminalApp() {
     const action = parseTerminalInput(raw);
     switch (action.kind) {
       case 'help':
-        append('CMD F1 help | F2 onboard | F3 audit | F4 race | peer sam | pay sam 10 lunch | split 50 sam dinner | peers');
+        append('CMD F1 help | F2 onboard | bank in | bank out | peer sam | pay sam 10 lunch | split 50 sam dinner');
+        return;
+      case 'bank-in':
+        void runBankInbound();
+        return;
+      case 'bank-out':
+        void runBankOutbound();
         return;
       case 'peer':
         selectPeer(action.owner);
@@ -551,7 +596,11 @@ export function TerminalApp() {
                 onSelectTransfer={(id) => void pickPayment(id)}
               />
             )}
+            <h3 className="bb-subhd">SIM BANK · CORRIDORS</h3>
+            <p className="bb-dim">Inbound/outbound opens a new counterparty wallet, posts a real transfer, then they go dormant in PEERS.</p>
             <div className="bb-actions">
+              <BbLink onClick={() => void runBankInbound()} disabled={busy !== ''}>ACH IN</BbLink>
+              <BbLink onClick={() => void runBankOutbound()} disabled={busy !== ''}>ACH OUT</BbLink>
               <BbLink onClick={() => void runDeposit('100')} disabled={busy !== ''}>+DEP $100</BbLink>
               <BbLink onClick={() => void runRace()} disabled={busy !== ''}>RACE</BbLink>
               <BbLink onClick={signOut}>OUT</BbLink>

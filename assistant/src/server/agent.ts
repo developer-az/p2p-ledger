@@ -20,7 +20,7 @@ export function systemPrompt(
     '- Money moves wallet-to-wallet via POST /v1/transfers (idempotent keys, double-entry, fraud rules).',
     `- Counterparties (peers) on this wallet: ${peerLine}.`,
     '- Use list_peers and peer_ledger for who someone paid or received from; summarize_activity for totals.',
-    '- You cannot send money. For payments tell the user: CMD `pay <owner> <amount> <memo>` or PEERS panel.',
+    '- You cannot send money. For payments: CMD `pay <owner> <amount> <memo>`, PEERS panel, or `bank in` / `bank out` for simulated ACH corridors (new peers).',
     '',
     'Rules:',
     '- Only state amounts, dates, names and statuses from tool results. Never do arithmetic yourself.',

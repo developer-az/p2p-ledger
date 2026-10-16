@@ -310,6 +310,10 @@ export class CompositeLedger implements LedgerReader, LedgerWriter {
   practicePeers(exceptId: string) {
     return this.practice.listPeers(exceptId);
   }
+
+  isPracticeAccount(id: string): boolean {
+    return this.practice.isPracticeAccount(id);
+  }
 }
 
 export async function isLiveLedgerReachable(baseUrl: string, timeoutMs = 2_500): Promise<boolean> {

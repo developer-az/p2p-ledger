@@ -32,7 +32,7 @@ I study Information Science with a minor in Information Risk Management, Ethics,
 - **Moves money with double-entry bookkeeping.** Every transfer writes a debit and a matching credit in one database transaction. Database triggers reject any entry that does not balance or that tries to edit history.
 - **Survives retries and races.** A repeated request with the same idempotency key returns the first result instead of charging twice. Account locks are always taken in the same order, so two opposite transfers cannot deadlock.
 - **Checks for fraud and records why.** Risky transfers are declined with a stored reason the assistant can read back.
-- **Never loses an event.** Each transfer is written to an outbox table in the same transaction and then published to Kafka or AWS SQS, so no message goes out for a transfer that rolled back.
+- **Never loses an event.** Each transfer is written to an outbox table in the same transaction, so no event goes out for a transfer that rolled back. A relay then hands events to a pluggable sink: a log sink (what the hosted demo runs), or Kafka or AWS SQS adapters that are tested against real brokers in CI.
 - **Explains itself.** A TypeScript assistant answers balance and declined-payment questions with read-only tools over the signed-in wallet.
 
 ## What broke, and what I changed
@@ -46,6 +46,17 @@ I study Information Science with a minor in Information Risk Management, Ethics,
 I designed it and built it with Claude Code and Cursor. The ledger core came out of a Claude Code session I directed; the assistant's fallback and retry work are my own commits.
 
 It is a portfolio system, not a licensed bank. See [SECURITY.md](docs/SECURITY.md).
+
+## What actually runs
+
+| Piece | Status |
+|-------|--------|
+| Ledger API (Spring Boot native image) | Hosted on Render's free tier. CI builds the image, pushes it to GHCR and triggers the deploy. |
+| PostgreSQL | Hosted Postgres (Supabase in the deploy config). The ledger's health check includes the database. |
+| Assistant UI and `/api` | Hosted on Vercel at [ledger.anthony-zhou.com](https://ledger.anthony-zhou.com). Falls back to an in-memory practice ledger when the ledger API is down. |
+| Event sink | The hosted ledger uses the `log` sink. The Kafka and SQS adapters are exercised by integration tests (a Kafka broker and ElasticMQ in Testcontainers), not in the hosted demo. |
+| `infra/aws` Terraform | Written and checked by `terraform validate` in CI. Not applied; no AWS resources exist for this project. |
+| Health | A scheduled workflow checks `/actuator/health` on the ledger and `/api/health` on the assistant. |
 
 ## Terminal UI
 
@@ -89,7 +100,7 @@ flowchart LR
   end
   subgraph data["Data & events"]
     PG[(PostgreSQL)]
-    Q[[SQS / Kafka]]
+    Q[[log sink · Kafka / SQS adapters]]
   end
   UI --> API
   API --> JVM
@@ -122,7 +133,7 @@ cd ledger-service && ./mvnw verify
 cd assistant && npm test && npm run build
 ```
 
-Smoke the deployed app: `cd assistant && npm run smoke:api -- https://p2p-ledger-pi.vercel.app`
+Smoke the deployed app: `cd assistant && npm run smoke:api -- https://ledger.anthony-zhou.com`
 
 ## Assistant API
 
@@ -135,7 +146,7 @@ Browser → **`/api/*` only**. Live traffic uses `ledger-service` when healthy; 
 ```
 GitHub Actions → tests → native image → GHCR → Render
 Vercel (assistant/) → LEDGER_URL, GEMINI_API_KEY / OPENROUTER_*
-PostgreSQL (Supabase) · SQS FIFO optional (infra/aws)
+PostgreSQL (Supabase) · event sink: log (Kafka / SQS adapters tested in CI; infra/aws not applied)
 ```
 
 Checklist: [GITHUB.md](docs/GITHUB.md).
@@ -146,7 +157,7 @@ Checklist: [GITHUB.md](docs/GITHUB.md).
 |------|----------|
 | `ledger-service/` | Java ledger, migrations, native build |
 | `assistant/` | Terminal UI, Hono API, evals |
-| `infra/aws/` | SQS, IAM, budget alarm |
+| `infra/aws/` | Terraform for an SQS queue, IAM user and budget alarm (validated, not applied) |
 | `loadtest/` | k6 |
 | `docs/` | Architecture, API, briefing, images |
 

@@ -107,5 +107,7 @@ cd ledger-service && ./mvnw verify   # Testcontainers Postgres
 - **DB invariants:** unbalanced entries and ledger `UPDATE` rejected.
 - **Fraud:** boundary tests with controllable clock.
 - **SQS:** ElasticMQ FIFO group ids.
+- **Kafka:** single-node Kafka broker; records keyed by transfer id with `event-id` / `event-type` headers.
+- **Outbox under broker failure:** a failing sink leaves events unpublished; a sink that fails mid-batch marks only what it acknowledged.
 - **Load shedding:** `503` + `Retry-After`; health never shed.
 - **Native smoke:** [`scripts/smoke.sh`](../ledger-service/scripts/smoke.sh) on CI-built binary.

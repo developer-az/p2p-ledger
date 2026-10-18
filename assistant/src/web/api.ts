@@ -100,6 +100,28 @@ export const SPEND_CATEGORIES: SpendCategory[] = [
   'dining', 'groceries', 'transport', 'entertainment', 'housing', 'shopping', 'health', 'other',
 ];
 
+export type ActivityFeedKind = 'logged' | 'income' | 'paid' | 'failed';
+
+export interface ActivityFeedRow {
+  id: string;
+  kind: ActivityFeedKind;
+  label: string;
+  detail: string;
+  amount: string;
+  occurredAt: string;
+  transferId?: string;
+  spendId?: string;
+  category?: string;
+}
+
+export interface PersonalInsights {
+  walletBalance: string;
+  income30d: string;
+  loggedSpend30d: string;
+  sentToPeople30d: string;
+  bullets: string[];
+}
+
 export interface HabitsHome {
   weekly: {
     weekEnding: string;
@@ -125,6 +147,8 @@ export interface AccountView {
   openedAt: string;
   summary: AccountSummary;
   habits?: HabitsHome;
+  activityFeed?: ActivityFeedRow[];
+  insights?: PersonalInsights;
   transfers: AccountActivity[];
 }
 

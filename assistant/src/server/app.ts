@@ -19,7 +19,9 @@ import {
   welcomeBankPackage,
 } from './bank-sim.js';
 import { peerLedgerView } from './peer-ledger.js';
+import { buildActivityFeed, buildPersonalInsights } from './money-insights.js';
 import { buildHabitsHome, SPEND_CATEGORIES, type SpendLogStore } from './spend-log.js';
+import { formatMoney } from './money.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
 import { loadAccountView } from './tools.js';
 import { providerFromEnv } from './providers/index.js';
@@ -442,7 +444,27 @@ async function accountView(
   const base = await loadAccountView(ledger, id, limit);
   if (!base) return null;
   const habits = await buildHabitsHome(spendLogs, id, now(), base.currency);
-  return { ...base, habits };
+  const spends = await spendLogs.list(id, { limit: 80 });
+  const activityFeed = buildActivityFeed(
+    base.transfers,
+    spends,
+    (minor, currency) => formatMoney(minor, currency),
+  );
+  const insights = buildPersonalInsights(base.balance, base.summary, habits);
+  return {
+    ...base,
+    habits,
+    activityFeed,
+    insights,
+    spendEntries: spends.map((s) => ({
+      id: s.id,
+      amount: formatMoney(s.amountMinor, s.currency),
+      amountMinor: s.amountMinor,
+      category: s.category,
+      note: s.note,
+      occurredAt: s.occurredAt,
+    })),
+  };
 }
 
 async function listPeers(ledger: CompositeLedger, accountId: string) {

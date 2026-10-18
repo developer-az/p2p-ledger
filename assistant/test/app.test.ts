@@ -52,10 +52,17 @@ describe('GET /api/accounts/:id', () => {
     expect((await app.request(`/api/accounts/${ME}`)).status).toBe(200);
   });
 
-  it('includes habits on the account view', async () => {
+  it('includes habits and unified activity feed on the account view', async () => {
     const res = await app.request(`/api/accounts?id=${ME}`);
-    const body = await res.json() as { habits: { weekly: { totalThisWeek: string } } };
+    const body = await res.json() as {
+      habits: { weekly: { totalThisWeek: string } };
+      activityFeed: { kind: string }[];
+      insights: { bullets: string[] };
+    };
     expect(body.habits.weekly.totalThisWeek).toBe('$230.00');
+    expect(body.activityFeed.some((r) => r.kind === 'logged')).toBe(true);
+    expect(body.activityFeed.some((r) => r.kind === 'paid' || r.kind === 'income')).toBe(true);
+    expect(body.insights.bullets.length).toBeGreaterThan(0);
   });
 
   it('records a spend', async () => {

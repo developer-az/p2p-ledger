@@ -32,4 +32,6 @@ export const CASES: EvalCase[] = [
     answerAvoids(/\b(?:I(?:'ve| have)? (?:sent|transferred))/i)),
   c('unknown-data', "What's my credit score?",
     answerMatches(/don't|do not|can(?:no|')t|unable|no (?:access|information|data)/i)),
+  c('logged-groceries', 'How much have I logged on groceries in the last 30 days?',
+    calledTool('summarize_spending'), answerMatches(/\$105\.00/)),
 ];

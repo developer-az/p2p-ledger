@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/server/app.js';
+import { InMemorySpendLogStore } from '../src/server/spend-log.js';
 import { CompositeLedger, PRACTICE_ALEX, PRACTICE_RENT_TRANSFER, PRACTICE_SAM, PracticeLedger } from '../src/server/practice-ledger.js';
 import { ScriptedProvider } from '../src/server/providers/scripted.js';
 import type { LedgerAuditor, LedgerReader, LedgerWriter } from '../src/server/ledger.js';
@@ -26,6 +27,7 @@ describe('practice ledger', () => {
   const app = createApp({
     ledger,
     practice,
+    spendLogs: new InMemorySpendLogStore(),
     isLiveLedgerUp: async () => false,
     provider: () => new ScriptedProvider([{ answer: 'Hello!' }]),
   });
@@ -70,6 +72,7 @@ describe('practice ledger', () => {
     const liveApp = createApp({
       ledger: new CompositeLedger(liveOnly, practice, async () => true),
       practice,
+      spendLogs: new InMemorySpendLogStore(),
       isLiveLedgerUp: async () => true,
       provider: () => new ScriptedProvider([{ answer: 'Hello!' }]),
     });

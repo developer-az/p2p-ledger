@@ -31,6 +31,15 @@ describe('parseTerminalInput', () => {
     expect(parseTerminalInput('peer sam')).toEqual({ kind: 'peer', owner: 'sam' });
   });
 
+  it('maps log spend command', () => {
+    expect(parseTerminalInput('log 12.50 dining lunch')).toEqual({
+      kind: 'log',
+      amountMinor: 1250,
+      category: 'dining',
+      note: 'lunch',
+    });
+  });
+
   it('maps split bill across one peer', () => {
     expect(parseTerminalInput('split 50 sam dinner')).toEqual({
       kind: 'split',

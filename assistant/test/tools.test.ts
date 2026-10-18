@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { executeTool, TOOL_SPECS } from '../src/server/tools.js';
+import { fixtureSpendLogStore } from '../evals/spend-fixture.js';
 import { FixtureLedger, ME, NOW } from '../evals/fixture.js';
 
-const ctx = { ledger: new FixtureLedger(), accountId: ME, now: () => NOW };
+const ctx = { ledger: new FixtureLedger(), spendLogs: fixtureSpendLogStore(), accountId: ME, now: () => NOW };
 
 describe('tools', () => {
   it('exposes plain JSON Schemas both vendors accept', () => {
@@ -56,6 +57,16 @@ describe('tools', () => {
     expect(await executeTool(ctx, 'list_transfers', { limit: 999 })).toMatchObject({ error: 'Invalid arguments' });
     expect(await executeTool(ctx, 'get_account_overview', { accountId: 'someone-else' })).toMatchObject({ error: 'Invalid arguments' });
     expect(await executeTool(ctx, 'drop_tables', {})).toEqual({ error: 'Unknown tool: drop_tables' });
+  });
+
+  it('summarizes user-logged spending', async () => {
+    expect(await executeTool(ctx, 'summarize_spending', { days: 30 })).toMatchObject({
+      totalSpent: '$312.00',
+      entryCount: 7,
+    });
+    const dining = (await executeTool(ctx, 'summarize_spending', { days: 30 }) as { byCategory: { category: string; total: string }[] })
+      .byCategory.find((r) => r.category === 'dining');
+    expect(dining?.total).toBe('$55.00');
   });
 
   it('explains decline codes', async () => {

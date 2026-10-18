@@ -17,11 +17,13 @@ import java.util.concurrent.ThreadLocalRandom;
 import io.github.developeraz.ledger.account.Account;
 import io.github.developeraz.ledger.account.AccountRepository;
 import io.github.developeraz.ledger.account.AccountService;
+import io.github.developeraz.ledger.outbox.EventPublisher;
 import io.github.developeraz.ledger.outbox.OutboxRelay;
 import io.github.developeraz.ledger.outbox.OutboxRepository;
 import io.github.developeraz.ledger.transfer.IdempotencyConflictException;
 import io.github.developeraz.ledger.transfer.Transfer;
 import io.github.developeraz.ledger.transfer.TransferService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -195,6 +197,35 @@ class TransferServiceTest {
         relay.relay();
 
         assertThat(outbox.countUnpublished()).isZero();
+    }
+
+    @Test
+    void brokerFailureLeavesEventsForTheNextPoll() {
+        Account alice = funded("alice", 1_000);
+        Account bob = funded("bob", 0);
+        transfers.transfer(key(), alice.id(), bob.id(), 100, "USD", null);
+        transfers.transfer(key(), alice.id(), bob.id(), 200, "USD", null);
+        int before = outbox.countUnpublished();
+
+        EventPublisher down = event -> {
+            throw new IllegalStateException("broker unavailable");
+        };
+        assertThat(relayWith(down).relayBatch()).isZero();
+        assertThat(outbox.countUnpublished()).isEqualTo(before);
+
+        // The broker accepts one event and then fails: only that one is marked published.
+        int[] calls = {0};
+        EventPublisher flaky = event -> {
+            if (calls[0]++ > 0) {
+                throw new IllegalStateException("broker unavailable");
+            }
+        };
+        assertThat(relayWith(flaky).relayBatch()).isEqualTo(1);
+        assertThat(outbox.countUnpublished()).isEqualTo(before - 1);
+    }
+
+    private OutboxRelay relayWith(EventPublisher publisher) {
+        return new OutboxRelay(outbox, publisher, tx, new SimpleMeterRegistry());
     }
 
     private Account funded(String owner, long amountMinor) {

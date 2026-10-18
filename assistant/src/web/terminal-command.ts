@@ -49,9 +49,9 @@ export function parseTerminalInput(raw: string): TerminalAction {
 
   const splitLine = /^split\s+(\S+)\s+(.+)$/i.exec(line);
   if (splitLine) {
-    const total = Number(splitLine[1].replace(/[$,]/g, ''));
+    const total = Number(splitLine[1]!.replace(/[$,]/g, ''));
     if (Number.isFinite(total) && total > 0) {
-      const tokens = splitLine[2].trim().split(/\s+/).filter(Boolean);
+      const tokens = splitLine[2]!.trim().split(/\s+/).filter(Boolean);
       if (tokens.length >= 1) {
         const memo = tokens.length > 1 ? tokens[tokens.length - 1]! : 'split';
         const peerTokens = tokens.length > 1 ? tokens.slice(0, -1) : tokens;

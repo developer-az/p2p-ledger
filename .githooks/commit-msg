@@ -1,0 +1,5 @@
+#!/bin/sh
+# Strip Cursor / Claude agent trailers before the commit is recorded.
+set -e
+ROOT="$(git rev-parse --show-toplevel)"
+python "$ROOT/scripts/strip-agent-commit-trailers.py" "$1"

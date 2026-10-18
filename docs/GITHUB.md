@@ -51,9 +51,19 @@ After a history rewrite, `main` should not contain those trailers. Re-check with
 
 ### Stop future commits
 
-In **Claude Code** (or whichever tool added the trailers), turn off commit co-author / session attribution in that product’s settings or environment variables before your next `git commit`. Cursor commits from this assistant do not add those trailers unless your local hook or another tool does.
+In **Claude Code** (or whichever tool added the trailers), turn off commit co-author / session attribution in that product’s settings or environment variables before your next `git commit`.
 
-Optional: add a **commit-msg hook** that rejects lines starting with `Claude-Session:` or unwanted `Co-Authored-By:`.
+**Cursor:** Cursor Settings → **Git & PRs** → turn off **Commit attribution** (and **PR attribution** if you use agent-created PRs). For CLI, set `attribution.attributeCommitsToAgent` and `attributePRsToAgent` to `false` in `%USERPROFILE%\.cursor\cli-config.json`.
+
+**This repo:** after clone, install the tracked hook (strips Cursor / Claude / `Made-with` trailers; keeps human `Co-authored-by` lines):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install-git-hooks.ps1
+```
+
+```bash
+sh scripts/install-git-hooks.sh
+```
 
 ### Remove from existing history (rewrite + force push)
 

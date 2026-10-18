@@ -98,7 +98,7 @@ export async function answerFromLedger(opts: {
     const top = rows.sort((a, b) => moneyMinor(b.sent) - moneyMinor(a.sent))[0];
     const lines = rows.slice(0, 4).map((r) => `${r.counterparty} ${r.sent}`);
     const advice = top
-      ? `Largest outflow to ${top.counterparty} (${top.sent}). In a real treasury run you'd set per-vendor limits and review memos weekly — here, try PEERS + BLOTTER to inspect each line.`
+      ? `Largest outflow to ${top.counterparty} (${top.sent}). In a real treasury run you'd set per-vendor limits and review memos weekly — here, try PEERS + ACTIVITY to inspect each line.`
       : 'No outbound P2P in this window — deposits and inbound corridors dominate.';
     return finish(
       `You sent ${String(sum.totalSent)} in the last ${String(sum.windowDays)} days. ${lines.length ? `By counterparty: ${lines.join(', ')}. ` : ''}${advice}`,

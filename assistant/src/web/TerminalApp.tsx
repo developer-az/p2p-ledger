@@ -275,7 +275,7 @@ export function TerminalApp() {
       const result = await api.integrity();
       setIntegrity(result);
       if (result.auditAvailable === false || result.source === 'audit-unavailable') {
-        append('AUDIT pending on ledger host (404) — balances in WATCH/BLOTTER are still live Postgres');
+        append('AUDIT pending on ledger host (404) — balances in SNAPSHOT/ACTIVITY are still live Postgres');
       } else {
         append(`AUDIT live balanced=${result.balanced} entries=${result.entryCount}`);
       }

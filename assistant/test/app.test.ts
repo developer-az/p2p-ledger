@@ -58,11 +58,32 @@ describe('GET /api/accounts/:id', () => {
       habits: { weekly: { totalThisWeek: string } };
       activityFeed: { kind: string }[];
       insights: { bullets: string[] };
+      finance: { periodLabel: string };
     };
     expect(body.habits.weekly.totalThisWeek).toBe('$230.00');
     expect(body.activityFeed.some((r) => r.kind === 'logged')).toBe(true);
     expect(body.activityFeed.some((r) => r.kind === 'paid' || r.kind === 'income')).toBe(true);
     expect(body.insights.bullets.length).toBeGreaterThan(0);
+    expect(body.finance.periodLabel).toBeTruthy();
+  });
+
+  it('records income and updates finance profile', async () => {
+    const patch = await app.request(`/api/accounts/${ME}/finance`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ walletCashMinor: 50000, creditOwedMinor: 10000, spendLogsAffectWallet: false }),
+    });
+    expect(patch.status).toBe(200);
+    const income = await app.request(`/api/accounts/${ME}/incomes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amountMinor: 250000, source: 'salary' }),
+    });
+    expect(income.status).toBe(201);
+    const view = await app.request(`/api/accounts?id=${ME}`);
+    const body = await view.json() as { activityFeed: { kind: string }[]; finance: { projectedCash: string } };
+    expect(body.activityFeed.some((r) => r.kind === 'logged_income')).toBe(true);
+    expect(body.finance.projectedCash).toBe('$3,000.00');
   });
 
   it('records a spend', async () => {

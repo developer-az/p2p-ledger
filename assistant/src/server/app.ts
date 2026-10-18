@@ -21,6 +21,12 @@ import {
 import { peerLedgerView } from './peer-ledger.js';
 import { buildActivityFeed, buildPersonalInsights } from './money-insights.js';
 import { buildHabitsHome, SPEND_CATEGORIES, type SpendLogStore } from './spend-log.js';
+import {
+  buildFinanceSnapshot,
+  INCOME_SOURCES,
+  InMemoryPersonalFinanceStore,
+  type PersonalFinanceStore,
+} from './personal-finance.js';
 import { formatMoney } from './money.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
 import { loadAccountView } from './tools.js';
@@ -59,6 +65,19 @@ const recordSpendBody = z.object({
   occurredAt: z.string().datetime().optional(),
 });
 
+const financePatchBody = z.object({
+  walletCashMinor: z.number().int().min(0).max(MAX_MINOR_UI).nullable().optional(),
+  creditOwedMinor: z.number().int().min(0).max(MAX_MINOR_UI).optional(),
+  spendLogsAffectWallet: z.boolean().optional(),
+});
+
+const recordIncomeBody = z.object({
+  amountMinor: z.number().int().positive().max(MAX_MINOR_UI),
+  source: z.enum(INCOME_SOURCES),
+  note: z.string().max(140).optional(),
+  occurredAt: z.string().datetime().optional(),
+});
+
 /** Fixed-window limiter per client IP: protects the free LLM quota from one noisy visitor. */
 function rateLimiter(limit: number, windowMs: number) {
   const hits = new Map<string, { count: number; resetAt: number }>();
@@ -78,6 +97,7 @@ export function createApp(deps: {
   ledger: CompositeLedger;
   practice: PracticeLedger;
   spendLogs: SpendLogStore;
+  personalFinance?: PersonalFinanceStore;
   liveLedger?: LedgerWriter & LedgerAuditor;
   isLiveLedgerUp?: () => Promise<boolean>;
   /** Tests inject a fake model; production loads Gemini/Claude on first chat only. */
@@ -85,6 +105,7 @@ export function createApp(deps: {
   now?: () => Date;
 }) {
   const now = deps.now ?? (() => new Date());
+  const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
   const app = new Hono().basePath('/api');
   const allowChat = rateLimiter(20, 60_000);
   const allowSeed = rateLimiter(3, 60_000);
@@ -147,7 +168,7 @@ export function createApp(deps: {
   app.get('/accounts', async (c) => {
     const id = c.req.query('id');
     const limit = Number(c.req.query('limit') ?? '30');
-    if (id) return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, id, Math.min(limit, 100), now));
+    if (id) return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, id, Math.min(limit, 100), now));
     const owner = c.req.query('owner');
     if (!owner) return c.json({ error: 'owner is required' }, 400);
     const accounts = await deps.ledger.accountsByOwner(owner);
@@ -211,7 +232,7 @@ export function createApp(deps: {
   });
 
   // Direct links. The UI uses ?id= so a host that 404s a second path segment still reaches this app.
-  app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, deps.spendLogs, c.req.param('id'), 30, now)));
+  app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, c.req.param('id'), 30, now)));
 
   app.post('/accounts/:id/spends', async (c) => {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
@@ -240,7 +261,57 @@ export function createApp(deps: {
     if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
     const account = await deps.ledger.getAccount(accountId);
     if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
-    return c.json(await buildHabitsHome(deps.spendLogs, accountId, now(), account.currency));
+    const profile = await personalFinance.getProfile(accountId, account.currency, now());
+    return c.json(await buildHabitsHome(deps.spendLogs, accountId, now(), account.currency, profile.periodStart));
+  });
+
+  app.patch('/accounts/:id/finance', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const account = await deps.ledger.getAccount(accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const parsed = financePatchBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+    const profile = await personalFinance.updateProfile(accountId, account.currency, parsed.data, now());
+    const spends = await deps.spendLogs.list(accountId, { limit: 500 });
+    const incomes = await personalFinance.listIncome(accountId, { limit: 500 });
+    const finance = buildFinanceSnapshot(profile, formatMoney(account.balanceMinor, account.currency), spends, incomes);
+    return c.json({ profile, finance });
+  });
+
+  app.post('/accounts/:id/finance/rollover', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const account = await deps.ledger.getAccount(accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const profile = await personalFinance.startNewPeriod(accountId, account.currency, now());
+    const spends = await deps.spendLogs.list(accountId, { limit: 500 });
+    const incomes = await personalFinance.listIncome(accountId, { limit: 500 });
+    const finance = buildFinanceSnapshot(profile, formatMoney(account.balanceMinor, account.currency), spends, incomes);
+    return c.json({ profile, finance, message: 'New period started. Older logs stay in ACTIVITY; totals below are from now.' });
+  });
+
+  app.post('/accounts/:id/incomes', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const account = await deps.ledger.getAccount(accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const parsed = recordIncomeBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+    const event = await personalFinance.recordIncome(accountId, {
+      ...parsed.data,
+      currency: account.currency,
+    }, now());
+    return c.json({
+      id: event.id,
+      amountMinor: event.amountMinor,
+      source: event.source,
+      note: event.note,
+      occurredAt: event.occurredAt,
+    }, 201);
   });
 
   app.get('/accounts/:id/entries', async (c) => {
@@ -256,7 +327,7 @@ export function createApp(deps: {
   app.get('/accounts/:id/statement.txt', async (c) => {
     const id = c.req.param('id');
     if (!z.string().uuid().safeParse(id).success) return c.text('Invalid account id', 400);
-    const view = await accountView(deps.ledger, deps.spendLogs, id, 100, now);
+    const view = await accountView(deps.ledger, deps.spendLogs, personalFinance, id, 100, now);
     if (!view) return c.text('Account not found', 404);
     const entries = await deps.ledger.entries(id, 200);
     const body = formatLedgerStatement(view, entries, {
@@ -436,6 +507,7 @@ export function createApp(deps: {
 async function accountView(
   ledger: LedgerReader,
   spendLogs: SpendLogStore,
+  personalFinance: PersonalFinanceStore,
   id: string,
   limit = 30,
   now: () => Date,
@@ -443,17 +515,23 @@ async function accountView(
   if (!z.string().uuid().safeParse(id).success) return null;
   const base = await loadAccountView(ledger, id, limit);
   if (!base) return null;
-  const habits = await buildHabitsHome(spendLogs, id, now(), base.currency);
+  const profile = await personalFinance.getProfile(id, base.currency, now());
+  const habits = await buildHabitsHome(spendLogs, id, now(), base.currency, profile.periodStart);
   const spends = await spendLogs.list(id, { limit: 80 });
+  const incomes = await personalFinance.listIncome(id, { limit: 80 });
   const activityFeed = buildActivityFeed(
     base.transfers,
     spends,
     (minor, currency) => formatMoney(minor, currency),
+    incomes,
   );
-  const insights = buildPersonalInsights(base.balance, base.summary, habits);
+  const finance = buildFinanceSnapshot(profile, base.balance, spends, incomes);
+  const insights = buildPersonalInsights(base.balance, base.summary, habits, finance);
   return {
     ...base,
     habits,
+    finance,
+    moneyProfile: profile,
     activityFeed,
     insights,
     spendEntries: spends.map((s) => ({

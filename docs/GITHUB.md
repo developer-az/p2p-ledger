@@ -55,7 +55,9 @@ In **Claude Code** (or whichever tool added the trailers), turn off commit co-au
 
 **Cursor:** Cursor Settings → **Git & PRs** → turn off **Commit attribution** (and **PR attribution** if you use agent-created PRs). For CLI, set `attribution.attributeCommitsToAgent` and `attributePRsToAgent` to `false` in `%USERPROFILE%\.cursor\cli-config.json`.
 
-**This repo:** after clone, install the tracked hook (strips Cursor / Claude / `Made-with` trailers; keeps human `Co-authored-by` lines):
+**Global (all repos on this machine):** `git config --global core.hooksPath` → `%USERPROFILE%\.git-hooks` (see that folder’s `README.md`). Local `core.hooksPath` overrides global.
+
+**This repo (optional):** tracked hooks under `.githooks/` if you want repo-specific behavior on top of global:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/install-git-hooks.ps1

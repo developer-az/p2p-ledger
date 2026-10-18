@@ -29,7 +29,7 @@
 | | |
 |---|---|
 | **Problem** | P2P money needs one source of truth: correct balances under concurrency, safe retries, auditable history, explainable declines. |
-| **Approach** | `ledger-service` (Spring Boot + PostgreSQL) is the system of record. `assistant` is the product: Bloomberg-style **terminal UI**, Hono **`/api` BFF**, **simulated bank corridors**, **peer lane**, and read-only **LLM tools** on the signed-in wallet. |
+| **Approach** | `ledger-service` (Spring Boot + PostgreSQL) is the system of record. `assistant` is the product: **user-logged habits** (`spend_logs`) plus Bloomberg-style **terminal UI**, Hono **`/api` BFF**, **simulated bank corridors**, **peer settle-ups**, and read-only **LLM tools**. |
 | **Scope** | End-to-end portfolio system: Docker, native-image CI, Render + Vercel deploy path, k6 load tests, integration tests. Not a licensed bank — [SECURITY.md](docs/SECURITY.md). |
 
 ## Live surfaces
@@ -47,7 +47,7 @@ Three panes plus a fixed **CMD** bar:
 
 | Pane | Purpose |
 |------|---------|
-| **WATCH** | Balance, 30-day flow (deposits vs peer inflow), peer chips, **bank dock** (ACH IN/OUT, +DEP, export) |
+| **WATCH** | **HABITS** (weekly logged spend, quick LOG), wallet balance, peers, **bank dock** (ACH IN/OUT, +DEP, export) |
 | **BLOTTER** | Transfers; click a row to expand/collapse ledger detail |
 | **AUDIT / MSG** | Company-wide integrity (F3) and AI Q&A via CMD |
 

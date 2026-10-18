@@ -3,7 +3,10 @@ import { createApp } from '../src/server/app.js';
 import { LedgerError, type LedgerAuditor, type LedgerWriter } from '../src/server/ledger.js';
 import { CompositeLedger, PracticeLedger } from '../src/server/practice-ledger.js';
 import { ScriptedProvider } from '../src/server/providers/scripted.js';
-import { FixtureLedger, ME } from '../evals/fixture.js';
+import { fixtureSpendLogStore } from '../evals/spend-fixture.js';
+import { FixtureLedger, ME, NOW } from '../evals/fixture.js';
+
+const spendLogs = fixtureSpendLogStore();
 
 const practice = new PracticeLedger();
 
@@ -21,7 +24,9 @@ const writer: LedgerWriter & LedgerAuditor = {
 const app = createApp({
   ledger: new CompositeLedger(Object.assign(new FixtureLedger(), writer), practice, async () => false),
   practice,
+  spendLogs,
   provider: () => new ScriptedProvider([{ answer: 'Hello!' }]),
+  now: () => NOW,
 });
 const chat = (body: unknown, ip = '1.1.1.1') => app.request('/api/chat', {
   method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json', 'x-forwarded-for': ip },
@@ -47,6 +52,21 @@ describe('GET /api/accounts/:id', () => {
     expect((await app.request(`/api/accounts/${ME}`)).status).toBe(200);
   });
 
+  it('includes habits on the account view', async () => {
+    const res = await app.request(`/api/accounts?id=${ME}`);
+    const body = await res.json() as { habits: { weekly: { totalThisWeek: string } } };
+    expect(body.habits.weekly.totalThisWeek).toBe('$230.00');
+  });
+
+  it('records a spend', async () => {
+    const res = await app.request(`/api/accounts/${ME}/spends`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amountMinor: 500, category: 'dining' }),
+    });
+    expect(res.status).toBe(201);
+  });
+
   it('says the ledger is waking when the upstream returns 502', async () => {
     const asleepLive = Object.assign(new FixtureLedger(), writer, {
       getAccount: () => Promise.reject(new LedgerError(502, 'bad gateway')),
@@ -54,7 +74,9 @@ describe('GET /api/accounts/:id', () => {
     const asleep = createApp({
       ledger: new CompositeLedger(asleepLive, practice, async () => false),
       practice,
+      spendLogs,
       provider: () => new ScriptedProvider([{ answer: 'Hello!' }]),
+      now: () => NOW,
     });
     const res = await asleep.request(`/api/accounts?id=${ME}`);
     expect(res.status).toBe(503);
@@ -85,6 +107,8 @@ describe('POST /api/chat', () => {
     const limited = createApp({
       ledger: new CompositeLedger(Object.assign(new FixtureLedger(), writer), practice, async () => false),
       practice,
+      spendLogs,
+      now: () => NOW,
       provider: () => ({
         name: 'scripted',
         model: 'fake',

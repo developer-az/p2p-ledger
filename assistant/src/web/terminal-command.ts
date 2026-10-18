@@ -15,6 +15,7 @@ export type TerminalAction =
   | { kind: 'open'; owner: string }
   | { kind: 'signout' }
   | { kind: 'refresh' }
+  | { kind: 'log'; amountMinor: number; category: string; note: string }
   | { kind: 'chat'; text: string };
 
 export function parseTerminalInput(raw: string): TerminalAction {
@@ -47,11 +48,28 @@ export function parseTerminalInput(raw: string): TerminalAction {
   if (lower.startsWith(':peer ')) return { kind: 'peer', owner: line.slice(6).trim() };
   if (lower.startsWith('peer ')) return { kind: 'peer', owner: line.slice(5).trim() };
 
-  const splitLine = /^split\s+(\S+)\s+(.+)$/i.exec(line);
-  if (splitLine) {
-    const total = Number(splitLine[1].replace(/[$,]/g, ''));
+  const logLine = /^log\s+(\S+)\s+(\S+)(?:\s+(.+))?$/i.exec(line);
+  const logAmount = logLine?.[1];
+  const logCategory = logLine?.[2];
+  if (logAmount && logCategory) {
+    const total = Number(logAmount.replace(/[$,]/g, ''));
     if (Number.isFinite(total) && total > 0) {
-      const tokens = splitLine[2].trim().split(/\s+/).filter(Boolean);
+      return {
+        kind: 'log',
+        amountMinor: Math.round(total * 100),
+        category: logCategory.toLowerCase(),
+        note: (logLine[3] ?? '').trim(),
+      };
+    }
+  }
+
+  const splitLine = /^split\s+(\S+)\s+(.+)$/i.exec(line);
+  const splitAmount = splitLine?.[1];
+  const splitRest = splitLine?.[2];
+  if (splitAmount && splitRest) {
+    const total = Number(splitAmount.replace(/[$,]/g, ''));
+    if (Number.isFinite(total) && total > 0) {
+      const tokens = splitRest.trim().split(/\s+/).filter(Boolean);
       if (tokens.length >= 1) {
         const memo = tokens.length > 1 ? tokens[tokens.length - 1]! : 'split';
         const peerTokens = tokens.length > 1 ? tokens.slice(0, -1) : tokens;

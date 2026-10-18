@@ -18,9 +18,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/terminal-workstation.png" alt="P2P ledger terminal — WATCH, BLOTTER, AUDIT/MSG, and command line on PostgreSQL" width="900">
+  <img src="docs/images/settle-home.png" alt="Settle: wallet balance, requests waiting for an answer, and recent activity" width="640">
+  <img src="docs/images/settle-split-phone.png" alt="Settle on a phone: splitting a bill between friends" width="220">
 </p>
-<p align="center"><sub>Terminal workstation on live PostgreSQL · <a href="https://p2p-ledger-pi.vercel.app">open demo</a> · F2 ONBOARD to seed wallets</sub></p>
+<p align="center"><sub><strong>Settle</strong>, the app on top of the ledger: send, split bills, request money, log spending. Demo only, no real money. The original terminal lives at <code>/ops</code>.</sub></p>
 
 ---
 

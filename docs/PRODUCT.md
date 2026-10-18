@@ -1,3 +1,14 @@
+# Product direction — Settle (consumer app) on a ledger-first core
+
+**Settle** is the user-facing app (`/`): send money, split a bill, ask a friend for money, log spending, see activity and insights, open a receipt for any payment. The original terminal is the engineering console at `/ops`.
+
+What actually runs, with no pretence:
+
+- Payments, deposits, declines and balances are real double-entry ledger operations (Postgres, append-only, idempotent).
+- A payment request is a row in `payment_requests`. Paying it is one ledger transfer with key `request-<id>-<declinedAttempts>`, so a double click moves money once and a retry after a decline uses a fresh key.
+- Splitting a bill creates one request per friend; shares always sum to the total.
+- Demo only: no authentication (a wallet id acts as the key), no real money, hosted event sink is `log`.
+
 # Product direction — habits + ledger-first P2P
 
 ## What we are building

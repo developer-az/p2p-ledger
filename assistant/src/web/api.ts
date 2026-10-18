@@ -233,6 +233,35 @@ export interface PracticeBootstrap {
   hint: string;
 }
 
+export type RequestStatus = 'PENDING' | 'PAID' | 'DECLINED' | 'CANCELLED';
+
+export interface PaymentRequestView {
+  id: string;
+  requesterAccountId: string;
+  payerAccountId: string;
+  requester: AccountRef;
+  payer: AccountRef;
+  amountMinor: number;
+  amount: string;
+  currency: string;
+  memo: string | null;
+  status: RequestStatus;
+  transferId: string | null;
+  declinedAttempts: number;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+export interface PayRequestResult {
+  request: PaymentRequestView;
+  transfer: {
+    id: string;
+    status: 'COMPLETED' | 'REJECTED';
+    rejectionReason: string | null;
+    declineExplanation: string | null;
+  };
+}
+
 export interface BootstrapResponse {
   live: boolean;
   practice: PracticeBootstrap;
@@ -320,16 +349,17 @@ export const api = {
       headers: { 'Idempotency-Key': idempotencyKey() },
       body: JSON.stringify({ amountMinor }),
     }),
+  /** Pass the same key when retrying after a network error so the payment can only happen once. */
   transfer: (body: {
     sourceAccountId: string;
     destinationAccountId: string;
     amountMinor: number;
     currency: string;
     memo?: string;
-  }) =>
+  }, key: string = idempotencyKey()) =>
     call<{ id: string; status: string; rejectionReason?: string | null }>('/api/transfers', {
       method: 'POST',
-      headers: { 'Idempotency-Key': idempotencyKey() },
+      headers: { 'Idempotency-Key': key },
       body: JSON.stringify(body),
     }),
   peers: (accountId: string) =>
@@ -387,6 +417,30 @@ export const api = {
       `/api/accounts/${encodeURIComponent(accountId)}/finance/rollover`,
       { method: 'POST', body: JSON.stringify({}) },
     ),
+  requests: (accountId: string) =>
+    call<{ incoming: PaymentRequestView[]; outgoing: PaymentRequestView[] }>(
+      `/api/requests?accountId=${encodeURIComponent(accountId)}`,
+    ),
+  createRequests: (body: {
+    requesterAccountId: string;
+    memo?: string;
+    payers: { accountId: string; amountMinor: number }[];
+  }) => call<{ requests: PaymentRequestView[] }>('/api/requests', { method: 'POST', body: JSON.stringify(body) }),
+  payRequest: (requestId: string, accountId: string) =>
+    call<PayRequestResult>(`/api/requests/${encodeURIComponent(requestId)}/pay`, {
+      method: 'POST',
+      body: JSON.stringify({ accountId }),
+    }),
+  declineRequest: (requestId: string, accountId: string) =>
+    call<{ request: PaymentRequestView }>(`/api/requests/${encodeURIComponent(requestId)}/decline`, {
+      method: 'POST',
+      body: JSON.stringify({ accountId }),
+    }),
+  cancelRequest: (requestId: string, accountId: string) =>
+    call<{ request: PaymentRequestView }>(`/api/requests/${encodeURIComponent(requestId)}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ accountId }),
+    }),
   entries: (accountId: string, limit = 50) =>
     call<{ accountId: string; currency: string; entries: LedgerEntryRow[] }>(
       `/api/accounts/${encodeURIComponent(accountId)}/entries?limit=${limit}`,

@@ -9,7 +9,7 @@ import { answerFromLedger } from './fallback.js';
 import { LedgerError, type LedgerAuditor, type LedgerReader, type LedgerWriter } from './ledger.js';
 import { isModelOutage } from './providers/retry.js';
 import type { LlmProvider } from './providers/types.js';
-import type { CompositeLedger, PracticeLedger } from './practice-ledger.js';
+import { PRACTICE_ALEX, PRACTICE_JORDAN, PRACTICE_SAM, type CompositeLedger, type PracticeLedger } from './practice-ledger.js';
 import { LEDGER_CAPABILITIES } from './personas.js';
 import { formatLedgerStatement } from './statement-export.js';
 import {
@@ -30,6 +30,12 @@ import {
 import { formatMoney } from './money.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
 import { loadAccountView } from './tools.js';
+import {
+  InMemoryPaymentRequestStore,
+  type PaymentRequest,
+  type PaymentRequestStore,
+} from './payment-requests.js';
+import { explainDecline } from './peer-ledger.js';
 import { providerFromEnv } from './providers/index.js';
 import { MAX_MINOR_UI } from './money.js';
 
@@ -54,6 +60,16 @@ const chatBody = z.object({
     text: z.string().min(1).max(2000),
   })).min(1).max(20).refine((m) => m.at(-1)?.role === 'user', 'Last message must be from the user'),
 });
+
+const requestBody = z.object({
+  requesterAccountId: z.string().uuid(),
+  memo: z.string().max(140).optional(),
+  payers: z.array(z.object({
+    accountId: z.string().uuid(),
+    amountMinor: z.number().int().positive().max(MAX_MINOR_UI),
+  })).min(1).max(8),
+});
+const requestActorBody = z.object({ accountId: z.string().uuid() });
 
 const paymentBody = z.object({ accountId: z.string().uuid(), transferId: z.string().uuid() });
 const raceBody = z.object({ accountId: z.string().uuid(), fromAccountId: z.string().uuid() });
@@ -98,6 +114,7 @@ export function createApp(deps: {
   practice: PracticeLedger;
   spendLogs: SpendLogStore;
   personalFinance?: PersonalFinanceStore;
+  paymentRequests?: PaymentRequestStore;
   liveLedger?: LedgerWriter & LedgerAuditor;
   isLiveLedgerUp?: () => Promise<boolean>;
   /** Tests inject a fake model; production loads Gemini/Claude on first chat only. */
@@ -106,6 +123,7 @@ export function createApp(deps: {
 }) {
   const now = deps.now ?? (() => new Date());
   const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
+  const paymentRequests = deps.paymentRequests ?? new InMemoryPaymentRequestStore();
   const app = new Hono().basePath('/api');
   const allowChat = rateLimiter(20, 60_000);
   const allowSeed = rateLimiter(3, 60_000);
@@ -231,6 +249,131 @@ export function createApp(deps: {
     }
   });
 
+  /** Adds names and display amounts so the UI never has to look accounts up one by one. */
+  async function requestView(r: PaymentRequest) {
+    const [requester, payer] = await Promise.all([
+      deps.ledger.getAccount(r.requesterAccountId),
+      deps.ledger.getAccount(r.payerAccountId),
+    ]);
+    return {
+      ...r,
+      amount: formatMoney(r.amountMinor, r.currency),
+      requester: { id: r.requesterAccountId, owner: requester?.ownerId ?? 'unknown' },
+      payer: { id: r.payerAccountId, owner: payer?.ownerId ?? 'unknown' },
+    };
+  }
+
+  app.post('/requests', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = requestBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+    const { requesterAccountId, payers, memo } = parsed.data;
+    const requester = await deps.ledger.getAccount(requesterAccountId);
+    if (!requester || requester.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const ids = payers.map((p) => p.accountId);
+    if (new Set(ids).size !== ids.length) return c.json({ error: 'Each person can be asked once per request' }, 400);
+    if (ids.includes(requesterAccountId)) return c.json({ error: 'You cannot ask yourself for money' }, 400);
+    for (const p of payers) {
+      const payer = await deps.ledger.getAccount(p.accountId);
+      if (!payer || payer.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+      if (payer.currency !== requester.currency) return c.json({ error: 'Currencies do not match' }, 400);
+    }
+    const created = [];
+    for (const p of payers) {
+      created.push(await requestView(await paymentRequests.create({
+        requesterAccountId,
+        payerAccountId: p.accountId,
+        amountMinor: p.amountMinor,
+        currency: requester.currency,
+        memo: memo ?? null,
+      }, now())));
+    }
+    return c.json({ requests: created }, 201);
+  });
+
+  /** The offline practice household starts with a few open requests so the screen is never empty. */
+  let practiceSeeded: Promise<void> | null = null;
+  function seedPracticeRequests(): Promise<void> {
+    practiceSeeded ??= (async () => {
+      if ((await paymentRequests.listFor(PRACTICE_ALEX, 1)).length > 0) return;
+      const make = (requester: string, payer: string, amountMinor: number, memo: string) =>
+        paymentRequests.create({ requesterAccountId: requester, payerAccountId: payer, amountMinor, currency: 'USD', memo }, now());
+      await make(PRACTICE_SAM, PRACTICE_ALEX, 1_850, 'Groceries run');
+      await make(PRACTICE_JORDAN, PRACTICE_ALEX, 6_000, 'Utilities share');
+      await make(PRACTICE_ALEX, PRACTICE_SAM, 3_500, 'Concert parking');
+    })();
+    return practiceSeeded;
+  }
+
+  app.get('/requests', async (c) => {
+    const accountId = c.req.query('accountId');
+    if (!accountId || !z.string().uuid().safeParse(accountId).success) {
+      return c.json({ error: 'accountId is required' }, 400);
+    }
+    if (deps.ledger.isPracticeAccount(accountId)) await seedPracticeRequests();
+    const rows = await paymentRequests.listFor(accountId, 60);
+    const views = await Promise.all(rows.map(requestView));
+    return c.json({
+      incoming: views.filter((r) => r.payerAccountId === accountId),
+      outgoing: views.filter((r) => r.requesterAccountId === accountId),
+    });
+  });
+
+  /**
+   * Pays a request from the payer's wallet. The idempotency key comes from the request itself,
+   * so a double click, a retry after a timeout, or two open tabs move the money once.
+   */
+  app.post('/requests/:id/pay', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = requestActorBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    const request = await paymentRequests.get(c.req.param('id'));
+    if (!request) return c.json({ error: 'Request not found' }, 404);
+    if (request.payerAccountId !== parsed.data.accountId) return c.json({ error: 'Only the person asked can pay this' }, 403);
+    if (request.status !== 'PENDING' && request.status !== 'PAID') {
+      return c.json({ error: `This request was ${request.status.toLowerCase()}`, request: await requestView(request) }, 409);
+    }
+    const transfer = await deps.ledger.transfer({
+      sourceAccountId: request.payerAccountId,
+      destinationAccountId: request.requesterAccountId,
+      amountMinor: request.amountMinor,
+      currency: request.currency,
+      memo: request.memo ?? 'Payment request',
+    }, `request-${request.id}-${request.declinedAttempts}`);
+    const summary = {
+      id: transfer.id,
+      status: transfer.status,
+      rejectionReason: transfer.rejectionReason,
+      declineExplanation: explainDecline(transfer.rejectionReason),
+    };
+    if (transfer.status === 'REJECTED') {
+      await paymentRequests.noteDecline(request.id);
+      return c.json({ request: await requestView((await paymentRequests.get(request.id)) ?? request), transfer: summary });
+    }
+    const resolved = await paymentRequests.resolve(request.id, 'PAID', transfer.id, now());
+    const current = resolved ?? (await paymentRequests.get(request.id)) ?? request;
+    return c.json({ request: await requestView(current), transfer: summary });
+  });
+
+  for (const [action, status, who] of [
+    ['decline', 'DECLINED', 'payerAccountId'],
+    ['cancel', 'CANCELLED', 'requesterAccountId'],
+  ] as const) {
+    app.post(`/requests/:id/${action}`, async (c) => {
+      if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+      const parsed = requestActorBody.safeParse(await c.req.json().catch(() => null));
+      if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+      const request = await paymentRequests.get(c.req.param('id'));
+      if (!request) return c.json({ error: 'Request not found' }, 404);
+      if (request[who] !== parsed.data.accountId) {
+        return c.json({ error: action === 'decline' ? 'Only the person asked can decline' : 'Only the person who asked can cancel' }, 403);
+      }
+      const resolved = await paymentRequests.resolve(request.id, status, null, now());
+      if (!resolved) return c.json({ error: `This request was already ${request.status.toLowerCase()}`, request: await requestView(request) }, 409);
+      return c.json({ request: await requestView(resolved) });
+    });
+  }
+
   // Direct links. The UI uses ?id= so a host that 404s a second path segment still reaches this app.
   app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, c.req.param('id'), 30, now)));
 
@@ -350,7 +493,16 @@ export function createApp(deps: {
         error: 'The live ledger is not running. Use Alex, Sam, or Jordan below — they work without Docker. To create fresh accounts, run: docker compose up',
       }, 503);
     }
-    return c.json(await seedDemo(deps.liveLedger));
+    const seeded = await seedDemo(deps.liveLedger);
+    const [alex, sam, jordan] = seeded.accounts;
+    if (alex && sam && jordan) {
+      const ask = (requester: string, payer: string, amountMinor: number, memo: string) =>
+        paymentRequests.create({ requesterAccountId: requester, payerAccountId: payer, amountMinor, currency: 'USD', memo }, now());
+      await ask(sam.id, alex.id, 1_850, 'Groceries run');
+      await ask(jordan.id, alex.id, 6_000, 'Utilities share');
+      await ask(alex.id, sam.id, 3_500, 'Concert parking');
+    }
+    return c.json(seeded);
   });
 
   app.get('/bank/status', (c) => c.json(bankSimulatorStatus()));

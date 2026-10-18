@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/server/app.js';
+import { InMemorySpendLogStore } from '../src/server/spend-log.js';
 import { CompositeLedger, PracticeLedger, PRACTICE_ALEX, PRACTICE_SAM } from '../src/server/practice-ledger.js';
 import { ScriptedProvider } from '../src/server/providers/scripted.js';
 import type { LedgerAuditor, LedgerReader, LedgerWriter, Transfer, TransferRequest, WriteResult } from '../src/server/ledger.js';
@@ -36,6 +37,7 @@ describe('POST /api/race', () => {
     const app = createApp({
       ledger: new CompositeLedger(ledger, practice, async () => false),
       practice,
+      spendLogs: new InMemorySpendLogStore(),
       provider: () => new ScriptedProvider([{ answer: 'ok' }]),
     });
     const res = await app.request('/api/race', {

@@ -86,6 +86,87 @@ export interface AccountSummary {
   declinedCount: number;
 }
 
+export type SpendCategory =
+  | 'dining'
+  | 'groceries'
+  | 'transport'
+  | 'entertainment'
+  | 'housing'
+  | 'shopping'
+  | 'health'
+  | 'other';
+
+export const SPEND_CATEGORIES: SpendCategory[] = [
+  'dining', 'groceries', 'transport', 'entertainment', 'housing', 'shopping', 'health', 'other',
+];
+
+export type ActivityFeedKind = 'logged' | 'logged_income' | 'income' | 'paid' | 'failed';
+
+export const INCOME_SOURCES = ['salary', 'freelance', 'gift', 'refund', 'other'] as const;
+export type IncomeSource = (typeof INCOME_SOURCES)[number];
+
+export interface ActivityFeedRow {
+  id: string;
+  kind: ActivityFeedKind;
+  label: string;
+  detail: string;
+  amount: string;
+  occurredAt: string;
+  transferId?: string;
+  spendId?: string;
+  incomeId?: string;
+  category?: string;
+}
+
+export interface MoneyProfile {
+  accountId: string;
+  currency: string;
+  periodLabel: string;
+  periodStart: string;
+  walletCashMinor: number | null;
+  creditOwedMinor: number;
+  spendLogsAffectWallet: boolean;
+  updatedAt: string;
+}
+
+export interface FinanceSnapshot {
+  periodLabel: string;
+  periodStart: string;
+  walletCash: string | null;
+  creditOwed: string;
+  netCash: string | null;
+  ledgerWallet: string;
+  spendLogsAffectWallet: boolean;
+  periodTotals: { income: string; spent: string };
+  projectedCash: string | null;
+  bullets: string[];
+}
+
+export interface PersonalInsights {
+  walletBalance: string;
+  income30d: string;
+  loggedSpend30d: string;
+  sentToPeople30d: string;
+  bullets: string[];
+}
+
+export interface HabitsHome {
+  weekly: {
+    weekEnding: string;
+    totalThisWeek: string;
+    totalLastWeek: string;
+    weekOverWeek: string;
+    highlights: { category: SpendCategory; thisWeek: string; lastWeek: string; direction: 'up' | 'down' | 'flat' }[];
+    recentSpends: { amount: string; category: SpendCategory; note: string | null; occurredAt: string }[];
+  };
+  summary30d: {
+    windowDays: number;
+    totalSpent: string;
+    byCategory: { category: SpendCategory; total: string; count: number }[];
+    entryCount: number;
+  };
+}
+
 export interface AccountView {
   id: string;
   owner: string;
@@ -93,6 +174,11 @@ export interface AccountView {
   currency: string;
   openedAt: string;
   summary: AccountSummary;
+  habits?: HabitsHome;
+  moneyProfile?: MoneyProfile;
+  finance?: FinanceSnapshot;
+  activityFeed?: ActivityFeedRow[];
+  insights?: PersonalInsights;
   transfers: AccountActivity[];
 }
 
@@ -145,6 +231,35 @@ export interface PracticeBootstrap {
   focusAccountId: string;
   stoppedTransferId: string;
   hint: string;
+}
+
+export type RequestStatus = 'PENDING' | 'PAID' | 'DECLINED' | 'CANCELLED';
+
+export interface PaymentRequestView {
+  id: string;
+  requesterAccountId: string;
+  payerAccountId: string;
+  requester: AccountRef;
+  payer: AccountRef;
+  amountMinor: number;
+  amount: string;
+  currency: string;
+  memo: string | null;
+  status: RequestStatus;
+  transferId: string | null;
+  declinedAttempts: number;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+export interface PayRequestResult {
+  request: PaymentRequestView;
+  transfer: {
+    id: string;
+    status: 'COMPLETED' | 'REJECTED';
+    rejectionReason: string | null;
+    declineExplanation: string | null;
+  };
 }
 
 export interface BootstrapResponse {
@@ -234,16 +349,17 @@ export const api = {
       headers: { 'Idempotency-Key': idempotencyKey() },
       body: JSON.stringify({ amountMinor }),
     }),
+  /** Pass the same key when retrying after a network error so the payment can only happen once. */
   transfer: (body: {
     sourceAccountId: string;
     destinationAccountId: string;
     amountMinor: number;
     currency: string;
     memo?: string;
-  }) =>
+  }, key: string = idempotencyKey()) =>
     call<{ id: string; status: string; rejectionReason?: string | null }>('/api/transfers', {
       method: 'POST',
-      headers: { 'Idempotency-Key': idempotencyKey() },
+      headers: { 'Idempotency-Key': key },
       body: JSON.stringify(body),
     }),
   peers: (accountId: string) =>
@@ -272,6 +388,59 @@ export const api = {
     call<CorridorResult>('/api/bank/outbound', { method: 'POST', body: JSON.stringify({ accountId }) }),
   account: (id: string, limit = 50) =>
     call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}&limit=${limit}`),
+  habits: (accountId: string) =>
+    call<HabitsHome>(`/api/accounts/${encodeURIComponent(accountId)}/habits`),
+  recordSpend: (accountId: string, body: { amountMinor: number; category: SpendCategory; note?: string }) =>
+    call<{ id: string }>(`/api/accounts/${encodeURIComponent(accountId)}/spends`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  recordIncome: (accountId: string, body: { amountMinor: number; source: IncomeSource; note?: string }) =>
+    call<{ id: string }>(`/api/accounts/${encodeURIComponent(accountId)}/incomes`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateFinance: (
+    accountId: string,
+    body: {
+      walletCashMinor?: number | null;
+      creditOwedMinor?: number;
+      spendLogsAffectWallet?: boolean;
+    },
+  ) =>
+    call<{ profile: MoneyProfile; finance: FinanceSnapshot }>(
+      `/api/accounts/${encodeURIComponent(accountId)}/finance`,
+      { method: 'PATCH', body: JSON.stringify(body) },
+    ),
+  rolloverFinancePeriod: (accountId: string) =>
+    call<{ profile: MoneyProfile; finance: FinanceSnapshot; message: string }>(
+      `/api/accounts/${encodeURIComponent(accountId)}/finance/rollover`,
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
+  requests: (accountId: string) =>
+    call<{ incoming: PaymentRequestView[]; outgoing: PaymentRequestView[] }>(
+      `/api/requests?accountId=${encodeURIComponent(accountId)}`,
+    ),
+  createRequests: (body: {
+    requesterAccountId: string;
+    memo?: string;
+    payers: { accountId: string; amountMinor: number }[];
+  }) => call<{ requests: PaymentRequestView[] }>('/api/requests', { method: 'POST', body: JSON.stringify(body) }),
+  payRequest: (requestId: string, accountId: string) =>
+    call<PayRequestResult>(`/api/requests/${encodeURIComponent(requestId)}/pay`, {
+      method: 'POST',
+      body: JSON.stringify({ accountId }),
+    }),
+  declineRequest: (requestId: string, accountId: string) =>
+    call<{ request: PaymentRequestView }>(`/api/requests/${encodeURIComponent(requestId)}/decline`, {
+      method: 'POST',
+      body: JSON.stringify({ accountId }),
+    }),
+  cancelRequest: (requestId: string, accountId: string) =>
+    call<{ request: PaymentRequestView }>(`/api/requests/${encodeURIComponent(requestId)}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ accountId }),
+    }),
   entries: (accountId: string, limit = 50) =>
     call<{ accountId: string; currency: string; entries: LedgerEntryRow[] }>(
       `/api/accounts/${encodeURIComponent(accountId)}/entries?limit=${limit}`,

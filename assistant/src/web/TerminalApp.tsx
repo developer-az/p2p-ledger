@@ -2,6 +2,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -14,15 +15,20 @@ import {
   type AccountActivity,
   type AccountRef,
   type AccountView,
+  type ActivityFeedKind,
   type BootstrapResponse,
   type Integrity,
   type PaymentTrail,
   type RaceResult,
   type ReplayResult,
   type TamperReport,
+  SPEND_CATEGORIES,
   type Turn,
 } from './api.js';
 import { OFFLINE_BOOTSTRAP } from './practice-fixture.js';
+import { LogSpendForm } from './LogSpendForm.js';
+import { LogIncomeForm } from './LogIncomeForm.js';
+import { MoneyPeriodPanel } from './MoneyPeriodPanel.js';
 import { PeerPanel } from './PeerPanel.js';
 import { personName } from './person-name.js';
 import { parseTerminalInput, splitAmountsMinor } from './terminal-command.js';
@@ -94,6 +100,7 @@ export function TerminalApp() {
   const [hiddenTransferIds, setHiddenTransferIds] = useState<Set<string>>(() => new Set());
   const [pendingHideId, setPendingHideId] = useState<string | null>(null);
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false);
+  const [feedFilter, setFeedFilter] = useState<'all' | 'logged' | 'income' | 'ledger'>('all');
 
   const append = useCallback((line: string) => {
     const ts = new Date().toISOString().slice(11, 19);
@@ -132,6 +139,28 @@ export function TerminalApp() {
   }, []);
 
   const chatMeta = boot.chat ?? { provider: 'gemini', configured: false };
+
+  async function runLogSpend(amountMinor: number, category: string, note: string) {
+    if (!account) return;
+    if (!SPEND_CATEGORIES.includes(category as typeof SPEND_CATEGORIES[number])) {
+      append(`ERR category — use: ${SPEND_CATEGORIES.join(', ')}`);
+      return;
+    }
+    setBusy('log');
+    try {
+      await api.recordSpend(account.id, {
+        amountMinor,
+        category: category as typeof SPEND_CATEGORIES[number],
+        note: note || undefined,
+      });
+      append(`LOG ${(amountMinor / 100).toFixed(2)} ${category}${note ? ` ${note}` : ''}`);
+      await loadAccount(account.id);
+    } catch (e) {
+      append(`ERR ${(e as Error).message}`);
+    } finally {
+      setBusy('');
+    }
+  }
 
   async function loadAccount(id: string) {
     setBusy('SYNC');
@@ -248,7 +277,7 @@ export function TerminalApp() {
       const result = await api.integrity();
       setIntegrity(result);
       if (result.auditAvailable === false || result.source === 'audit-unavailable') {
-        append('AUDIT pending on ledger host (404) — balances in WATCH/BLOTTER are still live Postgres');
+        append('AUDIT pending on ledger host (404) — balances in SNAPSHOT/ACTIVITY are still live Postgres');
       } else {
         append(`AUDIT live balanced=${result.balanced} entries=${result.entryCount}`);
       }
@@ -535,7 +564,7 @@ export function TerminalApp() {
     const action = parseTerminalInput(raw);
     switch (action.kind) {
       case 'help':
-        append('CMD F1 help | F2 onboard | bank in/out | pay sam 10 lunch | split 60 sam jordan lunch');
+        append('CMD log 12 dining · pay sam 10 lunch · F2 onboard · ask in ASK panel');
         return;
       case 'bank-in':
         void runBankInbound();
@@ -577,6 +606,9 @@ export function TerminalApp() {
       case 'refresh':
         if (account) void loadAccount(account.id);
         return;
+      case 'log':
+        void runLogSpend(action.amountMinor, action.category, action.note);
+        return;
       case 'chat':
         if (!action.text) return;
         if (account) void sendChat(action.text);
@@ -608,6 +640,29 @@ export function TerminalApp() {
       || t.counterparty.startsWith(selectedPeer.owner.split('-')[0] ?? ''),
     )
     : allTransfers).filter((t) => !hiddenTransferIds.has(t.transferId));
+
+  const visibleTransferIds = useMemo(() => new Set(transfers.map((t) => t.transferId)), [transfers]);
+
+  const displayFeed = useMemo(() => {
+    const feed = view?.activityFeed ?? [];
+    return feed.filter((row) => {
+      if (feedFilter === 'logged') return row.kind === 'logged';
+      if (feedFilter === 'income') return row.kind === 'logged_income' || row.kind === 'income';
+      if (row.kind === 'logged' || row.kind === 'logged_income') {
+        return feedFilter === 'all';
+      }
+      if (!row.transferId || !visibleTransferIds.has(row.transferId)) return false;
+      return feedFilter === 'all' || feedFilter === 'ledger';
+    });
+  }, [view?.activityFeed, feedFilter, visibleTransferIds]);
+
+  function feedKindClass(kind: ActivityFeedKind): string {
+    if (kind === 'logged') return 'bb-feed-logged';
+    if (kind === 'logged_income') return 'bb-feed-income-log';
+    if (kind === 'income') return 'bb-feed-in';
+    if (kind === 'failed') return 'bb-feed-fail';
+    return 'bb-feed-out';
+  }
 
   function hideTransferFromBlotter(transferId: string) {
     if (!account) return;
@@ -645,7 +700,7 @@ export function TerminalApp() {
   return (
     <div className="bb" onKeyDown={onKeyDown}>
       <header className="bb-top">
-        <span className="bb-logo">P2P</span>
+        <span className="bb-logo">HABIT</span>
         <span className="bb-ticker">
           <span className={boot.live ? 'bb-up' : 'bb-down'}>{liveTag}</span>
           <span>{auditTag}</span>
@@ -658,18 +713,19 @@ export function TerminalApp() {
           )}
           <span className="bb-dim">{clock.toLocaleTimeString()}</span>
         </span>
-        <span className="bb-fn">F1 HELP · F2 ONBOARD · F3 AUDIT · F4 RACE</span>
+        <span className="bb-fn">F1 HELP · F2 DEMO · F3 LEDGER CHECK</span>
         <a className="bb-dim" href={REPO} target="_blank" rel="noreferrer">SRC</a>
       </header>
 
       {!account && (
         <div className="bb-landing">
-          <p>This is a real double-entry ledger on PostgreSQL — not a slideshow.</p>
+          <p>Log what you spend. Settle up with friends on the same ledger when cents must match.</p>
           <p className="bb-dim">
+            No bank link — you add habit lines with <strong>LOG</strong> or CMD <code>log 15 groceries</code>.
             <BbLink onClick={() => void onboard()} disabled={!boot.live || busy !== ''}>ONBOARD</BbLink>
-            loads three treasury accounts, deposits, transfers, and one declined payment you can inspect.
+            for a demo household;
             <BbLink onClick={() => void openWallet('treasurer', true)} disabled={!boot.live || busy !== ''}>OPEN</BbLink>
-            creates your wallet with a $500 simulated bank deposit.
+            for a live wallet + welcome deposit.
           </p>
           {saved.length > 0 && (
             <p>
@@ -690,16 +746,35 @@ export function TerminalApp() {
       {account && view && (
         <div className="bb-grid">
           <section className="bb-panel bb-watch">
-            <h2 className="bb-hd">WATCH</h2>
+            <h2 className="bb-hd">SNAPSHOT <span className="bb-hd-sub">your money picture</span></h2>
             <div className="bb-panel-main">
-              <table className="bb-tbl bb-summary-tbl">
-                <tbody>
-                  <tr><td className="bb-k">BAL</td><td className="bb-hi">{view.balance}</td></tr>
-                  <tr><td className="bb-k">OWNER</td><td>{personName(view.owner)}</td></tr>
-                  <tr><td className="bb-k">30D</td><td className="bb-dim">out {view.summary.sent} · dep {view.summary.deposited} · in {view.summary.received}</td></tr>
-                </tbody>
-              </table>
-              <h3 className="bb-subhd">PEERS</h3>
+              {view.finance && view.moneyProfile && (
+                <MoneyPeriodPanel
+                  accountId={account.id}
+                  profile={view.moneyProfile}
+                  finance={view.finance}
+                  busy={busy !== ''}
+                  onUpdated={() => void loadAccount(account.id)}
+                />
+              )}
+              {view.insights && (
+                <ul className="bb-insight-list bb-pad">
+                  {view.insights.bullets.map((line, i) => (
+                    <li key={i}>{line}</li>
+                  ))}
+                </ul>
+              )}
+              <LogIncomeForm
+                accountId={account.id}
+                busy={busy !== ''}
+                onLogged={() => void loadAccount(account.id)}
+              />
+              <LogSpendForm
+                accountId={account.id}
+                busy={busy !== ''}
+                onLogged={() => void loadAccount(account.id)}
+              />
+              <h3 className="bb-subhd">Settle with someone</h3>
               {peers.length === 0
                 ? <p className="bb-dim bb-pad">None yet — F2 ONBOARD or ACH IN.</p>
                 : (
@@ -732,7 +807,7 @@ export function TerminalApp() {
               )}
             </div>
             <div className="bb-watch-dock">
-              <p className="bb-dock-label">BANK &amp; ACTIONS</p>
+              <p className="bb-dock-label">Advanced · demo ledger</p>
               <div className="bb-dock-row">
                 <BbLink onClick={() => void runBankInbound()} disabled={busy !== ''}>ACH IN</BbLink>
                 <BbLink onClick={() => void runBankOutbound()} disabled={busy !== ''}>ACH OUT</BbLink>
@@ -755,39 +830,45 @@ export function TerminalApp() {
           </section>
 
           <section className="bb-panel bb-blotter">
-            <h2 className="bb-hd">BLOTTER{selectedPeer ? ` · ${personName(selectedPeer.owner)}` : ''}</h2>
+            <h2 className="bb-hd">
+              ACTIVITY
+              <span className="bb-hd-sub">logs + ledger{selectedPeer ? ` · ${personName(selectedPeer.owner)}` : ''}</span>
+            </h2>
+            <div className="bb-feed-filters bb-pad">
+              <button type="button" className={`bb-btn-chip${feedFilter === 'all' ? ' bb-btn-chip-on' : ''}`} onClick={() => setFeedFilter('all')}>All</button>
+              <button type="button" className={`bb-btn-chip${feedFilter === 'logged' ? ' bb-btn-chip-on' : ''}`} onClick={() => setFeedFilter('logged')}>Spending</button>
+              <button type="button" className={`bb-btn-chip${feedFilter === 'income' ? ' bb-btn-chip-on' : ''}`} onClick={() => setFeedFilter('income')}>Income</button>
+              <button type="button" className={`bb-btn-chip${feedFilter === 'ledger' ? ' bb-btn-chip-on' : ''}`} onClick={() => setFeedFilter('ledger')}>Ledger only</button>
+            </div>
             <div className="bb-panel-main">
             <table className="bb-tbl bb-blotter-tbl">
               <thead>
                 <tr>
-                  <th>TIME</th>
-                  <th>MEMO</th>
-                  <th>CP</th>
-                  <th>STS</th>
+                  <th>WHEN</th>
+                  <th>TYPE</th>
+                  <th>WHAT</th>
                   <th className="bb-r">AMT</th>
                 </tr>
               </thead>
               <tbody>
-                {transfers.length === 0 && (
-                  <tr><td colSpan={5} className="bb-dim">No movements — :deposit 500 or F2 ONBOARD</td></tr>
+                {displayFeed.length === 0 && (
+                  <tr><td colSpan={4} className="bb-dim">Nothing here — log a spend above or run F2 ONBOARD for demo payments.</td></tr>
                 )}
-                {transfers.map((t) => (
-                  <Fragment key={t.transferId}>
+                {displayFeed.map((row) => (
+                  <Fragment key={row.id}>
                     <tr
-                      className={selectedPay === t.transferId ? 'bb-row-on' : undefined}
-                      onClick={() => void pickPayment(t.transferId)}
+                      className={`${feedKindClass(row.kind)}${selectedPay === row.transferId ? ' bb-row-on' : ''}`}
+                      onClick={() => row.transferId && void pickPayment(row.transferId)}
+                      style={{ cursor: row.transferId ? 'pointer' : 'default' }}
                     >
-                      <td>{when(t.createdAt)}</td>
-                      <td>{t.memo || '—'}</td>
-                      <td>{t.direction === 'deposit' ? 'BANK' : personName(t.counterparty)}</td>
-                      <td title={t.declineExplanation ?? t.declineReason ?? undefined}>
-                        {t.status === 'REJECTED' ? `REJ${t.declineReason ? `·${t.declineReason.slice(0, 12)}` : ''}` : 'OK'}
-                      </td>
-                      <td className="bb-r">{t.amount}</td>
+                      <td>{when(row.occurredAt)}</td>
+                      <td>{row.label}</td>
+                      <td>{row.detail}</td>
+                      <td className="bb-r">{row.amount}</td>
                     </tr>
-                    {selectedPay === t.transferId && trail && (
+                    {row.transferId && selectedPay === row.transferId && trail && (
                       <tr className="bb-detail-row">
-                        <td colSpan={5}>
+                        <td colSpan={4}>
                           <div className="bb-detail bb-detail-inline">
                             <p className="bb-mono">{trail.from} → {trail.to} · {trail.amount} · {trail.status}</p>
                             {trail.status === 'REJECTED' && trail.decline && (
@@ -804,14 +885,14 @@ export function TerminalApp() {
                             <p className="bb-actions">
                               {trail.audited && (
                                 <>
-                                  <BbLink onClick={() => account && void api.replay(account.id, t.transferId).then((r) => {
+                                  <BbLink onClick={() => account && row.transferId && void api.replay(account.id, row.transferId).then((r) => {
                                     setReplay(r);
                                     append(`REPLAY ${r.httpStatus}`);
                                   })} disabled={busy !== ''}>REPLAY</BbLink>
                                   {trail.status === 'COMPLETED' && (
                                     <>
                                       {' · '}
-                                      <BbLink onClick={() => account && void api.tamper(account.id, t.transferId).then((r) => {
+                                      <BbLink onClick={() => account && row.transferId && void api.tamper(account.id, row.transferId).then((r) => {
                                         setTamper(r);
                                         append('TAMPER checks');
                                       })} disabled={busy !== ''}>TAMPER</BbLink>
@@ -820,11 +901,11 @@ export function TerminalApp() {
                                   {' · '}
                                 </>
                               )}
-                              <BbLink onClick={() => requestHideTransfer(t.transferId)} disabled={busy !== ''}>HIDE</BbLink>
+                              <BbLink onClick={() => row.transferId && requestHideTransfer(row.transferId)} disabled={busy !== ''}>HIDE</BbLink>
                             </p>
-                            {pendingHideId === t.transferId && (
+                            {row.transferId && pendingHideId === row.transferId && (
                               <div className="bb-confirm">
-                                <p>Hide this line from your blotter? On a real ledger you could never delete money — only append corrections.</p>
+                                <p>Hide this ledger line from your view? Real ledgers stay append-only — this only affects your screen.</p>
                                 <label className="bb-check">
                                   <input
                                     type="checkbox"
@@ -856,9 +937,13 @@ export function TerminalApp() {
           </section>
 
           <section className="bb-panel bb-audit">
-            <h2 className="bb-hd">AUDIT / MSG</h2>
+            <h2 className="bb-hd">ASK <span className="bb-hd-sub">insight, not sales pitches</span></h2>
             <div className="bb-panel-main bb-audit-scroll">
-            <BbLink onClick={() => void runIntegrity()} disabled={busy !== ''}>CHECK ALL ACCOUNTS (F3)</BbLink>
+            <p className="bb-dim bb-pad">Ask about habits, income, or a payment. Answers use your logs and ledger data — not bank marketing.</p>
+            <details className="bb-audit-tech bb-pad">
+              <summary>Ledger integrity check (F3)</summary>
+              <BbLink onClick={() => void runIntegrity()} disabled={busy !== ''}>Run company-wide check</BbLink>
+            </details>
             {integrity && (
               <div className="bb-audit-body">
                 {integrity.source === 'audit-unavailable' || integrity.auditAvailable === false ? (
@@ -874,7 +959,7 @@ export function TerminalApp() {
                       <summary>Technical details</summary>
                       <pre className="bb-pre">{integrityLegend(integrity).join('\n')}</pre>
                     </details>
-                    <p className="bb-dim">This checks the whole company ledger — WATCH above is only your wallet.</p>
+                    <p className="bb-dim">This checks the whole company ledger — SNAPSHOT is only your wallet.</p>
                   </>
                 )}
               </div>

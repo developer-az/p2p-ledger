@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/server/app.js';
 import type { Account, LedgerAuditor, LedgerEntry, LedgerReader, LedgerWriter, Transfer, TransferRequest } from '../src/server/ledger.js';
+import { InMemorySpendLogStore } from '../src/server/spend-log.js';
 import { CompositeLedger, PracticeLedger } from '../src/server/practice-ledger.js';
 import { ScriptedProvider } from '../src/server/providers/scripted.js';
 
@@ -100,6 +101,7 @@ function appWith(ledger: MemoryLedger) {
   return createApp({
     ledger: new CompositeLedger(ledger, practice, async () => true),
     practice,
+    spendLogs: new InMemorySpendLogStore(),
     liveLedger: ledger,
     isLiveLedgerUp: async () => true,
     provider: () => new ScriptedProvider([{ answer: 'ok' }]),

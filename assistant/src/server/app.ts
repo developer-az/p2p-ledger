@@ -9,7 +9,7 @@ import { answerFromLedger } from './fallback.js';
 import { LedgerError, type LedgerAuditor, type LedgerReader, type LedgerWriter } from './ledger.js';
 import { isModelOutage } from './providers/retry.js';
 import type { LlmProvider } from './providers/types.js';
-import type { CompositeLedger, PracticeLedger } from './practice-ledger.js';
+import { PRACTICE_ALEX, PRACTICE_JORDAN, PRACTICE_SAM, type CompositeLedger, type PracticeLedger } from './practice-ledger.js';
 import { LEDGER_CAPABILITIES } from './personas.js';
 import { formatLedgerStatement } from './statement-export.js';
 import {
@@ -19,7 +19,23 @@ import {
   welcomeBankPackage,
 } from './bank-sim.js';
 import { peerLedgerView } from './peer-ledger.js';
+import { buildActivityFeed, buildPersonalInsights } from './money-insights.js';
+import { buildHabitsHome, SPEND_CATEGORIES, type SpendLogStore } from './spend-log.js';
+import {
+  buildFinanceSnapshot,
+  INCOME_SOURCES,
+  InMemoryPersonalFinanceStore,
+  type PersonalFinanceStore,
+} from './personal-finance.js';
+import { formatMoney } from './money.js';
+import { databaseUrlFromEnv } from './integrity-postgres.js';
 import { loadAccountView } from './tools.js';
+import {
+  InMemoryPaymentRequestStore,
+  type PaymentRequest,
+  type PaymentRequestStore,
+} from './payment-requests.js';
+import { explainDecline } from './peer-ledger.js';
 import { providerFromEnv } from './providers/index.js';
 import { MAX_MINOR_UI } from './money.js';
 
@@ -45,8 +61,38 @@ const chatBody = z.object({
   })).min(1).max(20).refine((m) => m.at(-1)?.role === 'user', 'Last message must be from the user'),
 });
 
+const requestBody = z.object({
+  requesterAccountId: z.string().uuid(),
+  memo: z.string().max(140).optional(),
+  payers: z.array(z.object({
+    accountId: z.string().uuid(),
+    amountMinor: z.number().int().positive().max(MAX_MINOR_UI),
+  })).min(1).max(8),
+});
+const requestActorBody = z.object({ accountId: z.string().uuid() });
+
 const paymentBody = z.object({ accountId: z.string().uuid(), transferId: z.string().uuid() });
 const raceBody = z.object({ accountId: z.string().uuid(), fromAccountId: z.string().uuid() });
+
+const recordSpendBody = z.object({
+  amountMinor: z.number().int().positive().max(MAX_MINOR_UI),
+  category: z.enum(SPEND_CATEGORIES),
+  note: z.string().max(140).optional(),
+  occurredAt: z.string().datetime().optional(),
+});
+
+const financePatchBody = z.object({
+  walletCashMinor: z.number().int().min(0).max(MAX_MINOR_UI).nullable().optional(),
+  creditOwedMinor: z.number().int().min(0).max(MAX_MINOR_UI).optional(),
+  spendLogsAffectWallet: z.boolean().optional(),
+});
+
+const recordIncomeBody = z.object({
+  amountMinor: z.number().int().positive().max(MAX_MINOR_UI),
+  source: z.enum(INCOME_SOURCES),
+  note: z.string().max(140).optional(),
+  occurredAt: z.string().datetime().optional(),
+});
 
 /** Fixed-window limiter per client IP: protects the free LLM quota from one noisy visitor. */
 function rateLimiter(limit: number, windowMs: number) {
@@ -66,11 +112,18 @@ function rateLimiter(limit: number, windowMs: number) {
 export function createApp(deps: {
   ledger: CompositeLedger;
   practice: PracticeLedger;
+  spendLogs: SpendLogStore;
+  personalFinance?: PersonalFinanceStore;
+  paymentRequests?: PaymentRequestStore;
   liveLedger?: LedgerWriter & LedgerAuditor;
   isLiveLedgerUp?: () => Promise<boolean>;
   /** Tests inject a fake model; production loads Gemini/Claude on first chat only. */
   provider?: () => LlmProvider;
+  now?: () => Date;
 }) {
+  const now = deps.now ?? (() => new Date());
+  const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
+  const paymentRequests = deps.paymentRequests ?? new InMemoryPaymentRequestStore();
   const app = new Hono().basePath('/api');
   const allowChat = rateLimiter(20, 60_000);
   const allowSeed = rateLimiter(3, 60_000);
@@ -120,7 +173,9 @@ export function createApp(deps: {
         apiVersion: 'v1',
         capabilities: [...LEDGER_CAPABILITIES],
         persistence: live
-          ? 'Accounts and transfers persist in PostgreSQL (Render). Bookmark ?id= or use saved wallets below.'
+          ? `Accounts and transfers persist in PostgreSQL (Render).${
+            databaseUrlFromEnv() ? ' Habit logs persist in spend_logs on the same database.' : ''
+          } Bookmark ?id= or use saved wallets below.`
           : 'Practice mode is in-memory per server instance — use live seed or create wallet while ledger is online.',
         auditCapabilities,
       },
@@ -131,7 +186,7 @@ export function createApp(deps: {
   app.get('/accounts', async (c) => {
     const id = c.req.query('id');
     const limit = Number(c.req.query('limit') ?? '30');
-    if (id) return respondAccount(c, await accountView(deps.ledger, id, Math.min(limit, 100)));
+    if (id) return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, id, Math.min(limit, 100), now));
     const owner = c.req.query('owner');
     if (!owner) return c.json({ error: 'owner is required' }, 400);
     const accounts = await deps.ledger.accountsByOwner(owner);
@@ -194,8 +249,213 @@ export function createApp(deps: {
     }
   });
 
+  /** Adds names and display amounts so the UI never has to look accounts up one by one. */
+  async function requestView(r: PaymentRequest) {
+    const [requester, payer] = await Promise.all([
+      deps.ledger.getAccount(r.requesterAccountId),
+      deps.ledger.getAccount(r.payerAccountId),
+    ]);
+    return {
+      ...r,
+      amount: formatMoney(r.amountMinor, r.currency),
+      requester: { id: r.requesterAccountId, owner: requester?.ownerId ?? 'unknown' },
+      payer: { id: r.payerAccountId, owner: payer?.ownerId ?? 'unknown' },
+    };
+  }
+
+  app.post('/requests', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = requestBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+    const { requesterAccountId, payers, memo } = parsed.data;
+    const requester = await deps.ledger.getAccount(requesterAccountId);
+    if (!requester || requester.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const ids = payers.map((p) => p.accountId);
+    if (new Set(ids).size !== ids.length) return c.json({ error: 'Each person can be asked once per request' }, 400);
+    if (ids.includes(requesterAccountId)) return c.json({ error: 'You cannot ask yourself for money' }, 400);
+    for (const p of payers) {
+      const payer = await deps.ledger.getAccount(p.accountId);
+      if (!payer || payer.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+      if (payer.currency !== requester.currency) return c.json({ error: 'Currencies do not match' }, 400);
+    }
+    const created = [];
+    for (const p of payers) {
+      created.push(await requestView(await paymentRequests.create({
+        requesterAccountId,
+        payerAccountId: p.accountId,
+        amountMinor: p.amountMinor,
+        currency: requester.currency,
+        memo: memo ?? null,
+      }, now())));
+    }
+    return c.json({ requests: created }, 201);
+  });
+
+  /** The offline practice household starts with a few open requests so the screen is never empty. */
+  let practiceSeeded: Promise<void> | null = null;
+  function seedPracticeRequests(): Promise<void> {
+    practiceSeeded ??= (async () => {
+      if ((await paymentRequests.listFor(PRACTICE_ALEX, 1)).length > 0) return;
+      const make = (requester: string, payer: string, amountMinor: number, memo: string) =>
+        paymentRequests.create({ requesterAccountId: requester, payerAccountId: payer, amountMinor, currency: 'USD', memo }, now());
+      await make(PRACTICE_SAM, PRACTICE_ALEX, 1_850, 'Groceries run');
+      await make(PRACTICE_JORDAN, PRACTICE_ALEX, 6_000, 'Utilities share');
+      await make(PRACTICE_ALEX, PRACTICE_SAM, 3_500, 'Concert parking');
+    })();
+    return practiceSeeded;
+  }
+
+  app.get('/requests', async (c) => {
+    const accountId = c.req.query('accountId');
+    if (!accountId || !z.string().uuid().safeParse(accountId).success) {
+      return c.json({ error: 'accountId is required' }, 400);
+    }
+    if (deps.ledger.isPracticeAccount(accountId)) await seedPracticeRequests();
+    const rows = await paymentRequests.listFor(accountId, 60);
+    const views = await Promise.all(rows.map(requestView));
+    return c.json({
+      incoming: views.filter((r) => r.payerAccountId === accountId),
+      outgoing: views.filter((r) => r.requesterAccountId === accountId),
+    });
+  });
+
+  /**
+   * Pays a request from the payer's wallet. The idempotency key comes from the request itself,
+   * so a double click, a retry after a timeout, or two open tabs move the money once.
+   */
+  app.post('/requests/:id/pay', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = requestActorBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    const request = await paymentRequests.get(c.req.param('id'));
+    if (!request) return c.json({ error: 'Request not found' }, 404);
+    if (request.payerAccountId !== parsed.data.accountId) return c.json({ error: 'Only the person asked can pay this' }, 403);
+    if (request.status !== 'PENDING' && request.status !== 'PAID') {
+      return c.json({ error: `This request was ${request.status.toLowerCase()}`, request: await requestView(request) }, 409);
+    }
+    const transfer = await deps.ledger.transfer({
+      sourceAccountId: request.payerAccountId,
+      destinationAccountId: request.requesterAccountId,
+      amountMinor: request.amountMinor,
+      currency: request.currency,
+      memo: request.memo ?? 'Payment request',
+    }, `request-${request.id}-${request.declinedAttempts}`);
+    const summary = {
+      id: transfer.id,
+      status: transfer.status,
+      rejectionReason: transfer.rejectionReason,
+      declineExplanation: explainDecline(transfer.rejectionReason),
+    };
+    if (transfer.status === 'REJECTED') {
+      await paymentRequests.noteDecline(request.id);
+      return c.json({ request: await requestView((await paymentRequests.get(request.id)) ?? request), transfer: summary });
+    }
+    const resolved = await paymentRequests.resolve(request.id, 'PAID', transfer.id, now());
+    const current = resolved ?? (await paymentRequests.get(request.id)) ?? request;
+    return c.json({ request: await requestView(current), transfer: summary });
+  });
+
+  for (const [action, status, who] of [
+    ['decline', 'DECLINED', 'payerAccountId'],
+    ['cancel', 'CANCELLED', 'requesterAccountId'],
+  ] as const) {
+    app.post(`/requests/:id/${action}`, async (c) => {
+      if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+      const parsed = requestActorBody.safeParse(await c.req.json().catch(() => null));
+      if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+      const request = await paymentRequests.get(c.req.param('id'));
+      if (!request) return c.json({ error: 'Request not found' }, 404);
+      if (request[who] !== parsed.data.accountId) {
+        return c.json({ error: action === 'decline' ? 'Only the person asked can decline' : 'Only the person who asked can cancel' }, 403);
+      }
+      const resolved = await paymentRequests.resolve(request.id, status, null, now());
+      if (!resolved) return c.json({ error: `This request was already ${request.status.toLowerCase()}`, request: await requestView(request) }, 409);
+      return c.json({ request: await requestView(resolved) });
+    });
+  }
+
   // Direct links. The UI uses ?id= so a host that 404s a second path segment still reaches this app.
-  app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, c.req.param('id'))));
+  app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, c.req.param('id'), 30, now)));
+
+  app.post('/accounts/:id/spends', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const account = await deps.ledger.getAccount(accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const parsed = recordSpendBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+    const event = await deps.spendLogs.record(accountId, {
+      ...parsed.data,
+      currency: account.currency,
+      source: 'manual',
+    }, now());
+    return c.json({
+      id: event.id,
+      amountMinor: event.amountMinor,
+      category: event.category,
+      note: event.note,
+      occurredAt: event.occurredAt,
+    }, 201);
+  });
+
+  app.get('/accounts/:id/habits', async (c) => {
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const account = await deps.ledger.getAccount(accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const profile = await personalFinance.getProfile(accountId, account.currency, now());
+    return c.json(await buildHabitsHome(deps.spendLogs, accountId, now(), account.currency, profile.periodStart));
+  });
+
+  app.patch('/accounts/:id/finance', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const account = await deps.ledger.getAccount(accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const parsed = financePatchBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+    const profile = await personalFinance.updateProfile(accountId, account.currency, parsed.data, now());
+    const spends = await deps.spendLogs.list(accountId, { limit: 500 });
+    const incomes = await personalFinance.listIncome(accountId, { limit: 500 });
+    const finance = buildFinanceSnapshot(profile, formatMoney(account.balanceMinor, account.currency), spends, incomes);
+    return c.json({ profile, finance });
+  });
+
+  app.post('/accounts/:id/finance/rollover', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const account = await deps.ledger.getAccount(accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const profile = await personalFinance.startNewPeriod(accountId, account.currency, now());
+    const spends = await deps.spendLogs.list(accountId, { limit: 500 });
+    const incomes = await personalFinance.listIncome(accountId, { limit: 500 });
+    const finance = buildFinanceSnapshot(profile, formatMoney(account.balanceMinor, account.currency), spends, incomes);
+    return c.json({ profile, finance, message: 'New period started. Older logs stay in ACTIVITY; totals below are from now.' });
+  });
+
+  app.post('/accounts/:id/incomes', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const account = await deps.ledger.getAccount(accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const parsed = recordIncomeBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+    const event = await personalFinance.recordIncome(accountId, {
+      ...parsed.data,
+      currency: account.currency,
+    }, now());
+    return c.json({
+      id: event.id,
+      amountMinor: event.amountMinor,
+      source: event.source,
+      note: event.note,
+      occurredAt: event.occurredAt,
+    }, 201);
+  });
 
   app.get('/accounts/:id/entries', async (c) => {
     const id = c.req.param('id');
@@ -210,7 +470,7 @@ export function createApp(deps: {
   app.get('/accounts/:id/statement.txt', async (c) => {
     const id = c.req.param('id');
     if (!z.string().uuid().safeParse(id).success) return c.text('Invalid account id', 400);
-    const view = await accountView(deps.ledger, id, 100);
+    const view = await accountView(deps.ledger, deps.spendLogs, personalFinance, id, 100, now);
     if (!view) return c.text('Account not found', 404);
     const entries = await deps.ledger.entries(id, 200);
     const body = formatLedgerStatement(view, entries, {
@@ -233,7 +493,16 @@ export function createApp(deps: {
         error: 'The live ledger is not running. Use Alex, Sam, or Jordan below — they work without Docker. To create fresh accounts, run: docker compose up',
       }, 503);
     }
-    return c.json(await seedDemo(deps.liveLedger));
+    const seeded = await seedDemo(deps.liveLedger);
+    const [alex, sam, jordan] = seeded.accounts;
+    if (alex && sam && jordan) {
+      const ask = (requester: string, payer: string, amountMinor: number, memo: string) =>
+        paymentRequests.create({ requesterAccountId: requester, payerAccountId: payer, amountMinor, currency: 'USD', memo }, now());
+      await ask(sam.id, alex.id, 1_850, 'Groceries run');
+      await ask(jordan.id, alex.id, 6_000, 'Utilities share');
+      await ask(alex.id, sam.id, 3_500, 'Concert parking');
+    }
+    return c.json(seeded);
   });
 
   app.get('/bank/status', (c) => c.json(bankSimulatorStatus()));
@@ -343,7 +612,7 @@ export function createApp(deps: {
       const question = messages.at(-1)?.text ?? '';
       const reason = llmConfigError(e);
       return c.json({
-        ...(await answerFromLedger({ ledger: deps.ledger, accountId, question })),
+        ...(await answerFromLedger({ ledger: deps.ledger, spendLogs: deps.spendLogs, accountId, question, now })),
         route: 'ledger-fallback',
         fallbackReason: reason,
       });
@@ -353,9 +622,11 @@ export function createApp(deps: {
       return c.json(await runAssistant({
         provider,
         ledger: deps.ledger,
+        spendLogs: deps.spendLogs,
         accountId,
         messages,
         peers,
+        now,
       }));
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
@@ -364,7 +635,7 @@ export function createApp(deps: {
       const question = messages.at(-1)?.text ?? '';
       // Never 500 the UI for model/config errors — ledger tools still answer.
       return c.json({
-        ...(await answerFromLedger({ ledger: deps.ledger, accountId, question })),
+        ...(await answerFromLedger({ ledger: deps.ledger, spendLogs: deps.spendLogs, accountId, question, now })),
         route: 'ledger-fallback',
         fallbackReason: `LLM call failed (${errStatus ?? 'no status'}): ${errMsg.slice(0, 220)}`,
       });
@@ -385,9 +656,45 @@ export function createApp(deps: {
   return app;
 }
 
-async function accountView(ledger: LedgerReader, id: string, limit = 30) {
+async function accountView(
+  ledger: LedgerReader,
+  spendLogs: SpendLogStore,
+  personalFinance: PersonalFinanceStore,
+  id: string,
+  limit = 30,
+  now: () => Date,
+) {
   if (!z.string().uuid().safeParse(id).success) return null;
-  return loadAccountView(ledger, id, limit);
+  const base = await loadAccountView(ledger, id, limit);
+  if (!base) return null;
+  const profile = await personalFinance.getProfile(id, base.currency, now());
+  const habits = await buildHabitsHome(spendLogs, id, now(), base.currency, profile.periodStart);
+  const spends = await spendLogs.list(id, { limit: 80 });
+  const incomes = await personalFinance.listIncome(id, { limit: 80 });
+  const activityFeed = buildActivityFeed(
+    base.transfers,
+    spends,
+    (minor, currency) => formatMoney(minor, currency),
+    incomes,
+  );
+  const finance = buildFinanceSnapshot(profile, base.balance, spends, incomes);
+  const insights = buildPersonalInsights(base.balance, base.summary, habits, finance);
+  return {
+    ...base,
+    habits,
+    finance,
+    moneyProfile: profile,
+    activityFeed,
+    insights,
+    spendEntries: spends.map((s) => ({
+      id: s.id,
+      amount: formatMoney(s.amountMinor, s.currency),
+      amountMinor: s.amountMinor,
+      category: s.category,
+      note: s.note,
+      occurredAt: s.occurredAt,
+    })),
+  };
 }
 
 async function listPeers(ledger: CompositeLedger, accountId: string) {

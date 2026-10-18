@@ -18,9 +18,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/terminal-workstation.png" alt="P2P ledger terminal — WATCH, BLOTTER, AUDIT/MSG, and command line on PostgreSQL" width="900">
+  <img src="docs/images/settle-home.png" alt="Settle: wallet balance, requests waiting for an answer, and recent activity" width="640">
+  <img src="docs/images/settle-split-phone.png" alt="Settle on a phone: splitting a bill between friends" width="220">
 </p>
-<p align="center"><sub>Terminal workstation on live PostgreSQL · <a href="https://p2p-ledger-pi.vercel.app">open demo</a> · F2 ONBOARD to seed wallets</sub></p>
+<p align="center"><sub><strong>Settle</strong>, the app on top of the ledger: send, split bills, request money, log spending. Demo only, no real money. The original terminal lives at <code>/ops</code>.</sub></p>
 
 ---
 
@@ -29,7 +30,7 @@
 | | |
 |---|---|
 | **Problem** | P2P money needs one source of truth: correct balances under concurrency, safe retries, auditable history, explainable declines. |
-| **Approach** | `ledger-service` (Spring Boot + PostgreSQL) is the system of record. `assistant` is the product: Bloomberg-style **terminal UI**, Hono **`/api` BFF**, **simulated bank corridors**, **peer lane**, and read-only **LLM tools** on the signed-in wallet. |
+| **Approach** | `ledger-service` (Spring Boot + PostgreSQL) is the system of record. `assistant` is the product: **user-logged habits** (`spend_logs`) plus Bloomberg-style **terminal UI**, Hono **`/api` BFF**, **simulated bank corridors**, **peer settle-ups**, and read-only **LLM tools**. |
 | **Scope** | End-to-end portfolio system: Docker, native-image CI, Render + Vercel deploy path, k6 load tests, integration tests. Not a licensed bank — [SECURITY.md](docs/SECURITY.md). |
 
 ## Live surfaces
@@ -47,7 +48,7 @@ Three panes plus a fixed **CMD** bar:
 
 | Pane | Purpose |
 |------|---------|
-| **WATCH** | Balance, 30-day flow (deposits vs peer inflow), peer chips, **bank dock** (ACH IN/OUT, +DEP, export) |
+| **WATCH** | **HABITS** (weekly logged spend, quick LOG), wallet balance, peers, **bank dock** (ACH IN/OUT, +DEP, export) |
 | **BLOTTER** | Transfers; click a row to expand/collapse ledger detail |
 | **AUDIT / MSG** | Company-wide integrity (F3) and AI Q&A via CMD |
 

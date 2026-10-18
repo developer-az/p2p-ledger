@@ -1,5 +1,7 @@
 import type { AssistantReply } from './agent.js';
 import type { LedgerReader } from './ledger.js';
+import type { SpendLogStore } from './spend-log.js';
+import { InMemorySpendLogStore } from './spend-log.js';
 import type { ToolCallRecord } from './providers/types.js';
 import { executeTool, type ToolContext } from './tools.js';
 
@@ -9,11 +11,17 @@ import { executeTool, type ToolContext } from './tools.js';
  */
 export async function answerFromLedger(opts: {
   ledger: LedgerReader;
+  spendLogs?: SpendLogStore;
   accountId: string;
   question: string;
   now?: () => Date;
 }): Promise<AssistantReply> {
-  const ctx: ToolContext = { ledger: opts.ledger, accountId: opts.accountId, now: opts.now ?? (() => new Date()) };
+  const ctx: ToolContext = {
+    ledger: opts.ledger,
+    spendLogs: opts.spendLogs ?? new InMemorySpendLogStore(),
+    accountId: opts.accountId,
+    now: opts.now ?? (() => new Date()),
+  };
   const calls: ToolCallRecord[] = [];
   const call = async (tool: string, args: unknown) => {
     const start = performance.now();
@@ -68,18 +76,19 @@ export async function answerFromLedger(opts: {
     );
   }
 
-  if (/given out|give out|how much have i (given|sent|paid)|total.*sent|spent the most|spend.*money|better spend|what should i do/.test(q)) {
+  if (/habit|logged|my spend|spending this week|category|groceries|dining/.test(q) && !/sent to|peer|pay sam/.test(q)) {
+    if (/week|this week|last week/.test(q)) {
+      const story = await call('weekly_spending_story', {});
+      return finish(
+        `This week you logged ${String(story.totalThisWeek)} (${String(story.weekOverWeek)}). Last week was ${String(story.totalLastWeek)}.`,
+      );
+    }
     const days = /month/.test(q) ? 30 : daysIn(q);
-    const sum = await call('summarize_activity', { days });
-    const rows = asRows(sum.byCounterparty).filter((r) => r.sent !== '$0.00');
-    const top = rows.sort((a, b) => moneyMinor(b.sent) - moneyMinor(a.sent))[0];
-    const lines = rows.slice(0, 4).map((r) => `${r.counterparty} ${r.sent}`);
-    const advice = top
-      ? `Largest outflow to ${top.counterparty} (${top.sent}). In a real treasury run you'd set per-vendor limits and review memos weekly — here, try PEERS + BLOTTER to inspect each line.`
-      : 'No outbound P2P in this window — deposits and inbound corridors dominate.';
-    return finish(
-      `You sent ${String(sum.totalSent)} in the last ${String(sum.windowDays)} days. ${lines.length ? `By counterparty: ${lines.join(', ')}. ` : ''}${advice}`,
-    );
+    const sum = await call('summarize_spending', { days });
+    const top = asCategoryRows(sum.byCategory).slice(0, 3).map((r) => `${r.category} ${r.total}`).join(', ');
+    return finish(top
+      ? `In the last ${String(sum.windowDays)} days you logged ${String(sum.totalSpent)}. Top: ${top}.`
+      : `In the last ${String(sum.windowDays)} days you logged ${String(sum.totalSpent)}.`);
   }
 
   if (/given out|give out|how much have i (given|sent|paid)|total.*sent|spent the most|spend.*money|better spend|what should i do/.test(q)) {
@@ -89,7 +98,7 @@ export async function answerFromLedger(opts: {
     const top = rows.sort((a, b) => moneyMinor(b.sent) - moneyMinor(a.sent))[0];
     const lines = rows.slice(0, 4).map((r) => `${r.counterparty} ${r.sent}`);
     const advice = top
-      ? `Largest outflow to ${top.counterparty} (${top.sent}). In a real treasury run you'd set per-vendor limits and review memos weekly — here, try PEERS + BLOTTER to inspect each line.`
+      ? `Largest outflow to ${top.counterparty} (${top.sent}). In a real treasury run you'd set per-vendor limits and review memos weekly — here, try PEERS + ACTIVITY to inspect each line.`
       : 'No outbound P2P in this window — deposits and inbound corridors dominate.';
     return finish(
       `You sent ${String(sum.totalSent)} in the last ${String(sum.windowDays)} days. ${lines.length ? `By counterparty: ${lines.join(', ')}. ` : ''}${advice}`,
@@ -171,6 +180,10 @@ function asTransfers(value: unknown): Listed[] {
 
 function asRows(value: unknown): { counterparty: string; sent: string }[] {
   return Array.isArray(value) ? value as { counterparty: string; sent: string }[] : [];
+}
+
+function asCategoryRows(value: unknown): { category: string; total: string }[] {
+  return Array.isArray(value) ? value as { category: string; total: string }[] : [];
 }
 
 function moneyMinor(display: string): number {

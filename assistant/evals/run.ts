@@ -3,6 +3,7 @@ import { runAssistant, type AssistantReply } from '../src/server/agent.js';
 import { providerFromEnv } from '../src/server/providers/index.js';
 import { isLongQuotaWait, isModelOutage, isNetworkError, retryableStatus, retryDelayMs } from '../src/server/providers/retry.js';
 import { CASES, type EvalCase } from './cases.js';
+import { fixtureSpendLogStore } from './spend-fixture.js';
 import { FixtureLedger, ME, NOW } from './fixture.js';
 
 if (process.env.ALLOW_LIVE_LLM_EVAL !== '1') {
@@ -41,6 +42,7 @@ function casesToRun(): EvalCase[] {
 const evalCases = casesToRun();
 const provider = providerFromEnv();
 const ledger = new FixtureLedger();
+const spendLogs = fixtureSpendLogStore();
 
 async function withRetry<T>(fn: () => Promise<T>, attempts = 2): Promise<T> {
   for (let i = 1; ; i++) {
@@ -74,7 +76,7 @@ for (const testCase of evalCases) {
     let reply: AssistantReply;
     try {
       reply = await withRetry(() => runAssistant({
-        provider, ledger, accountId: ME, now: () => NOW,
+        provider, ledger, spendLogs, accountId: ME, now: () => NOW,
         messages: [{ role: 'user', text: testCase.question }],
       }));
     } catch (e) {

@@ -43,7 +43,7 @@ export function PeerPanel({
         <button type="button" className="bb-btn-chip" disabled={busy} onClick={() => onPay('100', 'invoice')}>$100</button>
         <button type="button" className="bb-link" disabled={busy} onClick={onRaceFromPeer}>race</button>
       </p>
-      <p className="bb-dim bb-peer-hint">BLOTTER shows shared tx · CMD: pay {peer.owner.split('-')[0]} 10 lunch</p>
+      <p className="bb-dim bb-peer-hint">ACTIVITY shows shared ledger lines · CMD: pay {peer.owner.split('-')[0]} 10 lunch</p>
     </div>
   );
 }

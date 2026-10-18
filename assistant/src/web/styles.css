@@ -606,7 +606,16 @@ code { font-size: .92em; padding: 0 4px; background: var(--sunken); color: var(-
 }
 .bb-insight-list li { margin-bottom: 6px; }
 .bb-feed-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.bb-finance { border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 4px; }
+.bb-finance-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 8px; }
+.bb-finance-title { margin: 0; }
+.bb-finance-hint { margin: 4px 8px 8px; font-size: 10px; }
+.bb-finance-form { display: flex; flex-direction: column; gap: 6px; padding: 0 8px 8px; }
+.bb-finance-label { display: flex; flex-direction: column; gap: 4px; flex: 1; font-size: 10px; color: var(--muted); }
+.bb-finance-check { margin: 0 8px; font-size: 10px; line-height: 1.35; }
+.bb-finance-tbl { margin-top: 4px; }
 .bb-feed-logged td:nth-child(2) { color: #7ec8a8; }
+.bb-feed-income-log td:nth-child(2) { color: #6eb5d9; }
 .bb-feed-in td:nth-child(2) { color: var(--bb-up); }
 .bb-feed-out td:nth-child(2) { color: #c9a86c; }
 .bb-feed-fail td:nth-child(2) { color: var(--error); }

@@ -81,6 +81,38 @@ export function isSpendCategory(value: string): value is SpendCategory {
   return (SPEND_CATEGORIES as readonly string[]).includes(value);
 }
 
+export function summarizeSpendingSince(
+  entries: SpendLogEntry[],
+  sinceIso: string,
+  currency = 'USD',
+): SpendingSummary {
+  const since = Date.parse(sinceIso);
+  const recent = entries.filter((e) => Date.parse(e.occurredAt) >= since);
+  const byCat = new Map<SpendCategory, { minor: number; count: number }>();
+  let totalMinor = 0;
+  for (const e of recent) {
+    totalMinor += e.amountMinor;
+    const row = byCat.get(e.category) ?? { minor: 0, count: 0 };
+    row.minor += e.amountMinor;
+    row.count += 1;
+    byCat.set(e.category, row);
+  }
+  const byCategory = [...byCat.entries()]
+    .sort((a, b) => b[1].minor - a[1].minor)
+    .map(([category, v]) => ({
+      category,
+      total: formatMoney(v.minor, currency),
+      count: v.count,
+    }));
+  const windowDays = Math.max(1, Math.ceil((Date.now() - since) / MS_DAY));
+  return {
+    windowDays,
+    totalSpent: formatMoney(totalMinor, currency),
+    byCategory,
+    entryCount: recent.length,
+  };
+}
+
 export function summarizeSpending(entries: SpendLogEntry[], days: number, now: Date, currency = 'USD'): SpendingSummary {
   const since = now.getTime() - days * MS_DAY;
   const recent = entries.filter((e) => Date.parse(e.occurredAt) >= since);
@@ -171,11 +203,19 @@ export function weeklySpendingStory(entries: SpendLogEntry[], now: Date, currenc
   };
 }
 
-export async function buildHabitsHome(store: SpendLogStore, accountId: string, now: Date, currency = 'USD'): Promise<HabitsHome> {
+export async function buildHabitsHome(
+  store: SpendLogStore,
+  accountId: string,
+  now: Date,
+  currency = 'USD',
+  periodStart?: string,
+): Promise<HabitsHome> {
   const events = await store.list(accountId, { limit: 500 });
   return {
     weekly: weeklySpendingStory(events, now, currency),
-    summary30d: summarizeSpending(events, 30, now, currency),
+    summary30d: periodStart
+      ? summarizeSpendingSince(events, periodStart, currency)
+      : summarizeSpending(events, 30, now, currency),
   };
 }
 

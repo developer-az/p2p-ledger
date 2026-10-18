@@ -100,7 +100,10 @@ export const SPEND_CATEGORIES: SpendCategory[] = [
   'dining', 'groceries', 'transport', 'entertainment', 'housing', 'shopping', 'health', 'other',
 ];
 
-export type ActivityFeedKind = 'logged' | 'income' | 'paid' | 'failed';
+export type ActivityFeedKind = 'logged' | 'logged_income' | 'income' | 'paid' | 'failed';
+
+export const INCOME_SOURCES = ['salary', 'freelance', 'gift', 'refund', 'other'] as const;
+export type IncomeSource = (typeof INCOME_SOURCES)[number];
 
 export interface ActivityFeedRow {
   id: string;
@@ -111,7 +114,32 @@ export interface ActivityFeedRow {
   occurredAt: string;
   transferId?: string;
   spendId?: string;
+  incomeId?: string;
   category?: string;
+}
+
+export interface MoneyProfile {
+  accountId: string;
+  currency: string;
+  periodLabel: string;
+  periodStart: string;
+  walletCashMinor: number | null;
+  creditOwedMinor: number;
+  spendLogsAffectWallet: boolean;
+  updatedAt: string;
+}
+
+export interface FinanceSnapshot {
+  periodLabel: string;
+  periodStart: string;
+  walletCash: string | null;
+  creditOwed: string;
+  netCash: string | null;
+  ledgerWallet: string;
+  spendLogsAffectWallet: boolean;
+  periodTotals: { income: string; spent: string };
+  projectedCash: string | null;
+  bullets: string[];
 }
 
 export interface PersonalInsights {
@@ -147,6 +175,8 @@ export interface AccountView {
   openedAt: string;
   summary: AccountSummary;
   habits?: HabitsHome;
+  moneyProfile?: MoneyProfile;
+  finance?: FinanceSnapshot;
   activityFeed?: ActivityFeedRow[];
   insights?: PersonalInsights;
   transfers: AccountActivity[];
@@ -335,6 +365,28 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  recordIncome: (accountId: string, body: { amountMinor: number; source: IncomeSource; note?: string }) =>
+    call<{ id: string }>(`/api/accounts/${encodeURIComponent(accountId)}/incomes`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateFinance: (
+    accountId: string,
+    body: {
+      walletCashMinor?: number | null;
+      creditOwedMinor?: number;
+      spendLogsAffectWallet?: boolean;
+    },
+  ) =>
+    call<{ profile: MoneyProfile; finance: FinanceSnapshot }>(
+      `/api/accounts/${encodeURIComponent(accountId)}/finance`,
+      { method: 'PATCH', body: JSON.stringify(body) },
+    ),
+  rolloverFinancePeriod: (accountId: string) =>
+    call<{ profile: MoneyProfile; finance: FinanceSnapshot; message: string }>(
+      `/api/accounts/${encodeURIComponent(accountId)}/finance/rollover`,
+      { method: 'POST', body: JSON.stringify({}) },
+    ),
   entries: (accountId: string, limit = 50) =>
     call<{ accountId: string; currency: string; entries: LedgerEntryRow[] }>(
       `/api/accounts/${encodeURIComponent(accountId)}/entries?limit=${limit}`,

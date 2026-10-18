@@ -592,6 +592,24 @@ code { font-size: .92em; padding: 0 4px; background: var(--sunken); color: var(-
   border-bottom: 1px solid var(--line);
   letter-spacing: 0.06em;
 }
+.bb-hd-sub {
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0;
+  margin-left: 6px;
+}
+.bb-insight-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.bb-insight-list li { margin-bottom: 6px; }
+.bb-feed-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.bb-feed-logged td:nth-child(2) { color: #7ec8a8; }
+.bb-feed-in td:nth-child(2) { color: var(--bb-up); }
+.bb-feed-out td:nth-child(2) { color: #c9a86c; }
+.bb-feed-fail td:nth-child(2) { color: var(--error); }
 .bb-subhd {
   margin: 8px 8px 4px;
   font-size: 10px;

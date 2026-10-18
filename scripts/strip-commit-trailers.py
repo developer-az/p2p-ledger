@@ -6,19 +6,16 @@ Or install git-filter-repo and use in --commit-callback.
 """
 from __future__ import annotations
 
+import re
 import sys
 
-DROP_PREFIXES = (
-    "Co-Authored-By:",
-    "Claude-Session:",
-)
+_TRAILER_LINE = re.compile(r"^\s*(co-authored-by|claude-session):", re.IGNORECASE)
 
 
 def clean_message(raw: str) -> str:
-    lines = raw.splitlines()
     kept: list[str] = []
-    for line in lines:
-        if any(line.startswith(p) for p in DROP_PREFIXES):
+    for line in raw.splitlines():
+        if _TRAILER_LINE.match(line):
             continue
         kept.append(line)
     while kept and kept[-1] == "":

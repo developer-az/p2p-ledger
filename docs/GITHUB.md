@@ -47,7 +47,7 @@ If keep-warm was **skipped** before, it was because this variable was empty. The
 
 Some AI coding tools append **git commit trailers** such as `Co-Authored-By:` and `Claude-Session:` (a link to a Claude Code session). Those lines are stored in **git history forever** on GitHub until you rewrite history. They do not expose your full chat by default, but the session URL is still metadata you may not want public.
 
-**In this repo (as of last scan):** five early commits on `main` contain the same `Claude-Session:` URL. No other branches add new ones unless your tool keeps appending them.
+After a history rewrite, `main` should not contain those trailers. Re-check with the commands in step 3 below before merging.
 
 ### Stop future commits
 
@@ -72,6 +72,7 @@ git filter-branch -f --msg-filter "python scripts/strip-commit-trailers.py" -- -
 ```bash
 git log --all --grep="Claude-Session" --oneline   # should print nothing
 git log --all --grep="Co-Authored-By: Claude" --oneline
+git log --all --grep="Co-authored-by: Cursor" -i --oneline   # should print nothing
 ```
 
 4. Push (requires permission on protected `main`):

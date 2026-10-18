@@ -20,9 +20,11 @@ import {
   type RaceResult,
   type ReplayResult,
   type TamperReport,
+  SPEND_CATEGORIES,
   type Turn,
 } from './api.js';
 import { OFFLINE_BOOTSTRAP } from './practice-fixture.js';
+import { HabitsPanel } from './HabitsPanel.js';
 import { PeerPanel } from './PeerPanel.js';
 import { personName } from './person-name.js';
 import { parseTerminalInput, splitAmountsMinor } from './terminal-command.js';
@@ -132,6 +134,28 @@ export function TerminalApp() {
   }, []);
 
   const chatMeta = boot.chat ?? { provider: 'gemini', configured: false };
+
+  async function runLogSpend(amountMinor: number, category: string, note: string) {
+    if (!account) return;
+    if (!SPEND_CATEGORIES.includes(category as typeof SPEND_CATEGORIES[number])) {
+      append(`ERR category — use: ${SPEND_CATEGORIES.join(', ')}`);
+      return;
+    }
+    setBusy('log');
+    try {
+      await api.recordSpend(account.id, {
+        amountMinor,
+        category: category as typeof SPEND_CATEGORIES[number],
+        note: note || undefined,
+      });
+      append(`LOG ${(amountMinor / 100).toFixed(2)} ${category}${note ? ` ${note}` : ''}`);
+      await loadAccount(account.id);
+    } catch (e) {
+      append(`ERR ${(e as Error).message}`);
+    } finally {
+      setBusy('');
+    }
+  }
 
   async function loadAccount(id: string) {
     setBusy('SYNC');
@@ -535,7 +559,7 @@ export function TerminalApp() {
     const action = parseTerminalInput(raw);
     switch (action.kind) {
       case 'help':
-        append('CMD F1 help | F2 onboard | bank in/out | pay sam 10 lunch | split 60 sam jordan lunch');
+        append('CMD F1 help | F2 onboard | log 12 dining lunch | pay sam 10 lunch | bank in/out');
         return;
       case 'bank-in':
         void runBankInbound();
@@ -576,6 +600,9 @@ export function TerminalApp() {
         return;
       case 'refresh':
         if (account) void loadAccount(account.id);
+        return;
+      case 'log':
+        void runLogSpend(action.amountMinor, action.category, action.note);
         return;
       case 'chat':
         if (!action.text) return;
@@ -664,12 +691,13 @@ export function TerminalApp() {
 
       {!account && (
         <div className="bb-landing">
-          <p>This is a real double-entry ledger on PostgreSQL — not a slideshow.</p>
+          <p>Log what you spend. Settle up with friends on the same ledger when cents must match.</p>
           <p className="bb-dim">
+            No bank link — you add habit lines with <strong>LOG</strong> or CMD <code>log 15 groceries</code>.
             <BbLink onClick={() => void onboard()} disabled={!boot.live || busy !== ''}>ONBOARD</BbLink>
-            loads three treasury accounts, deposits, transfers, and one declined payment you can inspect.
+            for a demo household;
             <BbLink onClick={() => void openWallet('treasurer', true)} disabled={!boot.live || busy !== ''}>OPEN</BbLink>
-            creates your wallet with a $500 simulated bank deposit.
+            for a live wallet + welcome deposit.
           </p>
           {saved.length > 0 && (
             <p>
@@ -692,6 +720,18 @@ export function TerminalApp() {
           <section className="bb-panel bb-watch">
             <h2 className="bb-hd">WATCH</h2>
             <div className="bb-panel-main">
+              {view.habits && (
+                <>
+                  <h3 className="bb-subhd">HABITS</h3>
+                  <HabitsPanel
+                    accountId={account.id}
+                    habits={view.habits}
+                    busy={busy !== ''}
+                    onLogged={() => void loadAccount(account.id)}
+                  />
+                </>
+              )}
+              <h3 className="bb-subhd">WALLET</h3>
               <table className="bb-tbl bb-summary-tbl">
                 <tbody>
                   <tr><td className="bb-k">BAL</td><td className="bb-hi">{view.balance}</td></tr>

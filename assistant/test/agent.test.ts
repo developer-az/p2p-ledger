@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_STEPS, runAssistant } from '../src/server/agent.js';
 import { ScriptedProvider } from '../src/server/providers/scripted.js';
+import { fixtureSpendLogStore } from '../evals/spend-fixture.js';
 import { FixtureLedger, ME, NOW } from '../evals/fixture.js';
 import { amountsGrounded } from '../evals/graders.js';
 
 const ledger = new FixtureLedger();
 const ask = (provider: ScriptedProvider, text = 'hi') =>
-  runAssistant({ provider, ledger, accountId: ME, now: () => NOW, messages: [{ role: 'user', text }] });
+  runAssistant({
+    provider,
+    ledger,
+    spendLogs: fixtureSpendLogStore(),
+    accountId: ME,
+    now: () => NOW,
+    messages: [{ role: 'user', text }],
+  });
 
 describe('runAssistant', () => {
   it('runs tool calls and returns the answer with a trace', async () => {

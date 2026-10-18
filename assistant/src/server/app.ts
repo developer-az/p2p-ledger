@@ -19,6 +19,8 @@ import {
   welcomeBankPackage,
 } from './bank-sim.js';
 import { peerLedgerView } from './peer-ledger.js';
+import { buildHabitsHome, SPEND_CATEGORIES, type SpendLogStore } from './spend-log.js';
+import { databaseUrlFromEnv } from './integrity-postgres.js';
 import { loadAccountView } from './tools.js';
 import { providerFromEnv } from './providers/index.js';
 import { MAX_MINOR_UI } from './money.js';
@@ -48,6 +50,13 @@ const chatBody = z.object({
 const paymentBody = z.object({ accountId: z.string().uuid(), transferId: z.string().uuid() });
 const raceBody = z.object({ accountId: z.string().uuid(), fromAccountId: z.string().uuid() });
 
+const recordSpendBody = z.object({
+  amountMinor: z.number().int().positive().max(MAX_MINOR_UI),
+  category: z.enum(SPEND_CATEGORIES),
+  note: z.string().max(140).optional(),
+  occurredAt: z.string().datetime().optional(),
+});
+
 /** Fixed-window limiter per client IP: protects the free LLM quota from one noisy visitor. */
 function rateLimiter(limit: number, windowMs: number) {
   const hits = new Map<string, { count: number; resetAt: number }>();
@@ -66,11 +75,14 @@ function rateLimiter(limit: number, windowMs: number) {
 export function createApp(deps: {
   ledger: CompositeLedger;
   practice: PracticeLedger;
+  spendLogs: SpendLogStore;
   liveLedger?: LedgerWriter & LedgerAuditor;
   isLiveLedgerUp?: () => Promise<boolean>;
   /** Tests inject a fake model; production loads Gemini/Claude on first chat only. */
   provider?: () => LlmProvider;
+  now?: () => Date;
 }) {
+  const now = deps.now ?? (() => new Date());
   const app = new Hono().basePath('/api');
   const allowChat = rateLimiter(20, 60_000);
   const allowSeed = rateLimiter(3, 60_000);
@@ -120,7 +132,9 @@ export function createApp(deps: {
         apiVersion: 'v1',
         capabilities: [...LEDGER_CAPABILITIES],
         persistence: live
-          ? 'Accounts and transfers persist in PostgreSQL (Render). Bookmark ?id= or use saved wallets below.'
+          ? `Accounts and transfers persist in PostgreSQL (Render).${
+            databaseUrlFromEnv() ? ' Habit logs persist in spend_logs on the same database.' : ''
+          } Bookmark ?id= or use saved wallets below.`
           : 'Practice mode is in-memory per server instance — use live seed or create wallet while ledger is online.',
         auditCapabilities,
       },
@@ -131,7 +145,7 @@ export function createApp(deps: {
   app.get('/accounts', async (c) => {
     const id = c.req.query('id');
     const limit = Number(c.req.query('limit') ?? '30');
-    if (id) return respondAccount(c, await accountView(deps.ledger, id, Math.min(limit, 100)));
+    if (id) return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, id, Math.min(limit, 100), now));
     const owner = c.req.query('owner');
     if (!owner) return c.json({ error: 'owner is required' }, 400);
     const accounts = await deps.ledger.accountsByOwner(owner);
@@ -195,7 +209,37 @@ export function createApp(deps: {
   });
 
   // Direct links. The UI uses ?id= so a host that 404s a second path segment still reaches this app.
-  app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, c.req.param('id'))));
+  app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, deps.spendLogs, c.req.param('id'), 30, now)));
+
+  app.post('/accounts/:id/spends', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const account = await deps.ledger.getAccount(accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const parsed = recordSpendBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+    const event = await deps.spendLogs.record(accountId, {
+      ...parsed.data,
+      currency: account.currency,
+      source: 'manual',
+    }, now());
+    return c.json({
+      id: event.id,
+      amountMinor: event.amountMinor,
+      category: event.category,
+      note: event.note,
+      occurredAt: event.occurredAt,
+    }, 201);
+  });
+
+  app.get('/accounts/:id/habits', async (c) => {
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const account = await deps.ledger.getAccount(accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    return c.json(await buildHabitsHome(deps.spendLogs, accountId, now(), account.currency));
+  });
 
   app.get('/accounts/:id/entries', async (c) => {
     const id = c.req.param('id');
@@ -210,7 +254,7 @@ export function createApp(deps: {
   app.get('/accounts/:id/statement.txt', async (c) => {
     const id = c.req.param('id');
     if (!z.string().uuid().safeParse(id).success) return c.text('Invalid account id', 400);
-    const view = await accountView(deps.ledger, id, 100);
+    const view = await accountView(deps.ledger, deps.spendLogs, id, 100, now);
     if (!view) return c.text('Account not found', 404);
     const entries = await deps.ledger.entries(id, 200);
     const body = formatLedgerStatement(view, entries, {
@@ -343,7 +387,7 @@ export function createApp(deps: {
       const question = messages.at(-1)?.text ?? '';
       const reason = llmConfigError(e);
       return c.json({
-        ...(await answerFromLedger({ ledger: deps.ledger, accountId, question })),
+        ...(await answerFromLedger({ ledger: deps.ledger, spendLogs: deps.spendLogs, accountId, question, now })),
         route: 'ledger-fallback',
         fallbackReason: reason,
       });
@@ -353,9 +397,11 @@ export function createApp(deps: {
       return c.json(await runAssistant({
         provider,
         ledger: deps.ledger,
+        spendLogs: deps.spendLogs,
         accountId,
         messages,
         peers,
+        now,
       }));
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
@@ -364,7 +410,7 @@ export function createApp(deps: {
       const question = messages.at(-1)?.text ?? '';
       // Never 500 the UI for model/config errors — ledger tools still answer.
       return c.json({
-        ...(await answerFromLedger({ ledger: deps.ledger, accountId, question })),
+        ...(await answerFromLedger({ ledger: deps.ledger, spendLogs: deps.spendLogs, accountId, question, now })),
         route: 'ledger-fallback',
         fallbackReason: `LLM call failed (${errStatus ?? 'no status'}): ${errMsg.slice(0, 220)}`,
       });
@@ -385,9 +431,18 @@ export function createApp(deps: {
   return app;
 }
 
-async function accountView(ledger: LedgerReader, id: string, limit = 30) {
+async function accountView(
+  ledger: LedgerReader,
+  spendLogs: SpendLogStore,
+  id: string,
+  limit = 30,
+  now: () => Date,
+) {
   if (!z.string().uuid().safeParse(id).success) return null;
-  return loadAccountView(ledger, id, limit);
+  const base = await loadAccountView(ledger, id, limit);
+  if (!base) return null;
+  const habits = await buildHabitsHome(spendLogs, id, now(), base.currency);
+  return { ...base, habits };
 }
 
 async function listPeers(ledger: CompositeLedger, accountId: string) {

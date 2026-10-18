@@ -86,6 +86,37 @@ export interface AccountSummary {
   declinedCount: number;
 }
 
+export type SpendCategory =
+  | 'dining'
+  | 'groceries'
+  | 'transport'
+  | 'entertainment'
+  | 'housing'
+  | 'shopping'
+  | 'health'
+  | 'other';
+
+export const SPEND_CATEGORIES: SpendCategory[] = [
+  'dining', 'groceries', 'transport', 'entertainment', 'housing', 'shopping', 'health', 'other',
+];
+
+export interface HabitsHome {
+  weekly: {
+    weekEnding: string;
+    totalThisWeek: string;
+    totalLastWeek: string;
+    weekOverWeek: string;
+    highlights: { category: SpendCategory; thisWeek: string; lastWeek: string; direction: 'up' | 'down' | 'flat' }[];
+    recentSpends: { amount: string; category: SpendCategory; note: string | null; occurredAt: string }[];
+  };
+  summary30d: {
+    windowDays: number;
+    totalSpent: string;
+    byCategory: { category: SpendCategory; total: string; count: number }[];
+    entryCount: number;
+  };
+}
+
 export interface AccountView {
   id: string;
   owner: string;
@@ -93,6 +124,7 @@ export interface AccountView {
   currency: string;
   openedAt: string;
   summary: AccountSummary;
+  habits?: HabitsHome;
   transfers: AccountActivity[];
 }
 
@@ -272,6 +304,13 @@ export const api = {
     call<CorridorResult>('/api/bank/outbound', { method: 'POST', body: JSON.stringify({ accountId }) }),
   account: (id: string, limit = 50) =>
     call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}&limit=${limit}`),
+  habits: (accountId: string) =>
+    call<HabitsHome>(`/api/accounts/${encodeURIComponent(accountId)}/habits`),
+  recordSpend: (accountId: string, body: { amountMinor: number; category: SpendCategory; note?: string }) =>
+    call<{ id: string }>(`/api/accounts/${encodeURIComponent(accountId)}/spends`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   entries: (accountId: string, limit = 50) =>
     call<{ accountId: string; currency: string; entries: LedgerEntryRow[] }>(
       `/api/accounts/${encodeURIComponent(accountId)}/entries?limit=${limit}`,

@@ -95,6 +95,47 @@ describe('GET /api/accounts/:id', () => {
     expect(res.status).toBe(201);
   });
 
+  it('seeds a guided practice demo with personal history', async () => {
+    const res = await app.request('/api/demo/practice', { method: 'POST' });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { accounts: { id: string }[]; focusAccountId: string };
+    expect(body.accounts).toHaveLength(3);
+    const view = await app.request(`/api/accounts?id=${body.focusAccountId}`);
+    const account = await view.json() as {
+      moneyProfile: { walletCashMinor: number | null; weeklyBudgetMinor: number | null };
+      patterns: { totals: { spend30dMinor: number }; streak: { currentDays: number } };
+    };
+    expect(account.moneyProfile.walletCashMinor).toBe(320_000);
+    expect(account.moneyProfile.weeklyBudgetMinor).toBe(45_000);
+    expect(account.patterns.totals.spend30dMinor).toBeGreaterThan(0);
+    expect(account.patterns.streak.currentDays).toBeGreaterThan(0);
+  });
+
+  it('funds a brand-new wallet and gives it a first peer', async () => {
+    const created = await app.request('/api/accounts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ownerId: 'new-person-test', currency: 'USD' }),
+    });
+    expect(created.status).toBe(201);
+    const account = await created.json() as { id: string };
+    const welcome = await app.request('/api/bank/welcome', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId: account.id }),
+    });
+    expect(welcome.status).toBe(200);
+    const packageBody = await welcome.json() as { depositTransferId: string; corridor: { peer: { id: string } } };
+    expect(packageBody.depositTransferId).toBeTruthy();
+    expect(packageBody.corridor.peer.id).toBeTruthy();
+    const view = await app.request(`/api/accounts?id=${account.id}`);
+    const body = await view.json() as { balance: string };
+    expect(body.balance).not.toBe('$0.00');
+    const peersRes = await app.request(`/api/peers?accountId=${account.id}`);
+    const peers = await peersRes.json() as { id: string }[];
+    expect(peers.some((peer) => peer.id === packageBody.corridor.peer.id)).toBe(true);
+  });
+
   it('says the ledger is waking when the upstream returns 502', async () => {
     const asleepLive = Object.assign(new FixtureLedger(), writer, {
       getAccount: () => Promise.reject(new LedgerError(502, 'bad gateway')),

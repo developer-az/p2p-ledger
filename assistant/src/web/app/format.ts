@@ -80,6 +80,59 @@ export function shortId(id: string): string {
   return id.length > 14 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
 }
 
+/** "$12.50" with a leading + or − for feed rows. */
+export function signedMoney(minor: number, currency = 'USD'): string {
+  const sign = minor > 0 ? '+' : minor < 0 ? '−' : '';
+  return `${sign}${money(Math.abs(minor), currency)}`;
+}
+
+export function percent(value: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.round((value / total) * 100);
+}
+
+export function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+export function plural(count: number, one: string, many = `${one}s`): string {
+  return count === 1 ? one : many;
+}
+
+export function dayKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+export function shortDay(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+export function monthDay(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+export function greeting(now = new Date()): string {
+  const hour = now.getHours();
+  if (hour < 5) return 'Still up';
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+export function relativeDay(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const diff = Math.round((startOfDay(now) - startOfDay(d)) / DAY_MS);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  if (diff < 7) return d.toLocaleDateString('en-US', { weekday: 'long' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 /** Percent change as plain words, or null when there is nothing to compare with. */
 export function changeWords(thisMinor: number, lastMinor: number): string | null {
   if (lastMinor <= 0) return thisMinor > 0 ? 'Nothing logged the week before' : null;

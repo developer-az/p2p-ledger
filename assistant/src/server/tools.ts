@@ -329,7 +329,7 @@ function summarize(transfers: Transfer[], accountId: string, currency: string): 
 }
 
 function emptySpendLogs(): SpendLogStore {
-  return { list: async () => [], record: async () => { throw new Error('read-only'); } };
+  return { list: async () => [], record: async () => { throw new Error('read-only'); }, remove: async () => false };
 }
 
 function describe(self: string, t: Transfer, names: Map<string, string>): AccountActivity {

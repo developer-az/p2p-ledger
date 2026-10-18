@@ -1,23 +1,28 @@
 import { useEffect, useState } from 'react';
 import { api, type PaymentTrail } from '../api.js';
+import { categoryLabel } from './categories.js';
 import { declineCopy } from './copy.js';
 import { displayName, dateTimeLabel, money, shortId } from './format.js';
 import { isLedgerItem, type FeedItem } from './feed.js';
-import { Sheet, Skeleton } from './ui.js';
+import { Sheet, Skeleton, useToast } from './ui.js';
 
 /** Everything about one payment, including the two ledger lines that prove it. */
 export function ActivitySheet({
   item,
   accountId,
   onClose,
+  onChanged,
 }: {
   item: FeedItem | null;
   accountId: string;
   onClose: () => void;
+  onChanged?: () => void;
 }) {
+  const toast = useToast();
   const [trail, setTrail] = useState<PaymentTrail | null>(null);
   const [trailError, setTrailError] = useState<string | null>(null);
   const [showProof, setShowProof] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   useEffect(() => {
     setTrail(null);
@@ -39,6 +44,21 @@ export function ActivitySheet({
   const copy = declined ? declineCopy(item?.declineReason, item?.declineExplanation) : null;
   const sign = item && item.signedMinor > 0 ? '+' : item && item.signedMinor < 0 ? '−' : '';
 
+  async function removeLog() {
+    if (!item?.spendId) return;
+    setRemoving(true);
+    try {
+      await api.deleteSpend(accountId, item.spendId);
+      toast('Log removed', { tone: 'good' });
+      onChanged?.();
+      onClose();
+    } catch (e) {
+      toast((e as Error).message, { tone: 'bad' });
+    } finally {
+      setRemoving(false);
+    }
+  }
+
   return (
     <Sheet open={item !== null} title={item?.title ?? ''} onClose={onClose}>
       {item ? (
@@ -58,7 +78,7 @@ export function ActivitySheet({
             <dt>When</dt><dd>{dateTimeLabel(item.occurredAt)}</dd>
             {item.counterparty ? (<><dt>{item.kind === 'received' ? 'From' : 'With'}</dt><dd>{displayName(item.counterparty)}</dd></>) : null}
             {item.memo ? (<><dt>Note</dt><dd>{item.memo}</dd></>) : null}
-            {item.category ? (<><dt>Category</dt><dd>{item.category}</dd></>) : null}
+            {item.category ? (<><dt>Category</dt><dd>{categoryLabel(item.category)}</dd></>) : null}
           </dl>
 
           {copy ? (
@@ -70,9 +90,16 @@ export function ActivitySheet({
           ) : null}
 
           {!ledger ? (
-            <p className="muted">
-              You added this yourself. It is kept separate from the ledger, so it never changes your wallet balance.
-            </p>
+            <div className="stack-sm">
+              <p className="muted">
+                You added this yourself. It is kept separate from the ledger, so it never changes your wallet balance.
+              </p>
+              {item.spendId ? (
+                <button type="button" className="btn btn-sm btn-danger" style={{ justifySelf: 'start' }} onClick={() => void removeLog()} disabled={removing}>
+                  {removing ? 'Removing…' : 'Remove this log'}
+                </button>
+              ) : null}
+            </div>
           ) : (
             <details open={showProof} onToggle={(e) => setShowProof((e.currentTarget as HTMLDetailsElement).open)}>
               <summary>Show the proof</summary>

@@ -17,6 +17,7 @@ export interface FeedItem {
   counterparty?: string;
   memo?: string | null;
   category?: string;
+  spendId?: string;
   declineReason?: string | null;
   declineExplanation?: string | null;
 }
@@ -82,6 +83,7 @@ export function buildFeed(view: AccountView): FeedItem[] {
         signedMinor: -minor,
         occurredAt: row.occurredAt,
         category,
+        spendId: row.spendId,
       });
     } else {
       items.push({

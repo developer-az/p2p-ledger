@@ -15,6 +15,8 @@ export interface MoneyProfile {
   walletCashMinor: number | null;
   /** Total owed on credit cards (positive = debt). */
   creditOwedMinor: number;
+  /** A gentle weekly pace the person sets for themselves. Null until they choose one. */
+  weeklyBudgetMinor: number | null;
   /**
    * When true, new spend logs reduce your projected cash from walletCash.
    * When false, walletCash is already “after spending” — logs are for history/insight only.
@@ -45,6 +47,7 @@ export interface RecordIncomeInput {
 export interface MoneyProfilePatch {
   walletCashMinor?: number | null;
   creditOwedMinor?: number;
+  weeklyBudgetMinor?: number | null;
   spendLogsAffectWallet?: boolean;
   periodLabel?: string;
   periodStart?: string;
@@ -62,6 +65,7 @@ export interface FinanceSnapshot {
   periodStart: string;
   walletCash: string | null;
   creditOwed: string;
+  weeklyBudget: string | null;
   netCash: string | null;
   ledgerWallet: string;
   spendLogsAffectWallet: boolean;
@@ -97,6 +101,7 @@ export function defaultMoneyProfile(accountId: string, currency: string, now = n
     periodStart,
     walletCashMinor: null,
     creditOwedMinor: 0,
+    weeklyBudgetMinor: null,
     spendLogsAffectWallet: true,
     updatedAt: now.toISOString(),
   };
@@ -131,6 +136,9 @@ export function buildFinanceSnapshot(
     ? null
     : formatMoney(profile.walletCashMinor, profile.currency);
   const creditOwed = formatMoney(profile.creditOwedMinor, profile.currency);
+  const weeklyBudget = profile.weeklyBudgetMinor === null
+    ? null
+    : formatMoney(profile.weeklyBudgetMinor, profile.currency);
   const netCash = profile.walletCashMinor === null
     ? null
     : formatMoney(profile.walletCashMinor - profile.creditOwedMinor, profile.currency);
@@ -173,6 +181,7 @@ export function buildFinanceSnapshot(
     periodStart: profile.periodStart,
     walletCash,
     creditOwed,
+    weeklyBudget,
     netCash,
     ledgerWallet: ledgerBalance,
     spendLogsAffectWallet: profile.spendLogsAffectWallet,
@@ -200,6 +209,7 @@ export class InMemoryPersonalFinanceStore implements PersonalFinanceStore {
       ...base,
       walletCashMinor: patch.walletCashMinor !== undefined ? patch.walletCashMinor : base.walletCashMinor,
       creditOwedMinor: patch.creditOwedMinor ?? base.creditOwedMinor,
+      weeklyBudgetMinor: patch.weeklyBudgetMinor !== undefined ? patch.weeklyBudgetMinor : base.weeklyBudgetMinor,
       spendLogsAffectWallet: patch.spendLogsAffectWallet ?? base.spendLogsAffectWallet,
       periodLabel: patch.periodLabel ?? base.periodLabel,
       periodStart: patch.periodStart ?? base.periodStart,
@@ -252,9 +262,11 @@ create table if not exists money_profiles (
     period_start            timestamptz not null,
     wallet_cash_minor       bigint,
     credit_owed_minor       bigint      not null default 0,
+    weekly_budget_minor     bigint,
     spend_logs_affect_wallet boolean    not null default true,
     updated_at              timestamptz not null default now()
 );
+alter table money_profiles add column if not exists weekly_budget_minor bigint;
 create table if not exists income_logs (
     id            uuid primary key,
     account_id    uuid        not null,
@@ -297,6 +309,9 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
         ? null
         : Number(row.wallet_cash_minor),
       creditOwedMinor: Number(row.credit_owed_minor ?? 0),
+      weeklyBudgetMinor: row.weekly_budget_minor === null || row.weekly_budget_minor === undefined
+        ? null
+        : Number(row.weekly_budget_minor),
       spendLogsAffectWallet: Boolean(row.spend_logs_affect_wallet),
       updatedAt: new Date(String(row.updated_at)).toISOString(),
     };
@@ -308,15 +323,15 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
       await this.ensureSchema(c);
       const res = await c.query(
         `select account_id, currency, period_label, period_start, wallet_cash_minor, credit_owed_minor,
-                spend_logs_affect_wallet, updated_at from money_profiles where account_id = $1`,
+                weekly_budget_minor, spend_logs_affect_wallet, updated_at from money_profiles where account_id = $1`,
         [accountId],
       );
       if (res.rows[0]) return this.rowToProfile(res.rows[0] as Record<string, unknown>);
       const p = defaultMoneyProfile(accountId, currency, now);
       await c.query(
         `insert into money_profiles (account_id, currency, period_label, period_start, wallet_cash_minor,
-         credit_owed_minor, spend_logs_affect_wallet, updated_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+         credit_owed_minor, weekly_budget_minor, spend_logs_affect_wallet, updated_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           accountId,
           currency,
@@ -324,6 +339,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
           p.periodStart,
           null,
           0,
+          null,
           true,
           now.toISOString(),
         ],
@@ -339,6 +355,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
     const next = await this.updateProfileFields(accountId, {
       walletCashMinor: patch.walletCashMinor !== undefined ? patch.walletCashMinor : current.walletCashMinor,
       creditOwedMinor: patch.creditOwedMinor ?? current.creditOwedMinor,
+      weeklyBudgetMinor: patch.weeklyBudgetMinor !== undefined ? patch.weeklyBudgetMinor : current.weeklyBudgetMinor,
       spendLogsAffectWallet: patch.spendLogsAffectWallet ?? current.spendLogsAffectWallet,
       periodLabel: patch.periodLabel ?? current.periodLabel,
       periodStart: patch.periodStart ?? current.periodStart,
@@ -351,6 +368,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
     fields: {
       walletCashMinor: number | null;
       creditOwedMinor: number;
+      weeklyBudgetMinor: number | null;
       spendLogsAffectWallet: boolean;
       periodLabel: string;
       periodStart: string;
@@ -366,8 +384,9 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
            period_start = $3,
            wallet_cash_minor = $4,
            credit_owed_minor = $5,
-           spend_logs_affect_wallet = $6,
-           updated_at = $7
+           weekly_budget_minor = $6,
+           spend_logs_affect_wallet = $7,
+           updated_at = $8
          where account_id = $1`,
         [
           accountId,
@@ -375,6 +394,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
           fields.periodStart,
           fields.walletCashMinor,
           fields.creditOwedMinor,
+          fields.weeklyBudgetMinor,
           fields.spendLogsAffectWallet,
           now.toISOString(),
         ],

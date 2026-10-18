@@ -41,6 +41,8 @@ export interface RecordSpendInput {
 export interface SpendLogStore {
   record(accountId: string, input: RecordSpendInput, now?: Date): Promise<SpendLogEntry>;
   list(accountId: string, opts?: { since?: Date; limit?: number }): Promise<SpendLogEntry[]>;
+  /** Remove one manual log. Returns false when it was already gone. */
+  remove(accountId: string, spendId: string): Promise<boolean>;
 }
 
 export interface CategoryTotal {
@@ -211,6 +213,16 @@ export async function buildHabitsHome(
   periodStart?: string,
 ): Promise<HabitsHome> {
   const events = await store.list(accountId, { limit: 500 });
+  return buildHabitsFromEntries(events, now, currency, periodStart);
+}
+
+/** Same shape as buildHabitsHome, for callers that already loaded the entries. */
+export function buildHabitsFromEntries(
+  events: SpendLogEntry[],
+  now: Date,
+  currency = 'USD',
+  periodStart?: string,
+): HabitsHome {
   return {
     weekly: weeklySpendingStory(events, now, currency),
     summary30d: periodStart
@@ -250,6 +262,13 @@ export class InMemorySpendLogStore implements SpendLogStore {
       .filter((e) => e.accountId === accountId && (since === undefined || Date.parse(e.occurredAt) >= since))
       .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
       .slice(0, limit);
+  }
+
+  async remove(accountId: string, spendId: string): Promise<boolean> {
+    const index = this.events.findIndex((e) => e.id === spendId && e.accountId === accountId);
+    if (index === -1) return false;
+    this.events.splice(index, 1);
+    return true;
   }
 }
 
@@ -355,6 +374,20 @@ export class PostgresSpendLogStore implements SpendLogStore {
         source: row.source as SpendSource,
         createdAt: new Date(String(row.created_at)).toISOString(),
       }));
+    } finally {
+      await c.end();
+    }
+  }
+
+  async remove(accountId: string, spendId: string): Promise<boolean> {
+    const c = await this.client();
+    try {
+      await this.ensureSchema(c);
+      const res = await c.query(
+        `delete from spend_logs where id = $1 and account_id = $2`,
+        [spendId, accountId],
+      );
+      return (res.rowCount ?? 0) > 0;
     } finally {
       await c.end();
     }

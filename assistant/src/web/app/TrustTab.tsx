@@ -35,7 +35,7 @@ function Demo<T>({ title, plain, button, run, onRun, children }: {
   );
 }
 
-export function TrustTab({ me, data, live }: { me: AccountRef; data: WalletData | null; live: boolean }) {
+export function TrustTab({ me, data, live, embedded = false }: { me: AccountRef; data: WalletData | null; live: boolean; embedded?: boolean }) {
   const [integrity, setIntegrity] = useState<Integrity | null>(null);
   const [integrityError, setIntegrityError] = useState<string | null>(null);
 
@@ -55,11 +55,13 @@ export function TrustTab({ me, data, live }: { me: AccountRef; data: WalletData 
   const [race, runRace] = useRun<RaceResult>(() => api.race(me.id, out!.id));
 
   return (
-    <div className="stack">
-      <div>
-        <h1 className="page-title">Trust</h1>
-        <p className="page-sub">What keeps your balance honest, and how to check it yourself.</p>
-      </div>
+    <div className={embedded ? 'trust-embedded stack' : 'stack'}>
+      {!embedded ? (
+        <div>
+          <h1 className="page-title">Trust</h1>
+          <p className="page-sub">What keeps your balance honest, and how to check it yourself.</p>
+        </div>
+      ) : null}
 
       <section className="card" aria-labelledby="health">
         <h2 id="health">Ledger health</h2>

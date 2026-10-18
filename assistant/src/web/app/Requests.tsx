@@ -9,10 +9,12 @@ export function IncomingRequests({
   requests,
   me,
   onChanged,
+  onPaid,
 }: {
   requests: PaymentRequestView[];
   me: string;
   onChanged: () => void;
+  onPaid?: () => void;
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
@@ -25,6 +27,7 @@ export function IncomingRequests({
       if (result.transfer.status === 'COMPLETED') {
         setProblem((p) => { const { [r.id]: _drop, ...rest } = p; return rest; });
         toast(`Paid ${r.amount} to ${displayName(r.requester.owner)}`);
+        onPaid?.();
       } else {
         setProblem((p) => ({ ...p, [r.id]: declineCopy(result.transfer.rejectionReason, result.transfer.declineExplanation) }));
       }

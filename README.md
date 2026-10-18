@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/settle-home.png" alt="Settle: wallet balance, requests waiting for an answer, and recent activity" width="640">
+  <img src="docs/images/settle-home.png" alt="Settle guided demo: progress card, net position, weekly pace, and patterns peek" width="640">
   <img src="docs/images/settle-split-phone.png" alt="Settle on a phone: splitting a bill between friends" width="220">
 </p>
 <p align="center"><sub><strong>Settle</strong>, the app on top of the ledger: send, split bills, request money, log spending. Demo only, no real money. The original terminal lives at <code>/ops</code>.</sub></p>
@@ -30,7 +30,7 @@
 | | |
 |---|---|
 | **Problem** | P2P money needs one source of truth: correct balances under concurrency, safe retries, auditable history, explainable declines. |
-| **Approach** | `ledger-service` (Spring Boot + PostgreSQL) is the system of record. `assistant` is the product: **user-logged habits** (`spend_logs`) plus Bloomberg-style **terminal UI**, Hono **`/api` BFF**, **simulated bank corridors**, **peer settle-ups**, and read-only **LLM tools**. |
+| **Approach** | `ledger-service` (Spring Boot + PostgreSQL) is the system of record. `assistant` is the product: a consumer **Settle** app with a money snapshot (cash, cards, weekly pace), **two-tap spend logging**, **Patterns** over the user's own history, **peer settle-ups**, **simulated bank corridors**, and read-only **LLM tools**. |
 | **Scope** | End-to-end portfolio system: Docker, native-image CI, Render + Vercel deploy path, k6 load tests, integration tests. Not a licensed bank — [SECURITY.md](docs/SECURITY.md). |
 
 ## Live surfaces
@@ -40,7 +40,24 @@
 | **Assistant** (UI + `/api`) | [p2p-ledger-pi.vercel.app](https://p2p-ledger-pi.vercel.app) |
 | **Ledger API** | Render service → Vercel `LEDGER_URL` |
 
-**Try it:** open the demo → **F2 ONBOARD** (live Postgres when `LEDGER_URL` is set) or resume a saved wallet. Command line: `pay sam 10 lunch`, `bank in`, **F3** company audit. Setup: [DEVELOPMENT.md](docs/DEVELOPMENT.md) · Troubleshooting: [BRIEFING.md](docs/BRIEFING.md).
+**Try it:** open the demo → **Start the guided demo** (or **F2 ONBOARD** in `/ops`; live Postgres when `LEDGER_URL` is set), or resume a saved wallet. In **Settle**, set cash, cards and a weekly pace once, then log a spend in two taps. **Patterns** turns those logs into an eight-week heatmap, category shifts, a weekday rhythm and a card-payoff planner. The original terminal lives at `/ops`; command line: `pay sam 10 lunch`, `bank in`, **F3** company audit. Setup: [DEVELOPMENT.md](docs/DEVELOPMENT.md) · Troubleshooting: [BRIEFING.md](docs/BRIEFING.md).
+
+## The Settle experience
+
+| Surface | What it answers |
+|---------|-----------------|
+| **Today** | What is my net position, what is left this week, and what needs an answer? |
+| **Activity** | Every payment, logged spend and income — grouped by day, with a receipt on each payment. |
+| **Patterns** | Where the money went, how this month is trending, which weekday is expensive, and how fast a card can reach zero. |
+| **Ask** | Read-only questions about your records; the assistant cannot move money. |
+| **Wallet** | Edit the snapshot, manage the Settle wallet, friends, requests, statements and the trust lab. |
+
+The design rules: **three numbers to start** (cash, card balance, weekly pace), **two taps to log** (amount + category, with recent repeats and undo), and **no mixing** between user logs and ledger transfers. Habit totals never pretend to be a bank feed.
+
+**The demo is a guided tour, not a sandbox.** It seeds a believable personal history and a five-step progress card: set the baseline, log a spend, split a bill, answer a request, open a receipt. Each step points at a real feature and the state updates as you go. A **Demo** pill reopens the guide; **Start my own wallet** leaves the tour.
+
+**Your wallet is isolated from the demo.** Creating a wallet opens a new ledger account, funds it with a **$500 simulated deposit plus one inbound corridor** so send/split/request work immediately, pre-fills the cash step from that balance, and starts with no spend logs, no demo household, and no demo progress. In live mode the wallet persists in PostgreSQL; in practice mode it lives in memory.
+
 
 ## Terminal UI
 
@@ -121,7 +138,7 @@ Smoke the deployed app: `cd assistant && npm run smoke:api -- https://p2p-ledger
 
 ## Assistant API
 
-Browser → **`/api/*` only**. Live traffic uses `ledger-service` when healthy; otherwise **practice** mode. Notable routes: `/api/peers`, `/api/peer-ledger`, `/api/bank/*`, `/api/chat` (read-only tools). OpenAPI: [assistant/openapi.yaml](assistant/openapi.yaml).
+Browser → **`/api/*` only**. Live traffic uses `ledger-service` when healthy; otherwise **practice** mode. Notable routes: `/api/peers`, `/api/peer-ledger`, `/api/bank/*`, `/api/demo` (live seed), `/api/demo/practice` (guided practice seed), `/api/chat` (read-only tools). OpenAPI: [assistant/openapi.yaml](assistant/openapi.yaml).
 
 **Quality:** 80+ Vitest tests in CI; optional Gemini evals via Actions ([GITHUB.md](docs/GITHUB.md)).
 

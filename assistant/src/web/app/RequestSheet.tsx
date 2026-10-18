@@ -14,6 +14,7 @@ export function RequestSheet({
   peers,
   initialMode = 'split',
   onChanged,
+  onCompleted,
 }: {
   open: boolean;
   onClose: () => void;
@@ -21,6 +22,7 @@ export function RequestSheet({
   peers: AccountRef[];
   initialMode?: Mode;
   onChanged: () => void;
+  onCompleted?: () => void;
 }) {
   const toast = useToast();
   const [mode, setMode] = useState<Mode>(initialMode);
@@ -78,6 +80,7 @@ export function RequestSheet({
         payers: picked.map((accountId, i) => ({ accountId, amountMinor: plan.shares[i]! })),
       });
       onChanged();
+      onCompleted?.();
       toast(picked.length === 1 ? 'Request sent' : `Asked ${picked.length} people`);
       onClose();
     } catch (e) {

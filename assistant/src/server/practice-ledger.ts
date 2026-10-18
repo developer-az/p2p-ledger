@@ -152,9 +152,15 @@ export class PracticeLedger implements LedgerReader, LedgerWriter {
   }
 
   listPeers(exceptAccountId: string): { id: string; owner: string }[] {
-    return this.userAccounts()
-      .filter((a) => a.id !== exceptAccountId)
-      .map((a) => ({ id: a.id, owner: a.ownerId }));
+    const ids = new Set<string>();
+    for (const t of this.transfers) {
+      if (t.sourceAccountId === exceptAccountId) ids.add(t.destinationAccountId);
+      if (t.destinationAccountId === exceptAccountId) ids.add(t.sourceAccountId);
+    }
+    return [...ids].flatMap((id) => {
+      const a = this.account(id);
+      return a && a.type === 'USER' && a.id !== exceptAccountId ? [{ id: a.id, owner: a.ownerId }] : [];
+    });
   }
 
   isPracticeAccount(id: string): boolean {

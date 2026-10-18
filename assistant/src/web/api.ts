@@ -125,6 +125,7 @@ export interface MoneyProfile {
   periodStart: string;
   walletCashMinor: number | null;
   creditOwedMinor: number;
+  weeklyBudgetMinor: number | null;
   spendLogsAffectWallet: boolean;
   updatedAt: string;
 }
@@ -134,6 +135,7 @@ export interface FinanceSnapshot {
   periodStart: string;
   walletCash: string | null;
   creditOwed: string;
+  weeklyBudget: string | null;
   netCash: string | null;
   ledgerWallet: string;
   spendLogsAffectWallet: boolean;
@@ -175,11 +177,86 @@ export interface AccountView {
   openedAt: string;
   summary: AccountSummary;
   habits?: HabitsHome;
+  patterns?: SpendingPatterns;
   moneyProfile?: MoneyProfile;
   finance?: FinanceSnapshot;
   activityFeed?: ActivityFeedRow[];
   insights?: PersonalInsights;
+  spendEntries?: SpendEntry[];
   transfers: AccountActivity[];
+}
+
+export interface SpendEntry {
+  id: string;
+  amount: string;
+  amountMinor: number;
+  category: SpendCategory;
+  note: string | null;
+  occurredAt: string;
+}
+
+export interface PatternDay {
+  date: string;
+  spendMinor: number;
+  incomeMinor: number;
+  count: number;
+}
+
+export interface PatternCategory {
+  category: SpendCategory;
+  totalMinor: number;
+  count: number;
+  prevTotalMinor: number;
+  changePct: number | null;
+  sharePct: number;
+}
+
+export interface PatternWeekday {
+  weekday: number;
+  label: string;
+  totalMinor: number;
+  count: number;
+  averageMinor: number;
+}
+
+export interface SpendingPatterns {
+  generatedAt: string;
+  days: PatternDay[];
+  categories: PatternCategory[];
+  weekdays: PatternWeekday[];
+  week: {
+    start: string;
+    end: string;
+    spentMinor: number;
+    lastWeekSpentMinor: number;
+    budgetMinor: number | null;
+    remainingMinor: number | null;
+  };
+  month: {
+    label: string;
+    start: string;
+    spentMinor: number;
+    incomeMinor: number;
+    projectedSpendMinor: number;
+    dayOfMonth: number;
+    daysInMonth: number;
+  };
+  streak: {
+    currentDays: number;
+    longestDays: number;
+    loggedDays30d: number;
+    lastLoggedAt: string | null;
+  };
+  totals: {
+    spend30dMinor: number;
+    spendPrev30dMinor: number;
+    income30dMinor: number;
+    averageActiveDayMinor: number;
+    averageCalendarDayMinor: number;
+    biggestDay: PatternDay | null;
+    topCategory: PatternCategory | null;
+    activeDays30d: number;
+  };
 }
 
 export interface CorridorResult {
@@ -340,6 +417,7 @@ export interface StoppedPayment {
 export const api = {
   bootstrap: () => call<BootstrapResponse>('/api/bootstrap'),
   seedDemo: () => call<{ accounts: AccountRef[]; focusAccountId: string; stopped: StoppedPayment }>('/api/demo', { method: 'POST' }),
+  seedPracticeDemo: () => call<{ accounts: AccountRef[]; focusAccountId: string; seeded: boolean }>('/api/demo/practice', { method: 'POST' }),
   findAccounts: (owner: string) => call<AccountRef[]>(`/api/accounts?owner=${encodeURIComponent(owner)}`),
   openAccount: (ownerId: string) =>
     call<AccountRef>('/api/accounts', { method: 'POST', body: JSON.stringify({ ownerId, currency: 'USD' }) }),
@@ -395,6 +473,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  deleteSpend: (accountId: string, spendId: string) =>
+    call<{ removed: boolean }>(`/api/accounts/${encodeURIComponent(accountId)}/spends/${encodeURIComponent(spendId)}`, {
+      method: 'DELETE',
+    }),
   recordIncome: (accountId: string, body: { amountMinor: number; source: IncomeSource; note?: string }) =>
     call<{ id: string }>(`/api/accounts/${encodeURIComponent(accountId)}/incomes`, {
       method: 'POST',
@@ -405,6 +487,7 @@ export const api = {
     body: {
       walletCashMinor?: number | null;
       creditOwedMinor?: number;
+      weeklyBudgetMinor?: number | null;
       spendLogsAffectWallet?: boolean;
     },
   ) =>

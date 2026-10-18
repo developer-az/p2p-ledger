@@ -36,10 +36,11 @@ export function FeedRow({ item, onOpen, showTime = false }: { item: FeedItem; on
   );
 }
 
-export function FeedList({ items, onOpen, grouped = true, now = new Date() }: {
+export function FeedList({ items, onOpen, grouped = true, dayTotals = false, now = new Date() }: {
   items: FeedItem[];
   onOpen: (item: FeedItem) => void;
   grouped?: boolean;
+  dayTotals?: boolean;
   now?: Date;
 }) {
   if (!grouped) {
@@ -51,14 +52,20 @@ export function FeedList({ items, onOpen, grouped = true, now = new Date() }: {
   }
   return (
     <div>
-      {groupByDay(items.map((i) => ({ ...i })), now).map((g) => (
-        <Fragment key={g.label}>
-          <p className="day-label">{g.label}</p>
-          <ul className="list">
-            {g.rows.map((i) => <FeedRow key={i.id} item={i} onOpen={onOpen} showTime />)}
-          </ul>
-        </Fragment>
-      ))}
+      {groupByDay(items.map((i) => ({ ...i })), now).map((g) => {
+        const net = g.rows.reduce((total, item) => total + (item.kind === 'declined' ? 0 : item.signedMinor), 0);
+        return (
+          <Fragment key={g.label}>
+            <div className="day-head">
+              <p className="day-label">{g.label}</p>
+              {dayTotals && net !== 0 ? <span className={`day-total num ${net > 0 ? 'is-in' : ''}`}>{net > 0 ? '+' : '−'}{money(Math.abs(net))}</span> : null}
+            </div>
+            <ul className="list">
+              {g.rows.map((i) => <FeedRow key={i.id} item={i} onOpen={onOpen} showTime />)}
+            </ul>
+          </Fragment>
+        );
+      })}
     </div>
   );
 }

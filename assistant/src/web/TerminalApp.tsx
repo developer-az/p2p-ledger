@@ -27,6 +27,8 @@ import {
 } from './api.js';
 import { OFFLINE_BOOTSTRAP } from './practice-fixture.js';
 import { LogSpendForm } from './LogSpendForm.js';
+import { LogIncomeForm } from './LogIncomeForm.js';
+import { MoneyPeriodPanel } from './MoneyPeriodPanel.js';
 import { PeerPanel } from './PeerPanel.js';
 import { personName } from './person-name.js';
 import { parseTerminalInput, splitAmountsMinor } from './terminal-command.js';
@@ -98,7 +100,7 @@ export function TerminalApp() {
   const [hiddenTransferIds, setHiddenTransferIds] = useState<Set<string>>(() => new Set());
   const [pendingHideId, setPendingHideId] = useState<string | null>(null);
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false);
-  const [feedFilter, setFeedFilter] = useState<'all' | 'logged' | 'ledger'>('all');
+  const [feedFilter, setFeedFilter] = useState<'all' | 'logged' | 'income' | 'ledger'>('all');
 
   const append = useCallback((line: string) => {
     const ts = new Date().toISOString().slice(11, 19);
@@ -644,18 +646,19 @@ export function TerminalApp() {
   const displayFeed = useMemo(() => {
     const feed = view?.activityFeed ?? [];
     return feed.filter((row) => {
-      if (row.kind === 'logged') {
-        if (feedFilter === 'ledger') return false;
-        return true;
+      if (feedFilter === 'logged') return row.kind === 'logged';
+      if (feedFilter === 'income') return row.kind === 'logged_income' || row.kind === 'income';
+      if (row.kind === 'logged' || row.kind === 'logged_income') {
+        return feedFilter === 'all';
       }
-      if (feedFilter === 'logged') return false;
       if (!row.transferId || !visibleTransferIds.has(row.transferId)) return false;
-      return true;
+      return feedFilter === 'all' || feedFilter === 'ledger';
     });
   }, [view?.activityFeed, feedFilter, visibleTransferIds]);
 
   function feedKindClass(kind: ActivityFeedKind): string {
     if (kind === 'logged') return 'bb-feed-logged';
+    if (kind === 'logged_income') return 'bb-feed-income-log';
     if (kind === 'income') return 'bb-feed-in';
     if (kind === 'failed') return 'bb-feed-fail';
     return 'bb-feed-out';
@@ -745,6 +748,15 @@ export function TerminalApp() {
           <section className="bb-panel bb-watch">
             <h2 className="bb-hd">SNAPSHOT <span className="bb-hd-sub">your money picture</span></h2>
             <div className="bb-panel-main">
+              {view.finance && view.moneyProfile && (
+                <MoneyPeriodPanel
+                  accountId={account.id}
+                  profile={view.moneyProfile}
+                  finance={view.finance}
+                  busy={busy !== ''}
+                  onUpdated={() => void loadAccount(account.id)}
+                />
+              )}
               {view.insights && (
                 <ul className="bb-insight-list bb-pad">
                   {view.insights.bullets.map((line, i) => (
@@ -752,14 +764,11 @@ export function TerminalApp() {
                   ))}
                 </ul>
               )}
-              <table className="bb-tbl bb-summary-tbl">
-                <tbody>
-                  <tr><td className="bb-k">Logged (30d)</td><td className="bb-hi">{view.insights?.loggedSpend30d ?? view.habits?.summary30d.totalSpent ?? '—'}</td></tr>
-                  <tr><td className="bb-k">Income (30d)</td><td>{view.insights?.income30d ?? '—'}</td></tr>
-                  <tr><td className="bb-k">Wallet</td><td className="bb-dim">{view.balance}</td></tr>
-                  <tr><td className="bb-k">To people</td><td className="bb-dim">{view.insights?.sentToPeople30d ?? view.summary.sent}</td></tr>
-                </tbody>
-              </table>
+              <LogIncomeForm
+                accountId={account.id}
+                busy={busy !== ''}
+                onLogged={() => void loadAccount(account.id)}
+              />
               <LogSpendForm
                 accountId={account.id}
                 busy={busy !== ''}
@@ -827,7 +836,8 @@ export function TerminalApp() {
             </h2>
             <div className="bb-feed-filters bb-pad">
               <button type="button" className={`bb-btn-chip${feedFilter === 'all' ? ' bb-btn-chip-on' : ''}`} onClick={() => setFeedFilter('all')}>All</button>
-              <button type="button" className={`bb-btn-chip${feedFilter === 'logged' ? ' bb-btn-chip-on' : ''}`} onClick={() => setFeedFilter('logged')}>You logged</button>
+              <button type="button" className={`bb-btn-chip${feedFilter === 'logged' ? ' bb-btn-chip-on' : ''}`} onClick={() => setFeedFilter('logged')}>Spending</button>
+              <button type="button" className={`bb-btn-chip${feedFilter === 'income' ? ' bb-btn-chip-on' : ''}`} onClick={() => setFeedFilter('income')}>Income</button>
               <button type="button" className={`bb-btn-chip${feedFilter === 'ledger' ? ' bb-btn-chip-on' : ''}`} onClick={() => setFeedFilter('ledger')}>Ledger only</button>
             </div>
             <div className="bb-panel-main">

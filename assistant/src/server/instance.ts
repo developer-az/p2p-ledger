@@ -2,8 +2,10 @@ import { createApp } from './app.js';
 import { HttpLedgerClient } from './ledger.js';
 import { CompositeLedger, isLiveLedgerReachable, PracticeLedger } from './practice-ledger.js';
 import { createSpendLogStore } from './spend-log.js';
+import { createPersonalFinanceStore } from './personal-finance.js';
 
 let spendLogs = createSpendLogStore();
+let personalFinance = createPersonalFinanceStore();
 
 /** Shared API app for Node server, Vercel, and Vite dev middleware. */
 export function createAssistantApi() {
@@ -14,11 +16,13 @@ export function createAssistantApi() {
   const isLiveLedgerUp = () => isLiveLedgerReachable(ledgerUrl);
   const ledger = new CompositeLedger(liveLedger, practice, isLiveLedgerUp);
   spendLogs = createSpendLogStore();
+  personalFinance = createPersonalFinanceStore();
   return createApp({
     ledger,
     practice,
     liveLedger,
     isLiveLedgerUp,
     spendLogs,
+    personalFinance,
   });
 }

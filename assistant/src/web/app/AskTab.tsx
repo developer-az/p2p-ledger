@@ -18,7 +18,8 @@ const TOOL_WORDS: Record<string, string> = {
 const SUGGESTIONS = [
   'Why was my payment declined?',
   'How much did I spend this week?',
-  'Who have I sent the most money to?',
+  'Where did most of my money go this month?',
+  'Can I afford a $60 night out this week?',
 ];
 
 interface Message extends Turn {
@@ -26,7 +27,17 @@ interface Message extends Turn {
   note?: string;
 }
 
-export function AskTab({ accountId, boot }: { accountId: string; boot: BootstrapResponse }) {
+export function AskTab({
+  accountId,
+  boot,
+  seed,
+  onSeedUsed,
+}: {
+  accountId: string;
+  boot: BootstrapResponse;
+  seed?: string | null;
+  onSeedUsed?: () => void;
+}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -41,6 +52,14 @@ export function AskTab({ accountId, boot }: { accountId: string; boot: Bootstrap
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'nearest' });
   }, [messages, busy]);
+
+  useEffect(() => {
+    if (!seed) return;
+    void ask(seed);
+    onSeedUsed?.();
+    // The seed is a one-shot prompt from another screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed]);
 
   async function ask(question: string) {
     const q = question.trim();
@@ -72,38 +91,49 @@ export function AskTab({ accountId, boot }: { accountId: string; boot: Bootstrap
   const modelOn = boot.chat?.configured ?? false;
 
   return (
-    <div className="stack">
-      <div>
-        <h1 className="page-title">Ask</h1>
-        <p className="page-sub">
-          Ask about your payments, declines or spending. The assistant can read your wallet and nothing else, and it cannot move money.
-        </p>
-      </div>
-      <section className="card stack" aria-label="Conversation">
+    <div className="ask-page">
+      <header className="patterns-head">
+        <div>
+          <p className="eyebrow">Ask</p>
+          <h1>A conversation with your records.</h1>
+          <p className="page-sub">Read-only answers about your wallet, your habits and your declines. It cannot move money.</p>
+        </div>
+        <span className="pill pill-good"><Icon name="lock" size={14} /> Read-only</span>
+      </header>
+
+      <section className="card ask-panel" aria-label="Conversation">
         {!modelOn ? (
           <p className="notice notice-warn" style={{ fontSize: '0.92rem' }}>
-            The language model is not connected on this server, so answers are built directly from your records. They are accurate but plainer.
+            The language model is not connected on this server, so answers are built directly from your records. Accurate, just plainer.
           </p>
         ) : null}
         <div className="chat" aria-live="polite">
           {messages.length === 0 ? (
-            <div className="stack-sm">
-              <p className="muted">Try one of these:</p>
-              <div className="chips">
+            <div className="ask-empty">
+              <div className="ask-orb" aria-hidden="true">✦</div>
+              <h2>What do you want to know?</h2>
+              <p className="muted">Start with a question, or pick one of these.</p>
+              <div className="suggestion-grid">
                 {SUGGESTIONS.map((s) => (
-                  <button key={s} type="button" className="chip" onClick={() => void ask(s)}>{s}</button>
+                  <button key={s} type="button" className="suggestion" onClick={() => void ask(s)}>
+                    <Icon name="sparkle" size={16} />
+                    <span>{s}</span>
+                  </button>
                 ))}
               </div>
             </div>
           ) : null}
           {messages.map((m, i) => (
-            <div key={i} style={{ display: 'grid' }}>
-              <div className={`bubble ${m.role === 'user' ? 'bubble-user' : 'bubble-ai'}`}>{m.text}</div>
-              {m.role === 'assistant' && m.checked && m.checked.length > 0 ? (
-                <p className="faint" style={{ fontSize: '0.82rem', margin: '4px 6px 0' }}>
-                  Looked at: {m.checked.join(', ')}.{m.note ? ` ${m.note}` : ''}
-                </p>
-              ) : null}
+            <div key={i} className={`chat-turn chat-${m.role}`}>
+              {m.role === 'assistant' ? <span className="chat-avatar" aria-hidden="true">✦</span> : null}
+              <div>
+                <div className={`bubble ${m.role === 'user' ? 'bubble-user' : 'bubble-ai'}`}>{m.text}</div>
+                {m.role === 'assistant' && m.checked && m.checked.length > 0 ? (
+                  <p className="chat-grounding">
+                    Looked at: {m.checked.join(', ')}.{m.note ? ` ${m.note}` : ''}
+                  </p>
+                ) : null}
+              </div>
             </div>
           ))}
           {busy ? <div className="bubble bubble-ai faint">Looking through your records…</div> : null}
@@ -115,6 +145,7 @@ export function AskTab({ accountId, boot }: { accountId: string; boot: Bootstrap
           <input id="ask-input" className="input" placeholder="Ask about your money" value={text} maxLength={400} onChange={(e) => setText(e.target.value)} />
           <button className="btn btn-primary" type="submit" disabled={busy || !text.trim()} aria-label="Send question"><Icon name="send" /></button>
         </form>
+        <p className="hint ask-hint">Answers come from read-only tools scoped to this wallet. Nothing leaves your records except the question.</p>
       </section>
     </div>
   );

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { runAssistant } from './agent.js';
 import { booksCheck, paymentTrail, racePayment, replayPayment, tamperWithPayment } from './console.js';
 import { seedDemo } from './demo.js';
+import { seedDemoHabits, type DemoPersona } from './demo-habits.js';
 import { normalizeProviderId } from './env-normalize.js';
 import { answerFromLedger } from './fallback.js';
 import { LedgerError, type LedgerAuditor, type LedgerReader, type LedgerWriter } from './ledger.js';
@@ -20,7 +21,8 @@ import {
 } from './bank-sim.js';
 import { peerLedgerView } from './peer-ledger.js';
 import { buildActivityFeed, buildPersonalInsights } from './money-insights.js';
-import { buildHabitsHome, SPEND_CATEGORIES, type SpendLogStore } from './spend-log.js';
+import { buildHabitsFromEntries, buildHabitsHome, SPEND_CATEGORIES, type SpendLogStore } from './spend-log.js';
+import { buildSpendingPatterns } from './spending-patterns.js';
 import {
   buildFinanceSnapshot,
   INCOME_SOURCES,
@@ -84,6 +86,7 @@ const recordSpendBody = z.object({
 const financePatchBody = z.object({
   walletCashMinor: z.number().int().min(0).max(MAX_MINOR_UI).nullable().optional(),
   creditOwedMinor: z.number().int().min(0).max(MAX_MINOR_UI).optional(),
+  weeklyBudgetMinor: z.number().int().min(0).max(MAX_MINOR_UI).nullable().optional(),
   spendLogsAffectWallet: z.boolean().optional(),
 });
 
@@ -186,7 +189,7 @@ export function createApp(deps: {
   app.get('/accounts', async (c) => {
     const id = c.req.query('id');
     const limit = Number(c.req.query('limit') ?? '30');
-    if (id) return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, id, Math.min(limit, 100), now));
+    if (id) return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, id, Math.min(limit, 100), now, tzOffsetFrom(c)));
     const owner = c.req.query('owner');
     if (!owner) return c.json({ error: 'owner is required' }, 400);
     const accounts = await deps.ledger.accountsByOwner(owner);
@@ -375,7 +378,7 @@ export function createApp(deps: {
   }
 
   // Direct links. The UI uses ?id= so a host that 404s a second path segment still reaches this app.
-  app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, c.req.param('id'), 30, now)));
+  app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, c.req.param('id'), 30, now, tzOffsetFrom(c))));
 
   app.post('/accounts/:id/spends', async (c) => {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
@@ -397,6 +400,20 @@ export function createApp(deps: {
       note: event.note,
       occurredAt: event.occurredAt,
     }, 201);
+  });
+
+  app.delete('/accounts/:id/spends/:spendId', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const accountId = c.req.param('id');
+    const spendId = c.req.param('spendId');
+    if (!z.string().uuid().safeParse(accountId).success || !z.string().uuid().safeParse(spendId).success) {
+      return c.json({ error: 'Invalid id' }, 400);
+    }
+    const account = await deps.ledger.getAccount(accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const removed = await deps.spendLogs.remove(accountId, spendId);
+    if (!removed) return c.json({ error: 'That log was already removed' }, 404);
+    return c.json({ removed: true });
   });
 
   app.get('/accounts/:id/habits', async (c) => {
@@ -470,7 +487,7 @@ export function createApp(deps: {
   app.get('/accounts/:id/statement.txt', async (c) => {
     const id = c.req.param('id');
     if (!z.string().uuid().safeParse(id).success) return c.text('Invalid account id', 400);
-    const view = await accountView(deps.ledger, deps.spendLogs, personalFinance, id, 100, now);
+    const view = await accountView(deps.ledger, deps.spendLogs, personalFinance, id, 100, now, tzOffsetFrom(c));
     if (!view) return c.text('Account not found', 404);
     const entries = await deps.ledger.entries(id, 200);
     const body = formatLedgerStatement(view, entries, {
@@ -490,10 +507,13 @@ export function createApp(deps: {
     const live = deps.isLiveLedgerUp ? await deps.isLiveLedgerUp() : false;
     if (!live || !deps.liveLedger) {
       return c.json({
-        error: 'The live ledger is not running. Use Alex, Sam, or Jordan below — they work without Docker. To create fresh accounts, run: docker compose up',
+        error: 'The live ledger is not running. Use the guided practice demo below — it works without Docker.',
       }, 503);
     }
     const seeded = await seedDemo(deps.liveLedger);
+    const personas: DemoPersona[] = ['alex', 'sam', 'jordan'];
+    await Promise.all(seeded.accounts.map((account, i) =>
+      seedDemoHabits(deps.spendLogs, personalFinance, account.id, personas[i] ?? 'alex', now())));
     const [alex, sam, jordan] = seeded.accounts;
     if (alex && sam && jordan) {
       const ask = (requester: string, payer: string, amountMinor: number, memo: string) =>
@@ -503,6 +523,22 @@ export function createApp(deps: {
       await ask(alex.id, sam.id, 3_500, 'Concert parking');
     }
     return c.json(seeded);
+  });
+
+  /** Guided demo in practice mode: the fixed household plus a personal history to explore. */
+  app.post('/demo/practice', async (c) => {
+    if (!allowSeed(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const boot = deps.practice.bootstrap();
+    await Promise.all([
+      seedDemoHabits(deps.spendLogs, personalFinance, PRACTICE_ALEX, 'alex', now()),
+      seedDemoHabits(deps.spendLogs, personalFinance, PRACTICE_SAM, 'sam', now()),
+      seedDemoHabits(deps.spendLogs, personalFinance, PRACTICE_JORDAN, 'jordan', now()),
+    ]);
+    return c.json({
+      accounts: boot.accounts.map(({ id, owner }) => ({ id, owner })),
+      focusAccountId: boot.focusAccountId,
+      seeded: true,
+    });
   });
 
   app.get('/bank/status', (c) => c.json(bankSimulatorStatus()));
@@ -656,6 +692,12 @@ export function createApp(deps: {
   return app;
 }
 
+function tzOffsetFrom(c: { req: { query(name: string): string | undefined } }): number {
+  const raw = Number(c.req.query('tzOffset') ?? '0');
+  if (!Number.isFinite(raw)) return 0;
+  return Math.max(-840, Math.min(840, Math.trunc(raw)));
+}
+
 async function accountView(
   ledger: LedgerReader,
   spendLogs: SpendLogStore,
@@ -663,25 +705,30 @@ async function accountView(
   id: string,
   limit = 30,
   now: () => Date,
+  tzOffsetMinutes = 0,
 ) {
   if (!z.string().uuid().safeParse(id).success) return null;
   const base = await loadAccountView(ledger, id, limit);
   if (!base) return null;
   const profile = await personalFinance.getProfile(id, base.currency, now());
-  const habits = await buildHabitsHome(spendLogs, id, now(), base.currency, profile.periodStart);
-  const spends = await spendLogs.list(id, { limit: 80 });
-  const incomes = await personalFinance.listIncome(id, { limit: 80 });
+  const allSpends = await spendLogs.list(id, { limit: 500 });
+  const allIncomes = await personalFinance.listIncome(id, { limit: 500 });
+  const habits = buildHabitsFromEntries(allSpends, now(), base.currency, profile.periodStart);
+  const spends = allSpends.slice(0, 80);
+  const incomes = allIncomes.slice(0, 80);
+  const patterns = buildSpendingPatterns(allSpends, allIncomes, now(), profile, tzOffsetMinutes);
   const activityFeed = buildActivityFeed(
     base.transfers,
     spends,
     (minor, currency) => formatMoney(minor, currency),
     incomes,
   );
-  const finance = buildFinanceSnapshot(profile, base.balance, spends, incomes);
+  const finance = buildFinanceSnapshot(profile, base.balance, allSpends, allIncomes);
   const insights = buildPersonalInsights(base.balance, base.summary, habits, finance);
   return {
     ...base,
     habits,
+    patterns,
     finance,
     moneyProfile: profile,
     activityFeed,

@@ -66,6 +66,19 @@ describe('personal finance', () => {
     expect(after.periodLabel).toMatch(/December 2026/);
   });
 
+  it('keeps a weekly pace on the profile and in the snapshot', async () => {
+    const store = new InMemoryPersonalFinanceStore();
+    const profile = await store.updateProfile(ACCOUNT, 'USD', {
+      walletCashMinor: 80_000,
+      creditOwedMinor: 12_000,
+      weeklyBudgetMinor: 25_000,
+    });
+    expect(profile.weeklyBudgetMinor).toBe(25_000);
+    const snap = buildFinanceSnapshot(profile, '$0.00', [], []);
+    expect(snap.weeklyBudget).toBe('$250.00');
+    expect(snap.netCash).toBe('$680.00');
+  });
+
   it('sumSince ignores older rows', () => {
     const total = sumSince(
       [{ amountMinor: 100, occurredAt: '2026-11-01T00:00:00Z' }, { amountMinor: 200, occurredAt: '2026-10-01T00:00:00Z' }],

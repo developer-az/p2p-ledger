@@ -1,9 +1,28 @@
-import { useEffect, useState } from 'react';
-import { api, dollarsToMinor, SPEND_CATEGORIES, type AccountRef, type SpendCategory } from '../api.js';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import {
+  api,
+  dollarsToMinor,
+  INCOME_SOURCES,
+  SPEND_CATEGORIES,
+  type AccountRef,
+  type IncomeSource,
+  type SpendCategory,
+  type SpendEntry,
+} from '../api.js';
+import { categoryLabel, categoryMeta } from './categories.js';
 import { money } from './format.js';
 import { Sheet, useToast } from './ui.js';
 
-const QUICK = [2500, 10000, 50000];
+export { categoryLabel } from './categories.js';
+
+const QUICK = [2500, 5000, 10_000, 25_000];
+const SOURCE_LABELS: Record<IncomeSource, string> = {
+  salary: 'Salary',
+  freelance: 'Freelance',
+  gift: 'Gift',
+  refund: 'Refund',
+  other: 'Other',
+};
 
 export function AddMoneySheet({
   open,
@@ -14,7 +33,7 @@ export function AddMoneySheet({
   open: boolean;
   onClose: () => void;
   me: AccountRef;
-  onChanged: () => void;
+  onChanged: () => Promise<void>;
 }) {
   const toast = useToast();
   const [text, setText] = useState('');
@@ -36,8 +55,8 @@ export function AddMoneySheet({
     setError(null);
     try {
       await api.deposit(me.id, minor);
-      onChanged();
-      toast(`Added ${money(minor)}`);
+      await onChanged();
+      toast(`Added ${money(minor)} to your Settle wallet`, { tone: 'good' });
       onClose();
     } catch (e) {
       setError((e as Error).message);
@@ -47,11 +66,8 @@ export function AddMoneySheet({
   }
 
   return (
-    <Sheet open={open} title="Add money" onClose={onClose}>
+    <Sheet open={open} title="Add money" subtitle="A simulated bank transfer into your Settle wallet." onClose={onClose}>
       <form className="stack" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-        <p className="muted">
-          This is a simulated bank transfer. No real money is involved; it creates a deposit in the ledger so you can try payments.
-        </p>
         <div className="chips" role="group" aria-label="Quick amounts">
           {QUICK.map((q) => (
             <button key={q} type="button" className="chip" aria-pressed={minor === q} onClick={() => setText(String(q / 100))}>
@@ -66,6 +82,7 @@ export function AddMoneySheet({
             <input id="add-amount" className="input" inputMode="decimal" autoComplete="off" placeholder="0.00" value={text} onChange={(e) => setText(e.target.value)} />
           </div>
         </div>
+        <p className="hint">This is pretend money in the demo ledger. It does not touch a real bank account.</p>
         {error ? <p className="error-text" role="alert">{error}</p> : null}
         <button className="btn btn-primary btn-block" type="submit" disabled={minor === null || busy}>
           {busy ? 'Adding…' : minor === null ? 'Add money' : `Add ${money(minor)}`}
@@ -75,31 +92,105 @@ export function AddMoneySheet({
   );
 }
 
-const CATEGORY_LABEL: Record<SpendCategory, string> = {
-  dining: 'Dining',
-  groceries: 'Groceries',
-  transport: 'Transport',
-  entertainment: 'Fun',
-  housing: 'Housing',
-  shopping: 'Shopping',
-  health: 'Health',
-  other: 'Other',
-};
+export function IncomeSheet({
+  open,
+  onClose,
+  me,
+  onChanged,
+  onLogged,
+}: {
+  open: boolean;
+  onClose: () => void;
+  me: AccountRef;
+  onChanged: () => Promise<void>;
+  onLogged?: () => void;
+}) {
+  const toast = useToast();
+  const [text, setText] = useState('');
+  const [source, setSource] = useState<IncomeSource>('salary');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const minor = dollarsToMinor(text);
 
-export function categoryLabel(category: string): string {
-  return CATEGORY_LABEL[category as SpendCategory] ?? category;
+  useEffect(() => {
+    if (open) {
+      setText('');
+      setNote('');
+      setSource('salary');
+      setError(null);
+      setBusy(false);
+    }
+  }, [open]);
+
+  async function submit() {
+    if (minor === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.recordIncome(me.id, { amountMinor: minor, source, note: note.trim() || undefined });
+      await onChanged();
+      onLogged?.();
+      toast(`${money(minor)} of ${SOURCE_LABELS[source].toLowerCase()} logged`, { tone: 'good' });
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet open={open} title="Log income" subtitle="Money that arrived. It feeds your month, not your Settle wallet." onClose={onClose}>
+      <form className="stack" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+        <div className="field">
+          <label className="label" htmlFor="income-amount">Amount</label>
+          <div className="amount-input">
+            <span aria-hidden="true">$</span>
+            <input id="income-amount" className="input" inputMode="decimal" autoComplete="off" placeholder="0.00" value={text} onChange={(e) => setText(e.target.value)} />
+          </div>
+        </div>
+        <div className="field">
+          <span className="label" id="income-source">Where from?</span>
+          <div className="chips" role="group" aria-labelledby="income-source">
+            {INCOME_SOURCES.map((s) => (
+              <button key={s} type="button" className="chip" aria-pressed={source === s} onClick={() => setSource(s)}>
+                {SOURCE_LABELS[s]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="field">
+          <label className="label" htmlFor="income-note">Note <span className="faint">(optional)</span></label>
+          <input id="income-note" className="input" maxLength={120} placeholder="October paycheck" value={note} onChange={(e) => setNote(e.target.value)} />
+        </div>
+        {error ? <p className="error-text" role="alert">{error}</p> : null}
+        <button className="btn btn-primary btn-block" type="submit" disabled={minor === null || busy}>
+          {busy ? 'Saving…' : minor === null ? 'Log income' : `Log ${money(minor)}`}
+        </button>
+      </form>
+    </Sheet>
+  );
 }
 
 export function LogSpendSheet({
   open,
   onClose,
   me,
+  recent = [],
+  initialCategory,
+  initialAmount,
   onChanged,
+  onLogged,
 }: {
   open: boolean;
   onClose: () => void;
   me: AccountRef;
-  onChanged: () => void;
+  recent?: SpendEntry[];
+  initialCategory?: SpendCategory;
+  initialAmount?: number;
+  onChanged: () => Promise<void>;
+  onLogged?: () => void;
 }) {
   const toast = useToast();
   const [text, setText] = useState('');
@@ -111,22 +202,49 @@ export function LogSpendSheet({
 
   useEffect(() => {
     if (open) {
-      setText('');
+      setText(initialAmount ? (initialAmount / 100).toFixed(initialAmount % 100 === 0 ? 0 : 2) : '');
+      setCategory(initialCategory ?? 'dining');
       setNote('');
-      setCategory('dining');
       setError(null);
       setBusy(false);
     }
-  }, [open]);
+  }, [open, initialCategory, initialAmount]);
+
+  const again = useMemo(() => {
+    const seen = new Set<string>();
+    const rows: SpendEntry[] = [];
+    for (const entry of recent) {
+      const key = `${entry.category}|${entry.note ?? ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(entry);
+      if (rows.length === 3) break;
+    }
+    return rows;
+  }, [recent]);
 
   async function submit() {
     if (minor === null) return;
     setBusy(true);
     setError(null);
     try {
-      await api.recordSpend(me.id, { amountMinor: minor, category, note: note.trim() || undefined });
-      onChanged();
-      toast(`Logged ${money(minor)} for ${categoryLabel(category).toLowerCase()}`);
+      const result = await api.recordSpend(me.id, { amountMinor: minor, category, note: note.trim() || undefined });
+      await onChanged();
+      onLogged?.();
+      toast(`Logged ${money(minor)} · ${categoryLabel(category)}`, {
+        tone: 'good',
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            void api.deleteSpend(me.id, result.id)
+              .then(async () => {
+                await onChanged();
+                toast('Log removed');
+              })
+              .catch((e: Error) => toast(e.message, { tone: 'bad' }));
+          },
+        },
+      });
       onClose();
     } catch (e) {
       setError((e as Error).message);
@@ -136,35 +254,88 @@ export function LogSpendSheet({
   }
 
   return (
-    <Sheet open={open} title="Log a spend" onClose={onClose}>
-      <form className="stack" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-        <p className="muted">
-          For spending outside the wallet, like coffee or a bus pass. Only you can see it, and it does not change your wallet balance.
-        </p>
+    <Sheet
+      open={open}
+      title="Log a spend"
+      subtitle="What left your pocket? Two taps and you're done."
+      size="wide"
+      onClose={onClose}
+    >
+      <form className="log-form" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+        <div className="log-amount">
+          <span aria-hidden="true">$</span>
+          <input
+            autoFocus
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="0"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            aria-label="Amount"
+          />
+        </div>
+
+        <div className="chips log-quick" role="group" aria-label="Quick amounts">
+          {QUICK.map((q) => (
+            <button key={q} type="button" className="chip" aria-pressed={minor === q} onClick={() => setText(String(q / 100))}>
+              {money(q)}
+            </button>
+          ))}
+        </div>
+
+        {again.length > 0 ? (
+          <div className="again">
+            <p className="eyebrow">Again?</p>
+            <div className="chips">
+              {again.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  className="chip chip-again"
+                  onClick={() => {
+                    setCategory(entry.category);
+                    setNote(entry.note ?? '');
+                    setText((entry.amountMinor / 100).toFixed(entry.amountMinor % 100 === 0 ? 0 : 2));
+                  }}
+                >
+                  {categoryMeta(entry.category).emoji} {entry.note || categoryLabel(entry.category)} · {entry.amount}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div className="field">
-          <label className="label" htmlFor="spend-amount">Amount</label>
-          <div className="amount-input">
-            <span aria-hidden="true">$</span>
-            <input id="spend-amount" className="input" inputMode="decimal" autoComplete="off" placeholder="0.00" value={text} onChange={(e) => setText(e.target.value)} />
+          <span className="label" id="spend-cat">What was it?</span>
+          <div className="cat-grid" role="group" aria-labelledby="spend-cat">
+            {SPEND_CATEGORIES.map((c) => {
+              const meta = categoryMeta(c);
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  className="cat-tile"
+                  aria-pressed={category === c}
+                  style={{ '--cat': meta.color } as CSSProperties}
+                  onClick={() => setCategory(c)}
+                >
+                  <span className="cat-emoji" aria-hidden="true">{meta.emoji}</span>
+                  <span>{meta.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
-        <div className="field">
-          <span className="label" id="spend-cat">Category</span>
-          <div className="chips" role="group" aria-labelledby="spend-cat">
-            {SPEND_CATEGORIES.map((c) => (
-              <button key={c} type="button" className="chip" aria-pressed={category === c} onClick={() => setCategory(c)}>
-                {categoryLabel(c)}
-              </button>
-            ))}
-          </div>
-        </div>
+
         <div className="field">
           <label className="label" htmlFor="spend-note">Note <span className="faint">(optional)</span></label>
           <input id="spend-note" className="input" maxLength={120} placeholder="Coffee with Sam" value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
+
+        <p className="hint">Only you see this. It never moves money or changes your Settle wallet.</p>
         {error ? <p className="error-text" role="alert">{error}</p> : null}
-        <button className="btn btn-primary btn-block" type="submit" disabled={minor === null || busy}>
-          {busy ? 'Saving…' : 'Save'}
+        <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={minor === null || busy}>
+          {busy ? 'Saving…' : minor === null ? 'Log it' : `Log ${money(minor)}`}
         </button>
       </form>
     </Sheet>

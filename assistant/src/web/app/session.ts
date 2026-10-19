@@ -6,6 +6,8 @@ export interface Session {
   account: AccountRef;
   /** The demo household (Alex, Sam, Jordan), so one person can "view as" another. */
   household: AccountRef[];
+  /** True only for the guided demo; personal wallets are never marked demo. */
+  demo?: boolean;
 }
 
 function validRef(x: unknown): x is AccountRef {
@@ -21,7 +23,7 @@ export function loadSession(): Session | null {
     const parsed = JSON.parse(raw) as Partial<Session>;
     if (!validRef(parsed.account)) return null;
     const household = Array.isArray(parsed.household) ? parsed.household.filter(validRef) : [];
-    return { account: parsed.account, household };
+    return { account: parsed.account, household, demo: parsed.demo === true };
   } catch {
     return null;
   }

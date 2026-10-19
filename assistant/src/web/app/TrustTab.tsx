@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, type AccountRef, type Integrity, type RaceResult, type ReplayResult, type TamperReport } from '../api.js';
+import { api, type AccountRef, type Integrity, type ReplayResult, type TamperReport } from '../api.js';
 import type { WalletData } from './data.js';
 import { isLedgerItem, buildFeed } from './feed.js';
 import { dateTimeLabel } from './format.js';
@@ -35,7 +35,7 @@ function Demo<T>({ title, plain, button, run, onRun, children }: {
   );
 }
 
-export function TrustTab({ me, data, live }: { me: AccountRef; data: WalletData | null; live: boolean }) {
+export function TrustTab({ me, data, embedded = false }: { me: AccountRef; data: WalletData | null; embedded?: boolean }) {
   const [integrity, setIntegrity] = useState<Integrity | null>(null);
   const [integrityError, setIntegrityError] = useState<string | null>(null);
 
@@ -45,21 +45,21 @@ export function TrustTab({ me, data, live }: { me: AccountRef; data: WalletData 
     return () => { cancelled = true; };
   }, []);
 
-  // The demos need a real, completed payment to act on.
+  // The demos need a real, completed ledger entry to act on.
   const completed = data ? buildFeed(data.view).find((i) => isLedgerItem(i) && i.transferId && i.kind !== 'declined') : undefined;
   const transferId = completed?.transferId ?? null;
-  const out = data?.peers[0];
 
   const [replay, runReplay] = useRun<ReplayResult>(() => api.replay(me.id, transferId!));
   const [tamper, runTamper] = useRun<TamperReport>(() => api.tamper(me.id, transferId!));
-  const [race, runRace] = useRun<RaceResult>(() => api.race(me.id, out!.id));
 
   return (
-    <div className="stack">
-      <div>
-        <h1 className="page-title">Trust</h1>
-        <p className="page-sub">What keeps your balance honest, and how to check it yourself.</p>
-      </div>
+    <div className={embedded ? 'trust-embedded stack' : 'stack'}>
+      {!embedded ? (
+        <div>
+          <h1 className="page-title">Trust</h1>
+          <p className="page-sub">What keeps your balance honest, and how to check it yourself.</p>
+        </div>
+      ) : null}
 
       <section className="card" aria-labelledby="health">
         <h2 id="health">Ledger health</h2>
@@ -79,7 +79,7 @@ export function TrustTab({ me, data, live }: { me: AccountRef; data: WalletData 
       </section>
 
       {!transferId ? (
-        <div className="notice">Make a payment first. These checks run against a real payment in your history.</div>
+        <div className="notice">Make a deposit first. These checks run against a real ledger entry in your history.</div>
       ) : null}
 
       <div className="grid-2">
@@ -90,12 +90,6 @@ export function TrustTab({ me, data, live }: { me: AccountRef; data: WalletData 
           {(t) => <ul className="stack-sm" style={{ margin: 0, paddingLeft: 18 }}>{t.attempts.map((a) => <li key={a.attempt}><strong>{a.attempt}:</strong> {a.refused ? 'refused' : 'allowed'}. <span className="faint">{a.databaseSaid}</span></li>)}</ul>}
         </Demo>
       </div>
-
-      {live && out ? (
-        <Demo title="Two taps at once" button="Fire 10 identical payments at once" run={race} onRun={runRace} plain="A friend pays you, and ten copies of that request hit the ledger at the same moment. Only one should move money.">
-          {(r) => <p>{r.copies} requests sent, {r.distinctTransfers} payment created, {r.entriesPosted ?? 0} ledger lines posted. {r.status === 'REJECTED' ? (r.declineExplanation ?? 'It was declined.') : 'The rest were safely ignored.'}</p>}
-        </Demo>
-      ) : null}
 
       <section className="card stack-sm">
         <h2>What the assistant can see</h2>

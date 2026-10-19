@@ -67,6 +67,14 @@ describe('GET /api/accounts/:id', () => {
     expect(body.finance.periodLabel).toBeTruthy();
   });
 
+  it('accepts a viewer timezone offset for local patterns', async () => {
+    const res = await app.request(`/api/accounts?id=${ME}&tzOffset=420`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { patterns: { week: { start: string; end: string } } };
+    expect(body.patterns.week.start).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(body.patterns.week.end).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
   it('records income and updates finance profile', async () => {
     const patch = await app.request(`/api/accounts/${ME}/finance`, {
       method: 'PATCH',
@@ -93,6 +101,47 @@ describe('GET /api/accounts/:id', () => {
       body: JSON.stringify({ amountMinor: 500, category: 'dining' }),
     });
     expect(res.status).toBe(201);
+  });
+
+  it('seeds a guided practice demo with personal history', async () => {
+    const res = await app.request('/api/demo/practice', { method: 'POST' });
+    expect(res.status).toBe(200);
+    const body = await res.json() as { accounts: { id: string }[]; focusAccountId: string };
+    expect(body.accounts).toHaveLength(3);
+    const view = await app.request(`/api/accounts?id=${body.focusAccountId}`);
+    const account = await view.json() as {
+      moneyProfile: { walletCashMinor: number | null; weeklyBudgetMinor: number | null };
+      patterns: { totals: { spend30dMinor: number }; streak: { currentDays: number } };
+    };
+    expect(account.moneyProfile.walletCashMinor).toBe(320_000);
+    expect(account.moneyProfile.weeklyBudgetMinor).toBe(45_000);
+    expect(account.patterns.totals.spend30dMinor).toBeGreaterThan(0);
+    expect(account.patterns.streak.currentDays).toBeGreaterThan(0);
+  });
+
+  it('funds a brand-new wallet and gives it a first peer', async () => {
+    const created = await app.request('/api/accounts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ownerId: 'new-person-test', currency: 'USD' }),
+    });
+    expect(created.status).toBe(201);
+    const account = await created.json() as { id: string };
+    const welcome = await app.request('/api/bank/welcome', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId: account.id }),
+    });
+    expect(welcome.status).toBe(200);
+    const packageBody = await welcome.json() as { depositTransferId: string; corridor: { peer: { id: string } } };
+    expect(packageBody.depositTransferId).toBeTruthy();
+    expect(packageBody.corridor.peer.id).toBeTruthy();
+    const view = await app.request(`/api/accounts?id=${account.id}`);
+    const body = await view.json() as { balance: string };
+    expect(body.balance).not.toBe('$0.00');
+    const peersRes = await app.request(`/api/peers?accountId=${account.id}`);
+    const peers = await peersRes.json() as { id: string }[];
+    expect(peers.some((peer) => peer.id === packageBody.corridor.peer.id)).toBe(true);
   });
 
   it('says the ledger is waking when the upstream returns 502', async () => {

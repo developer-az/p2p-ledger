@@ -13,14 +13,14 @@ PNG assets for the root **README** and portfolio use. Prefer captures from **liv
 
 | File | Capture |
 |------|---------|
-| `settle-home.png` | Desktop **Today** above the fold: net position, weekly pace, quick actions, patterns peek (1440×1040) |
-| `settle-split-phone.png` | Mobile **Split a bill** sheet with friends selected (390×844) |
+| `settle-home.png` | Desktop **Today** above the fold: guided demo, net position, weekly pace, quick actions, patterns peek (1440×1040) |
+| `settle-habits-phone.png` | Mobile **Today** with the guided demo and weekly pace (390×844) |
 
 **How to refresh Settle shots**
 
 1. `cd assistant && npm run dev` (practice mode is fine).
-2. Open `http://localhost:5173`, try the demo, set the snapshot.
-3. Desktop: capture **Today** above the fold. Mobile: open **Split** from the quick actions.
+2. Open `http://localhost:5173`, start the guided demo, and let the personal history load.
+3. Desktop: capture **Today** above the fold. Mobile: capture the same screen at 390×844.
 4. Save under `docs/images/` and commit.
 
 **How to refresh**

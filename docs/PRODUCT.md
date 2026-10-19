@@ -1,16 +1,16 @@
 # Product direction — Settle (consumer app) on a ledger-first core
 
-**Settle** is the user-facing app (`/`): a calm money snapshot, two-tap spend logging, patterns from your own history, send, split, request, and a receipt for every payment. The original terminal is the engineering console at `/ops`.
+**Settle** is the user-facing app (`/`): a calm money snapshot, two-tap spend logging, income, weekly pace, and patterns from your own history. The original terminal is the engineering console at `/ops`; P2P endpoints remain in the API for clients that need them.
 
 ## The Settle experience (current)
 
 | Surface | Job | Rules |
 |---------|-----|-------|
-| **Today** | Net position (cash − cards), what is left of the weekly pace, requests that need an answer, recent activity | One glance; one next action |
-| **Activity** | Unified timeline of ledger payments, logged spends and logged income | Day totals; receipt on every ledger row; undo on a logged spend |
+| **Today** | Net position (cash − cards), what is left of the weekly pace, a habits-focused recent list, patterns peek | One glance; one next action |
+| **Activity** | Unified timeline of logged spends, income and ledger entries | Day totals; receipt on every ledger row; undo on a logged spend |
 | **Patterns** | Eight-week heatmap, 30-day categories, weekday rhythm, month projection, card-payoff planner, milestones | Only from what the person logged; never mixed with ledger totals |
 | **Ask** | Read-only questions about the wallet and habits | No money movement; tools scoped to one wallet |
-| **Wallet** | Edit cash/cards/weekly pace, Settle wallet actions, friends, requests, statement, trust lab | The ledger wallet and the personal snapshot stay separate |
+| **Wallet** | Edit cash/cards/weekly pace, logging stats, ledger balance, statement, trust lab | The ledger wallet and the personal snapshot stay separate |
 
 **Onboarding** asks three numbers once — cash, card balance, a weekly pace — in a 30-second sheet. It is editable, skippable, and never a bank login. **Logging** is amount + category with recent-repeat chips and an undo toast. A daily streak, weekly ring, and small milestones give the habit a game-like rhythm without turning money into a slot machine.
 
@@ -20,18 +20,19 @@
 |---|---|---|
 | Entry | **Start the guided demo** | **Create my wallet** |
 | Data | Seeded household + personal history for Alex, Sam, Jordan | New ledger account, no spend logs, no demo household |
-| First money | Existing demo balances/transfers | **$500 simulated deposit + one inbound corridor** so send/split/request work immediately |
-| Guidance | Five-step card: baseline → log → split → pay → receipt; **Demo** pill reopens it | Normal first-run setup; cash prefilled from the funded Settle wallet |
-| Isolation | `spend_logs`, `money_profiles`, requests and progress keyed by demo account ids | Keyed by the new account id; demo data never enters it |
+| First money | Existing demo balances/transfers | **$500 simulated deposit + one inbound corridor** so the ledger is never empty |
+| Guidance | Five-step card: baseline → log spend → log income → Patterns → weekly pace; **Demo** pill reopens it | Normal first-run setup; cash prefilled from the funded Settle wallet |
+| Isolation | `spend_logs`, `money_profiles` and progress keyed by demo account ids | Keyed by the new account id; demo data never enters it |
 | Persistence | Practice: memory; live: Postgres | Live: Postgres; practice: memory until restart |
 
-The demo is deliberately instructive: it has a believable history, a real declined payment, open requests, and a progress card that points at the feature each step proves. The personal wallet is deliberately clean: funded, with a first peer, but no demo story.
+The demo is deliberately instructive: it has a believable history, a real declined payment, ledger entries, and a progress card that points at the feature each step proves. The personal wallet is deliberately clean: funded, with a first peer, but no demo story.
 
 What actually runs, with no pretence:
 
 - Payments, deposits, declines and balances are real double-entry ledger operations (Postgres, append-only, idempotent).
 - A payment request is a row in `payment_requests`. Paying it is one ledger transfer with key `request-<id>-<declinedAttempts>`, so a double click moves money once and a retry after a decline uses a fresh key.
 - Splitting a bill creates one request per friend; shares always sum to the total.
+- The consumer app no longer exposes send/split; those ledger capabilities remain available to `/ops` and API clients, while Settle stays focused on spending habits.
 - Demo only: no authentication (a wallet id acts as the key), no real money, hosted event sink is `log`.
 
 # Product direction — habits + ledger-first P2P
@@ -83,11 +84,11 @@ SQL migration: [`assistant/sql/V1__spend_logs.sql`](../assistant/sql/V1__spend_l
 - No story gate, no WASD, no extra clicks. Saved wallets on this device appear as **Welcome back**.
 - The mock is illustrative only; real numbers come from the account view after sign-in.
 
-## Live send (today)
+## Live demo (today)
 
-1. **Seed live household** on sign-in → alex-/sam-/jordan-* wallets with history, personal demo logs and peers.
+1. **Seed live household** on sign-in → alex-/sam-/jordan-* wallets with history and personal demo logs.
 2. **Create wallet** → opens a fresh ledger account, funds a **$500 welcome deposit + inbound corridor**, pre-fills the cash step, and keeps demo data out.
-3. **Practice mode** → full P2P without Java; created wallets live in memory until restart.
+3. **Practice mode** → full ledger without Java; created wallets live in memory until restart.
 4. **Log habits** → the two-tap sheet on Today, or `log 12 dining coffee` in the ops console.
 
 ## Roadmap (showcase → production)

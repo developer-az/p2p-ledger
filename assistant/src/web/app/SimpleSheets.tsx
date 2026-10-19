@@ -33,7 +33,7 @@ export function AddMoneySheet({
   open: boolean;
   onClose: () => void;
   me: AccountRef;
-  onChanged: () => void;
+  onChanged: () => Promise<void>;
 }) {
   const toast = useToast();
   const [text, setText] = useState('');
@@ -55,7 +55,7 @@ export function AddMoneySheet({
     setError(null);
     try {
       await api.deposit(me.id, minor);
-      onChanged();
+      await onChanged();
       toast(`Added ${money(minor)} to your Settle wallet`, { tone: 'good' });
       onClose();
     } catch (e) {
@@ -97,11 +97,13 @@ export function IncomeSheet({
   onClose,
   me,
   onChanged,
+  onLogged,
 }: {
   open: boolean;
   onClose: () => void;
   me: AccountRef;
-  onChanged: () => void;
+  onChanged: () => Promise<void>;
+  onLogged?: () => void;
 }) {
   const toast = useToast();
   const [text, setText] = useState('');
@@ -127,7 +129,8 @@ export function IncomeSheet({
     setError(null);
     try {
       await api.recordIncome(me.id, { amountMinor: minor, source, note: note.trim() || undefined });
-      onChanged();
+      await onChanged();
+      onLogged?.();
       toast(`${money(minor)} of ${SOURCE_LABELS[source].toLowerCase()} logged`, { tone: 'good' });
       onClose();
     } catch (e) {
@@ -186,7 +189,7 @@ export function LogSpendSheet({
   recent?: SpendEntry[];
   initialCategory?: SpendCategory;
   initialAmount?: number;
-  onChanged: () => void;
+  onChanged: () => Promise<void>;
   onLogged?: () => void;
 }) {
   const toast = useToast();
@@ -226,7 +229,7 @@ export function LogSpendSheet({
     setError(null);
     try {
       const result = await api.recordSpend(me.id, { amountMinor: minor, category, note: note.trim() || undefined });
-      onChanged();
+      await onChanged();
       onLogged?.();
       toast(`Logged ${money(minor)} · ${categoryLabel(category)}`, {
         tone: 'good',
@@ -234,8 +237,8 @@ export function LogSpendSheet({
           label: 'Undo',
           onClick: () => {
             void api.deleteSpend(me.id, result.id)
-              .then(() => {
-                onChanged();
+              .then(async () => {
+                await onChanged();
                 toast('Log removed');
               })
               .catch((e: Error) => toast(e.message, { tone: 'bad' }));

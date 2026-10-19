@@ -1,17 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './app.css';
-import { api, type AccountRef, type BootstrapResponse, type SpendCategory } from '../api.js';
+import { api, type BootstrapResponse, type SpendCategory } from '../api.js';
 import { ActivitySheet } from './ActivitySheet.js';
 import { ActivityTab } from './ActivityTab.js';
 import { AskTab } from './AskTab.js';
 import { useWallet } from './data.js';
-import { buildFeed, type FeedItem } from './feed.js';
+import type { FeedItem } from './feed.js';
 import { DemoGuide, type DemoStepId } from './DemoGuide.js';
 import { displayName, parseMoney } from './format.js';
 import { Home } from './Home.js';
 import { InsightsTab } from './InsightsTab.js';
-import { RequestSheet } from './RequestSheet.js';
-import { SendSheet } from './SendSheet.js';
 import { clearSession, loadSession, saveSession, type Session } from './session.js';
 import { SetupSheet } from './SetupSheet.js';
 import { AddMoneySheet, IncomeSheet, LogSpendSheet } from './SimpleSheets.js';
@@ -28,9 +26,9 @@ const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'wallet', label: 'Wallet', icon: 'wallet' },
 ];
 
-type Sheetname = null | 'send' | 'split' | 'add' | 'log' | 'income' | 'setup';
+type Sheetname = null | 'add' | 'log' | 'income' | 'setup';
 
-const DEMO_STEPS: DemoStepId[] = ['baseline', 'log', 'split', 'pay', 'receipt'];
+const DEMO_STEPS: DemoStepId[] = ['baseline', 'log', 'income', 'patterns', 'pace'];
 
 function loadDemoProgress(key: string): DemoStepId[] {
   try {
@@ -50,7 +48,7 @@ export function ConsumerApp() {
   const [session, setSession] = useState<Session | null>(() => loadSession());
 
   useEffect(() => {
-    document.title = 'Settle · know your money, settle with friends';
+    document.title = 'Settle · know your money, keep the habit';
     api.bootstrap().then(setBoot).catch((e: Error) => setBootError(e.message));
   }, []);
 
@@ -105,14 +103,13 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   const me = session.account;
   const demo = session.demo === true;
   const demoKey = `settle:demo-progress:${me.id}`;
-  const { data, error, reload } = useWallet(me.id);
+  const { data, error, refreshing, reload } = useWallet(me.id);
   const [tab, setTab] = useState<Tab>('today');
   const [demoProgress, setDemoProgress] = useState<DemoStepId[]>(() => (demo ? loadDemoProgress(demoKey) : []));
   const [showDemoGuide, setShowDemoGuide] = useState(true);
   const [sheet, setSheet] = useState<Sheetname>(null);
   const [setupMode, setSetupMode] = useState<'onboarding' | 'edit'>('onboarding');
   const [setupStep, setSetupStep] = useState<0 | 1 | 2>(0);
-  const [sendTo, setSendTo] = useState<AccountRef | null>(null);
   const [item, setItem] = useState<FeedItem | null>(null);
   const [logPreset, setLogPreset] = useState<{ category?: SpendCategory; amountMinor?: number }>({});
   const [askSeed, setAskSeed] = useState<string | null>(null);
@@ -173,9 +170,12 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
     setSheet('setup');
   }, [data, me.id]);
 
-  const go = (t: Tab) => { setTab(t); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const go = (t: Tab) => {
+    if (demo && t === 'patterns') markDemo('patterns');
+    setTab(t);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   const closeSheet = () => setSheet(null);
-  const balanceMinor = Math.round((parseMoney(data?.view.balance) ?? 0) * 100);
   const celebrate = () => setBurst(Date.now());
 
   const openLog = (preset: { category?: SpendCategory; amountMinor?: number } = {}) => {
@@ -188,10 +188,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
     go('ask');
   };
 
-  const openFeedItem = (feedItem: FeedItem) => {
-    if (demo && feedItem.transferId) markDemo('receipt');
-    setItem(feedItem);
-  };
+  const openFeedItem = (feedItem: FeedItem) => setItem(feedItem);
 
   const handleDemoStep = (step: DemoStepId) => {
     switch (step) {
@@ -203,28 +200,22 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
       case 'log':
         openLog();
         break;
-      case 'split':
-        setSheet('split');
+      case 'income':
+        setSheet('income');
         break;
-      case 'pay':
-        if (tab !== 'today') go('today');
-        window.setTimeout(() => {
-          document.getElementById('needs-you')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 120);
+      case 'patterns':
+        go('patterns');
         break;
-      case 'receipt': {
-        const feed = data ? buildFeed(data.view) : [];
-        const first = feed.find((entry) => entry.transferId);
-        if (first) openFeedItem(first);
-        else go('activity');
+      case 'pace':
+        setSetupMode('edit');
+        setSetupStep(2);
+        setSheet('setup');
         break;
-      }
     }
   };
 
   const demoGuide = demo && showDemoGuide ? (
     <DemoGuide
-      data={data}
       progress={demoProgress}
       onStep={handleDemoStep}
       onDismiss={() => setShowDemoGuide(false)}
@@ -253,6 +244,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
           </nav>
           <span className="spacer" />
           <div className="top-actions">
+            {refreshing ? <span className="sync-pill" role="status" aria-label="Updating your wallet"><span className="sync-dot" /></span> : null}
             <button type="button" className="top-ask" onClick={() => ask()} title="Ask about your money">
               <Icon name="sparkle" size={16} /><span>Ask</span>
             </button>
@@ -289,6 +281,12 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
 
       <main id="main" className="main">
         {error && !data ? <ErrorNotice message={error} onRetry={() => void reload()} /> : null}
+        {error && data ? (
+          <div className="notice notice-warn sync-banner" role="status">
+            <span>Couldn&apos;t refresh your wallet.</span>
+            <button type="button" className="link-btn" onClick={() => void reload()}>Retry</button>
+          </div>
+        ) : null}
         <div className="view" key={tab}>
           {tab === 'today' ? (
             <Home
@@ -296,8 +294,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
               data={data}
               guide={demoGuide}
               actions={{
-                send: (to) => { setSendTo(to ?? null); setSheet('send'); },
-                split: () => setSheet('split'),
                 addMoney: () => setSheet('add'),
                 logSpend: openLog,
                 logIncome: () => setSheet('income'),
@@ -311,8 +307,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
                   setSetupStep(step ?? 0);
                   setSheet('setup');
                 },
-                requestPaid: () => markDemo('pay'),
-                reload: () => void reload(),
               }}
             />
           ) : null}
@@ -330,16 +324,11 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
             <WalletTab
               me={me}
               data={data}
-              boot={boot}
               actions={{
                 setup: () => { setSetupMode(data?.view.moneyProfile?.walletCashMinor == null ? 'onboarding' : 'edit'); setSetupStep(0); setSheet('setup'); },
                 logIncome: () => setSheet('income'),
                 addMoney: () => setSheet('add'),
-                send: (to) => { setSendTo(to ?? null); setSheet('send'); },
-                split: () => setSheet('split'),
                 ask: () => ask(),
-                reload: () => void reload(),
-                requestPaid: () => markDemo('pay'),
                 signOut: onSignOut,
               }}
             />
@@ -363,27 +352,8 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         </button>
       ) : null}
 
-      <SendSheet
-        open={sheet === 'send'}
-        onClose={closeSheet}
-        me={me}
-        balanceMinor={balanceMinor}
-        peers={data?.peers ?? []}
-        initialTo={sendTo}
-        onChanged={() => void reload()}
-        onAddMoney={() => setSheet('add')}
-      />
-      <RequestSheet
-        open={sheet === 'split'}
-        onClose={closeSheet}
-        me={me}
-        peers={data?.peers ?? []}
-        initialMode="split"
-        onChanged={() => void reload()}
-        onCompleted={() => markDemo('split')}
-      />
-      <AddMoneySheet open={sheet === 'add'} onClose={closeSheet} me={me} onChanged={() => void reload()} />
-      <IncomeSheet open={sheet === 'income'} onClose={closeSheet} me={me} onChanged={() => void reload()} />
+      <AddMoneySheet open={sheet === 'add'} onClose={closeSheet} me={me} onChanged={reload} />
+      <IncomeSheet open={sheet === 'income'} onClose={closeSheet} me={me} onChanged={reload} onLogged={() => markDemo('income')} />
       <LogSpendSheet
         open={sheet === 'log'}
         onClose={closeSheet}
@@ -391,7 +361,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         recent={data?.view.spendEntries ?? []}
         initialCategory={logPreset.category}
         initialAmount={logPreset.amountMinor}
-        onChanged={() => void reload()}
+        onChanged={reload}
         onLogged={() => { celebrate(); markDemo('log'); }}
       />
       <SetupSheet
@@ -402,9 +372,13 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         mode={setupMode}
         initialStep={setupStep}
         suggestedCashMinor={parseMoney(data?.view.balance)}
-        onSaved={() => void reload()}
+        onSaved={async (savedStep) => {
+          await reload();
+          if (savedStep === 2) markDemo('pace');
+          else markDemo('baseline');
+        }}
       />
-      <ActivitySheet item={item} accountId={me.id} onClose={() => setItem(null)} onChanged={() => void reload()} />
+      <ActivitySheet item={item} accountId={me.id} onClose={() => setItem(null)} onChanged={reload} />
       <Confetti burst={burst} />
     </>
   );

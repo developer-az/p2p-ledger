@@ -89,20 +89,20 @@ export function Welcome({
     <div className="welcome">
       <section className="welcome-hero">
         <div className="welcome-copy">
-          <p className="eyebrow">Settle · money with friends</p>
-          <h1>Know your money.<br /><em>Settle</em> with friends.</h1>
+          <p className="eyebrow">Settle · money with intention</p>
+          <h1>Know your money.<br /><em>Keep</em> the habit.</h1>
           <p className="welcome-lede">
-            One calm place for your cash, your cards, and what you actually spend. Split a bill in a few taps.
-            Every payment sits on a ledger you can inspect.
+            One calm place for your cash, your cards, and what you actually spend.
+            Log in two taps and watch the week take shape.
           </p>
           <div className="row-wrap welcome-actions">
             <button type="button" className="btn btn-primary btn-lg" onClick={() => void tryDemo()} disabled={!boot || busy !== null}>
               {busy === 'demo' ? 'Setting up…' : 'Start the guided demo'}
-              {busy !== 'demo' ? <Icon name="send" size={18} /> : null}
+              {busy !== 'demo' ? <Icon name="sparkle" size={18} /> : null}
             </button>
             <a className="btn btn-lg" href="#how">See how it works</a>
           </div>
-          <p className="welcome-demo-note">Sample history, five things to try, and a real ledger underneath. No setup required.</p>
+          <p className="welcome-demo-note">Sample history, five habits to try, and a real ledger underneath. No setup required.</p>
           <p className="legal">Demo only. Pretend dollars between demo wallets. No bank login, no real money.</p>
           <a className="welcome-own-link" href="#own-wallet">Or start with your own clean wallet →</a>
           {error ? <p className="error-text" role="alert" style={{ marginTop: 10 }}>{error}</p> : null}
@@ -136,8 +136,8 @@ export function Welcome({
             </div>
             <div className="phone-row">
               <span className="phone-icon is-in">↙</span>
-              <span><strong>Sam</strong><small>Dinner split</small></span>
-              <strong className="is-in">+$18.00</strong>
+              <span><strong>Salary</strong><small>Logged · Income</small></span>
+              <strong className="is-in">+$2,100</strong>
             </div>
             <div className="phone-row">
               <span className="phone-icon">🛒</span>
@@ -186,9 +186,9 @@ export function Welcome({
           <p>Amount, category, done. The app turns small logs into a week you can actually see.</p>
         </article>
         <article className="feature">
-          <span className="feature-icon">🔍</span>
-          <h2>Receipts, not vibes</h2>
-          <p>Send, split, request. Every payment is two ledger lines you can open and verify.</p>
+          <span className="feature-icon">📈</span>
+          <h2>Patterns, not guesswork</h2>
+          <p>A calendar heatmap, category shifts and a weekly pace that shows where the month is heading.</p>
         </article>
       </section>
 
@@ -196,7 +196,7 @@ export function Welcome({
         <div>
           <p className="eyebrow">Your own wallet</p>
           <h2>Start clean. Keep it yours.</h2>
-          <p className="muted">Your cash, cards and logs live on your wallet id — the demo household never touches them. You start with a $500 simulated deposit and a first friend so sending and splitting work immediately.</p>
+          <p className="muted">Your cash, cards and logs live on your wallet id — the demo household never touches them. You start with a $500 simulated deposit and a funded ledger balance, so the wallet is never empty.</p>
         </div>
         <form className="welcome-create" onSubmit={(e) => { e.preventDefault(); void create(); }}>
           <label className="sr-only" htmlFor="wallet-name">Your first name</label>

@@ -16,7 +16,7 @@ export function ActivitySheet({
   item: FeedItem | null;
   accountId: string;
   onClose: () => void;
-  onChanged?: () => void;
+  onChanged?: () => Promise<void>;
 }) {
   const toast = useToast();
   const [trail, setTrail] = useState<PaymentTrail | null>(null);
@@ -49,8 +49,8 @@ export function ActivitySheet({
     setRemoving(true);
     try {
       await api.deleteSpend(accountId, item.spendId);
+      await onChanged?.();
       toast('Log removed', { tone: 'good' });
-      onChanged?.();
       onClose();
     } catch (e) {
       toast((e as Error).message, { tone: 'bad' });

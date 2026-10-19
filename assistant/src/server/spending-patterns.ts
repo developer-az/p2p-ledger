@@ -6,7 +6,7 @@ const WINDOW_DAYS = 56;
 const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 
 export interface PatternDay {
-  /** UTC day key, YYYY-MM-DD. */
+  /** Local day key in the viewer's timezone, YYYY-MM-DD. */
   date: string;
   spendMinor: number;
   incomeMinor: number;
@@ -85,7 +85,7 @@ function addDays(d: Date, days: number): Date {
   return new Date(d.getTime() + days * MS_DAY);
 }
 
-/** Monday 00:00 UTC of the week containing `d`. */
+/** Monday 00:00 in the shifted local calendar. */
 function startOfWeek(d: Date): Date {
   const day = utcDayStart(d);
   const offset = (day.getUTCDay() + 6) % 7;
@@ -115,38 +115,47 @@ function pctChange(current: number, previous: number): number | null {
 
 /**
  * Everything the Patterns screen needs, derived from what the person logged.
- * The function is deliberately pure so the numbers can be tested without a server.
+ * `tzOffsetMinutes` is the browser's `getTimezoneOffset()` (minutes to add to
+ * local time to reach UTC). Shifting by it makes days, weeks, months and
+ * weekdays match the viewer instead of the server's UTC clock.
  */
 export function buildSpendingPatterns(
   spends: SpendLogEntry[],
   incomes: IncomeLogEntry[],
   now: Date,
   profile?: Pick<MoneyProfile, 'weeklyBudgetMinor' | 'currency'>,
+  tzOffsetMinutes = 0,
 ): SpendingPatterns {
-  const today = utcDayStart(now);
+  const shiftMs = tzOffsetMinutes * 60_000;
+  const shift = (ms: number): Date => new Date(ms - shiftMs);
+  const unshift = (d: Date): number => d.getTime() + shiftMs;
+  const localDayKey = (iso: string): string => dayKey(shift(Date.parse(iso)));
+  const nowLocal = shift(now.getTime());
+  const today = utcDayStart(nowLocal);
   const nowMs = now.getTime();
   const windowStart = addDays(today, -(WINDOW_DAYS - 1));
+  const windowStartMs = unshift(windowStart);
   const dayMap = new Map<string, PatternDay>();
   for (let i = 0; i < WINDOW_DAYS; i++) {
     const key = dayKey(addDays(windowStart, i));
     dayMap.set(key, { date: key, spendMinor: 0, incomeMinor: 0, count: 0 });
   }
   for (const spend of spends) {
-    const key = dayKey(new Date(spend.occurredAt));
+    const key = localDayKey(spend.occurredAt);
     const day = dayMap.get(key);
     if (!day) continue;
     day.spendMinor += spend.amountMinor;
     day.count += 1;
   }
   for (const income of incomes) {
-    const key = dayKey(new Date(income.occurredAt));
+    const key = localDayKey(income.occurredAt);
     const day = dayMap.get(key);
     if (day) day.incomeMinor += income.amountMinor;
   }
   const days = [...dayMap.values()];
 
-  const start30 = addDays(today, -29).getTime();
-  const startPrev30 = addDays(today, -59).getTime();
+  const start30 = unshift(addDays(today, -29));
+  const startPrev30 = unshift(addDays(today, -59));
   const spend30 = spends.filter((s) => inRange(timeOf(s), start30, nowMs + 1));
   const spendPrev30 = spends.filter((s) => inRange(timeOf(s), startPrev30, start30));
   const income30 = incomes.filter((i) => inRange(timeOf(i), start30, nowMs + 1));
@@ -182,8 +191,8 @@ export function buildSpendingPatterns(
   const weekdayTotals = Array.from({ length: 7 }, (_, weekday) => ({ weekday, totalMinor: 0, count: 0 }));
   for (const spend of spends) {
     const t = timeOf(spend);
-    if (t < windowStart.getTime() || t > nowMs) continue;
-    const row = weekdayTotals[new Date(spend.occurredAt).getUTCDay()];
+    if (t < windowStartMs || t > nowMs) continue;
+    const row = weekdayTotals[shift(t).getUTCDay()];
     if (!row) continue;
     row.totalMinor += spend.amountMinor;
     row.count += 1;
@@ -196,23 +205,23 @@ export function buildSpendingPatterns(
     averageMinor: Math.round(row.totalMinor / (WINDOW_DAYS / 7)),
   }));
 
-  const weekStart = startOfWeek(now);
-  const weekStartMs = weekStart.getTime();
-  const lastWeekStartMs = addDays(weekStart, -7).getTime();
+  const weekStart = startOfWeek(today);
+  const weekStartMs = unshift(weekStart);
+  const lastWeekStartMs = unshift(addDays(weekStart, -7));
   const weekSpends = spends.filter((s) => inRange(timeOf(s), weekStartMs, nowMs + 1));
   const lastWeekSpends = spends.filter((s) => inRange(timeOf(s), lastWeekStartMs, weekStartMs));
   const weekSpentMinor = sumMinor(weekSpends);
   const budgetMinor = profile?.weeklyBudgetMinor ?? null;
 
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const monthStartMs = monthStart.getTime();
+  const monthStart = new Date(Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), 1));
+  const monthStartMs = unshift(monthStart);
   const monthSpends = spends.filter((s) => inRange(timeOf(s), monthStartMs, nowMs + 1));
   const monthIncomes = incomes.filter((i) => inRange(timeOf(i), monthStartMs, nowMs + 1));
-  const dayOfMonth = now.getUTCDate();
-  const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
+  const dayOfMonth = nowLocal.getUTCDate();
+  const daysInMonth = new Date(Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth() + 1, 0)).getUTCDate();
   const monthSpentMinor = sumMinor(monthSpends);
 
-  const loggedDays = new Set(spends.map((s) => dayKey(new Date(s.occurredAt))));
+  const loggedDays = new Set(spends.map((s) => localDayKey(s.occurredAt)));
   let streakDays = 0;
   let cursor = loggedDays.has(dayKey(today)) ? today : addDays(today, -1);
   while (loggedDays.has(dayKey(cursor))) {
@@ -232,7 +241,7 @@ export function buildSpendingPatterns(
     if (!latest) return spend.occurredAt;
     return Date.parse(spend.occurredAt) > Date.parse(latest) ? spend.occurredAt : latest;
   }, null);
-  const activeDayKeys = new Set(spend30.map((s) => dayKey(new Date(s.occurredAt))));
+  const activeDayKeys = new Set(spend30.map((s) => localDayKey(s.occurredAt)));
 
   const biggestDay = days.reduce<PatternDay | null>((biggest, day) => {
     if (day.spendMinor <= 0) return biggest;
@@ -254,7 +263,7 @@ export function buildSpendingPatterns(
       remainingMinor: budgetMinor === null ? null : budgetMinor - weekSpentMinor,
     },
     month: {
-      label: monthLabel(now),
+      label: monthLabel(nowLocal),
       start: dayKey(monthStart),
       spentMinor: monthSpentMinor,
       incomeMinor: sumMinor(monthIncomes),

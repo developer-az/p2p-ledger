@@ -58,4 +58,29 @@ describe('spending patterns', () => {
     expect(dining?.changePct).toBeNull();
     expect(patterns.totals.spendPrev30dMinor).toBe(0);
   });
+
+  it('uses the viewer local day and week instead of the UTC boundary', () => {
+    const sundayEvening = new Date('2026-10-19T00:30:00Z'); // Sunday 5:30pm PDT
+    const spend = {
+      id: 's-local',
+      accountId: 'me',
+      amountMinor: 1_200,
+      currency: 'USD',
+      category: 'dining' as const,
+      note: 'Sunday dinner',
+      occurredAt: '2026-10-18T23:00:00Z', // Sunday 4pm PDT, before Monday UTC
+      source: 'manual' as const,
+      createdAt: '2026-10-18T23:00:00Z',
+    };
+    const local = buildSpendingPatterns([spend], [], sundayEvening, { weeklyBudgetMinor: 5_000, currency: 'USD' }, 420);
+    expect(local.week.start).toBe('2026-10-12');
+    expect(local.week.spentMinor).toBe(1_200);
+    expect(local.days.at(-1)?.date).toBe('2026-10-18');
+    expect(local.month.dayOfMonth).toBe(18);
+    expect(local.streak.currentDays).toBe(1);
+
+    const utc = buildSpendingPatterns([spend], [], sundayEvening, { weeklyBudgetMinor: 5_000, currency: 'USD' }, 0);
+    expect(utc.week.start).toBe('2026-10-19');
+    expect(utc.week.spentMinor).toBe(0);
+  });
 });

@@ -397,7 +397,7 @@ export function dollarsToMinor(input: string): number | null {
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
+    res = await fetch(path, { ...init, cache: 'no-store', headers: { 'Content-Type': 'application/json', ...init?.headers } });
   } catch {
     throw new Error(API_DOWN);
   }
@@ -464,8 +464,8 @@ export const api = {
 
   bankOutbound: (accountId: string) =>
     call<CorridorResult>('/api/bank/outbound', { method: 'POST', body: JSON.stringify({ accountId }) }),
-  account: (id: string, limit = 50) =>
-    call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}&limit=${limit}`),
+  account: (id: string, limit = 50, tzOffsetMinutes = 0) =>
+    call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}&limit=${limit}&tzOffset=${encodeURIComponent(String(tzOffsetMinutes))}`),
   habits: (accountId: string) =>
     call<HabitsHome>(`/api/accounts/${encodeURIComponent(accountId)}/habits`),
   recordSpend: (accountId: string, body: { amountMinor: number; category: SpendCategory; note?: string }) =>

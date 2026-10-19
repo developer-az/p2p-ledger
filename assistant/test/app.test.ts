@@ -67,6 +67,14 @@ describe('GET /api/accounts/:id', () => {
     expect(body.finance.periodLabel).toBeTruthy();
   });
 
+  it('accepts a viewer timezone offset for local patterns', async () => {
+    const res = await app.request(`/api/accounts?id=${ME}&tzOffset=420`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { patterns: { week: { start: string; end: string } } };
+    expect(body.patterns.week.start).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(body.patterns.week.end).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
   it('records income and updates finance profile', async () => {
     const patch = await app.request(`/api/accounts/${ME}/finance`, {
       method: 'PATCH',

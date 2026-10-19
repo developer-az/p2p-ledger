@@ -1,18 +1,14 @@
 import { useMemo, type ReactNode } from 'react';
 import type { AccountRef, SpendCategory } from '../api.js';
 import { categoryMeta } from './categories.js';
-import { declineCopy } from './copy.js';
 import { buildFeed, type FeedItem } from './feed.js';
 import { FeedList } from './FeedList.js';
 import { displayName, greeting, money } from './format.js';
 import { moneyPlan } from './money-plan.js';
-import { IncomingRequests } from './Requests.js';
 import type { WalletData } from './data.js';
-import { Avatar, EmptyState, Icon, ProgressRing, Skeleton } from './ui.js';
+import { EmptyState, Icon, ProgressRing, Skeleton } from './ui.js';
 
 export interface HomeActions {
-  send: (to?: AccountRef) => void;
-  split: () => void;
   addMoney: () => void;
   logSpend: (preset?: { category?: SpendCategory; amountMinor?: number }) => void;
   logIncome: () => void;
@@ -22,8 +18,6 @@ export interface HomeActions {
   seeInsights: () => void;
   seeWallet: () => void;
   setup: (step?: 0 | 1 | 2) => void;
-  requestPaid: () => void;
-  reload: () => void;
 }
 
 function weekDots(days: { date: string; count: number }[], todayKey: string) {
@@ -39,14 +33,9 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
   const feed = useMemo(() => (data ? buildFeed(data.view) : []), [data]);
   if (!data) return <HomeSkeleton />;
 
-  const { view, requests, peers } = data;
+  const { view } = data;
   const plan = moneyPlan(view);
-  const pendingIn = requests.incoming.filter((r) => r.status === 'PENDING');
-  const pendingOut = requests.outgoing.filter((r) => r.status === 'PENDING');
-  const latestDecline = feed.find((i) => i.kind === 'declined' && i.signedMinor < 0
-    && Date.now() - Date.parse(i.occurredAt) < 7 * 86_400_000);
-  const declineText = latestDecline ? declineCopy(latestDecline.declineReason, latestDecline.declineExplanation) : null;
-  const top = plan.topCategory;
+  const habitFeed = feed.filter((item) => item.kind === 'spend' || item.kind === 'income');
   const dots = plan.patterns ? weekDots(plan.patterns.days, plan.patterns.week.end) : [];
   const weekChange = plan.patterns
     ? plan.patterns.week.spentMinor - plan.patterns.week.lastWeekSpentMinor
@@ -58,7 +47,7 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
         <div>
           <p className="eyebrow">{greeting()} · {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
           <h1>Hi, {displayName(me.owner)}.</h1>
-          <p className="page-sub">A calm look at your money, and one small thing you can do next.</p>
+          <p className="page-sub">A calm look at your spending, and one small thing you can do next.</p>
         </div>
         <div className="hello-badges">
           <span className="streak-pill" title="Consecutive days with a logged spend">
@@ -81,47 +70,23 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
           <span className="quick-icon"><Icon name="plus" size={22} /></span>
           <span className="quick-copy"><strong>Log spend</strong><small>2 taps</small></span>
         </button>
-        <button type="button" className="quick" onClick={() => actions.send()}>
-          <span className="quick-icon"><Icon name="send" size={20} /></span>
-          <span className="quick-copy"><strong>Send</strong><small>to a friend</small></span>
-        </button>
-        <button type="button" className="quick" onClick={actions.split}>
-          <span className="quick-icon"><Icon name="split" size={20} /></span>
-          <span className="quick-copy"><strong>Split</strong><small>a bill</small></span>
-        </button>
         <button type="button" className="quick" onClick={actions.addMoney}>
           <span className="quick-icon"><Icon name="bank" size={20} /></span>
-          <span className="quick-copy"><strong>Add</strong><small>to wallet</small></span>
+          <span className="quick-copy"><strong>Add money</strong><small>to wallet</small></span>
+        </button>
+        <button type="button" className="quick" onClick={actions.logIncome}>
+          <span className="quick-icon"><Icon name="receive" size={20} /></span>
+          <span className="quick-copy"><strong>Log income</strong><small>money in</small></span>
+        </button>
+        <button type="button" className="quick" onClick={() => actions.setup(2)}>
+          <span className="quick-icon"><Icon name="target" size={20} /></span>
+          <span className="quick-copy"><strong>Weekly pace</strong><small>{plan.budgetMinor === null ? 'set a plan' : 'adjust'}</small></span>
         </button>
       </section>
 
       <div className="home-grid">
         <div className="stack">
           <WeekCard plan={plan} dots={dots} weekChange={weekChange} onSetup={() => actions.setup(plan.hasBaseline ? 2 : 0)} onInsights={actions.seeInsights} />
-
-          {pendingIn.length > 0 ? (
-            <section className="card needs-you" aria-labelledby="needs-you">
-              <div className="card-head">
-                <div>
-                  <p className="eyebrow">A small decision</p>
-                  <h2 id="needs-you">Needs your answer</h2>
-                </div>
-                <span className="pill pill-warn">{pendingIn.length} open</span>
-              </div>
-              <IncomingRequests requests={pendingIn.slice(0, 2)} me={me.id} onChanged={actions.reload} onPaid={actions.requestPaid} />
-              {pendingIn.length > 2 ? <p className="hint" style={{ marginTop: 10 }}>+{pendingIn.length - 2} more waiting in Activity.</p> : null}
-            </section>
-          ) : null}
-
-          {latestDecline && declineText ? (
-            <section className="notice notice-bad stack-sm" aria-label="A payment did not go through">
-              <p><strong>A payment did not go through.</strong> {money(Math.abs(latestDecline.signedMinor))} to {displayName(latestDecline.counterparty ?? '')}. No money moved.</p>
-              <p>{declineText.why}</p>
-              <div className="row-wrap">
-                <button type="button" className="btn btn-sm" onClick={() => actions.openItem(latestDecline)}>See details</button>
-              </div>
-            </section>
-          ) : null}
 
           <section className="card" aria-labelledby="recent">
             <div className="card-head">
@@ -131,21 +96,16 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
               </div>
               {feed.length > 0 ? <button type="button" className="link-btn" onClick={actions.seeAll}>See all</button> : null}
             </div>
-            {feed.length === 0 ? (
+            {habitFeed.length === 0 ? (
               <EmptyState
                 title="A clean page"
                 action={<button type="button" className="btn btn-primary" onClick={() => actions.logSpend()}>Log your first spend</button>}
               >
-                Log a coffee, add money, or send a friend $5. Your history starts here.
+                Log a coffee or add money. Your history starts here.
               </EmptyState>
             ) : (
-              <FeedList items={feed.slice(0, 5)} onOpen={actions.openItem} grouped={false} />
+              <FeedList items={habitFeed.slice(0, 5)} onOpen={actions.openItem} grouped={false} />
             )}
-            {pendingOut.length > 0 ? (
-              <p className="hint" style={{ marginTop: 12 }}>
-                Waiting on {pendingOut.length === 1 ? displayName(pendingOut[0]!.payer.owner) : `${pendingOut.length} friends`} to settle up.
-              </p>
-            ) : null}
           </section>
         </div>
 
@@ -163,28 +123,6 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
               <button type="button" className="chip chip-on-dark" onClick={() => actions.ask('Where did most of my money go this month?')}>Where did it go?</button>
               <button type="button" className="chip chip-on-dark" onClick={() => actions.ask('Can I afford a $60 night out this week?')}>Can I afford it?</button>
             </div>
-          </section>
-
-          <section className="card" aria-labelledby="friends">
-            <div className="card-head">
-              <div>
-                <p className="eyebrow">Your circle</p>
-                <h2 id="friends">Friends</h2>
-              </div>
-              <button type="button" className="link-btn" onClick={() => actions.send()}>Send</button>
-            </div>
-            {peers.length === 0 ? (
-              <p className="muted">People you pay, or who pay you, appear here.</p>
-            ) : (
-              <div className="friend-row">
-                {peers.slice(0, 6).map((p) => (
-                  <button key={p.id} type="button" className="friend" onClick={() => actions.send(p)} aria-label={`Send money to ${displayName(p.owner)}`}>
-                    <Avatar owner={p.owner} />
-                    <span>{displayName(p.owner)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
           </section>
         </div>
       </div>
@@ -236,8 +174,8 @@ function MoneyHero({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; acti
         </div>
         <div className="hero-side">
           <div className="hero-mini">
-            <span>Settle wallet</span>
-            <strong className="num">{money(plan.ledgerMinor)}</strong>
+            <span>Logged this month</span>
+            <strong className="num">{money(plan.patterns?.month.spentMinor ?? 0)}</strong>
           </div>
           <button type="button" className="hero-link" onClick={actions.seeInsights}>See your patterns →</button>
         </div>
@@ -259,7 +197,7 @@ function SetupHero({ actions }: { actions: HomeActions }) {
         <div><span>🎯</span><strong>Pace</strong><small>a kind weekly guide</small></div>
       </div>
       <button type="button" className="btn btn-lime" onClick={() => actions.setup(0)}>Set up in 30 seconds</button>
-      <p className="hero-footnote">Or skip — your Settle wallet balance still works.</p>
+      <p className="hero-footnote">Or skip — you can log spends without a baseline.</p>
     </section>
   );
 }

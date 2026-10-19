@@ -1,10 +1,8 @@
-import type { WalletData } from './data.js';
 import { Icon } from './ui.js';
 
-export type DemoStepId = 'baseline' | 'log' | 'split' | 'pay' | 'receipt';
+export type DemoStepId = 'baseline' | 'log' | 'income' | 'patterns' | 'pace';
 
 export interface DemoGuideProps {
-  data: WalletData | null;
   progress: DemoStepId[];
   onStep: (step: DemoStepId) => void;
   onDismiss: () => void;
@@ -33,30 +31,29 @@ const STEPS: StepCopy[] = [
     action: 'Log a spend',
   },
   {
-    id: 'split',
-    title: 'Split a bill with friends',
-    body: 'The shares always add up to the total. Each friend gets a request; money moves only when they accept.',
-    action: 'Split a bill',
+    id: 'income',
+    title: 'Log money coming in',
+    body: 'Salary, freelance, a refund. Income makes the month honest and keeps the projection grounded.',
+    action: 'Log income',
   },
   {
-    id: 'pay',
-    title: 'Answer a request',
-    body: 'Paying a request is one idempotent ledger transfer. A double tap cannot move the money twice.',
-    action: 'Answer a request',
+    id: 'patterns',
+    title: 'Open your patterns',
+    body: 'A calendar heatmap, category shifts, your expensive weekday, and a card payoff path — all from what you logged.',
+    action: 'Open Patterns',
   },
   {
-    id: 'receipt',
-    title: 'Open a receipt',
-    body: 'Every payment is two ledger lines that must balance. Open one and see the proof behind the number.',
-    action: 'Open a receipt',
+    id: 'pace',
+    title: 'Adjust the weekly pace',
+    body: 'A plan is a guide, not a punishment. Change it when life changes and the ring follows.',
+    action: 'Edit weekly pace',
   },
 ];
 
-export function DemoGuide({ data, progress, onStep, onDismiss, onExit, onPatterns }: DemoGuideProps) {
+export function DemoGuide({ progress, onStep, onDismiss, onExit, onPatterns }: DemoGuideProps) {
   const done = new Set(progress);
   const next = STEPS.find((s) => !done.has(s.id));
   const complete = done.size >= STEPS.length;
-  const pending = data?.requests.incoming.filter((r) => r.status === 'PENDING').length ?? 0;
 
   return (
     <section className="demo-guide" aria-labelledby="demo-title">
@@ -72,7 +69,7 @@ export function DemoGuide({ data, progress, onStep, onDismiss, onExit, onPattern
           <h2 id="demo-title">{complete ? 'You have seen the whole loop.' : next?.title}</h2>
           <p>
             {complete
-              ? 'Logging, splitting, paying and checking a receipt — that is the product. Patterns is where it gets interesting.'
+              ? 'Baseline, logging, income, patterns and a weekly pace — that is the product. Your own wallet starts clean whenever you are ready.'
               : next?.body}
           </p>
         </div>
@@ -95,7 +92,7 @@ export function DemoGuide({ data, progress, onStep, onDismiss, onExit, onPattern
         ) : (
           <>
             <button type="button" className="btn btn-primary btn-sm" onClick={() => next && onStep(next.id)}>
-              {next?.id === 'pay' && pending === 0 ? 'Open requests' : next?.action}
+              {next?.action}
             </button>
             <button type="button" className="btn btn-sm" onClick={onExit}>Start my own wallet</button>
           </>

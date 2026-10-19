@@ -19,9 +19,9 @@
 
 <p align="center">
   <img src="docs/images/settle-home.png" alt="Settle guided demo: progress card, net position, weekly pace, and patterns peek" width="640">
-  <img src="docs/images/settle-split-phone.png" alt="Settle on a phone: splitting a bill between friends" width="220">
+  <img src="docs/images/settle-habits-phone.png" alt="Settle on a phone: a weekly pace and spending patterns" width="220">
 </p>
-<p align="center"><sub><strong>Settle</strong>, the app on top of the ledger: send, split bills, request money, log spending. Demo only, no real money. The original terminal lives at <code>/ops</code>.</sub></p>
+<p align="center"><sub><strong>Settle</strong>, the app on top of the ledger: a calm money snapshot, two-tap spend logging, weekly pace, and patterns from your own history. Demo only, no real money. The original terminal lives at <code>/ops</code>.</sub></p>
 
 ---
 
@@ -30,7 +30,7 @@
 | | |
 |---|---|
 | **Problem** | P2P money needs one source of truth: correct balances under concurrency, safe retries, auditable history, explainable declines. |
-| **Approach** | `ledger-service` (Spring Boot + PostgreSQL) is the system of record. `assistant` is the product: a consumer **Settle** app with a money snapshot (cash, cards, weekly pace), **two-tap spend logging**, **Patterns** over the user's own history, **peer settle-ups**, **simulated bank corridors**, and read-only **LLM tools**. |
+| **Approach** | `ledger-service` (Spring Boot + PostgreSQL) is the system of record. `assistant` is the product: a consumer **Settle** app with a money snapshot (cash, cards, weekly pace), **two-tap spend logging**, **Patterns** over the user's own history, **simulated bank corridors**, and read-only **LLM tools**. P2P endpoints remain in the API and `/ops`, but the consumer app is focused on spending habits. |
 | **Scope** | End-to-end portfolio system: Docker, native-image CI, Render + Vercel deploy path, k6 load tests, integration tests. Not a licensed bank — [SECURITY.md](docs/SECURITY.md). |
 
 ## Live surfaces
@@ -50,13 +50,13 @@
 | **Activity** | Every payment, logged spend and income — grouped by day, with a receipt on each payment. |
 | **Patterns** | Where the money went, how this month is trending, which weekday is expensive, and how fast a card can reach zero. |
 | **Ask** | Read-only questions about your records; the assistant cannot move money. |
-| **Wallet** | Edit the snapshot, manage the Settle wallet, friends, requests, statements and the trust lab. |
+| **Wallet** | Edit the snapshot, review logging stats, fund the demo ledger, download a statement and open the trust lab. |
 
 The design rules: **three numbers to start** (cash, card balance, weekly pace), **two taps to log** (amount + category, with recent repeats and undo), and **no mixing** between user logs and ledger transfers. Habit totals never pretend to be a bank feed.
 
-**The demo is a guided tour, not a sandbox.** It seeds a believable personal history and a five-step progress card: set the baseline, log a spend, split a bill, answer a request, open a receipt. Each step points at a real feature and the state updates as you go. A **Demo** pill reopens the guide; **Start my own wallet** leaves the tour.
+**The demo is a guided tour, not a sandbox.** It seeds a believable personal history and a five-step progress card: set the baseline, log a spend, log income, open Patterns, adjust the weekly pace. Each step points at a real feature and the state updates as you go. A **Demo** pill reopens the guide; **Start my own wallet** leaves the tour.
 
-**Your wallet is isolated from the demo.** Creating a wallet opens a new ledger account, funds it with a **$500 simulated deposit plus one inbound corridor** so send/split/request work immediately, pre-fills the cash step from that balance, and starts with no spend logs, no demo household, and no demo progress. In live mode the wallet persists in PostgreSQL; in practice mode it lives in memory.
+**Your wallet is isolated from the demo.** Creating a wallet opens a new ledger account, funds it with a **$500 simulated deposit plus one inbound corridor** so the ledger is never empty, pre-fills the cash step from that balance, and starts with no spend logs, no demo household, and no demo progress. In live mode the wallet persists in PostgreSQL; in practice mode it lives in memory.
 
 
 ## Terminal UI

@@ -36,7 +36,7 @@ export function SetupSheet({
   mode?: 'onboarding' | 'edit';
   initialStep?: 0 | 1 | 2;
   suggestedCashMinor?: number | null;
-  onSaved: () => void;
+  onSaved: (step: 0 | 1 | 2) => Promise<void> | void;
 }) {
   const toast = useToast();
   const [step, setStep] = useState<Step>(0);
@@ -89,7 +89,7 @@ export function SetupSheet({
         weeklyBudgetMinor: budgetMinor,
         spendLogsAffectWallet: affectsWallet,
       });
-      onSaved();
+      await onSaved(step);
       toast(mode === 'onboarding' ? 'Baseline saved. This is your starting line.' : 'Your snapshot is updated.', { tone: 'good' });
       onClose();
     } catch (e) {

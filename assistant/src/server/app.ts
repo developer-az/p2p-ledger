@@ -189,7 +189,7 @@ export function createApp(deps: {
   app.get('/accounts', async (c) => {
     const id = c.req.query('id');
     const limit = Number(c.req.query('limit') ?? '30');
-    if (id) return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, id, Math.min(limit, 100), now));
+    if (id) return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, id, Math.min(limit, 100), now, tzOffsetFrom(c)));
     const owner = c.req.query('owner');
     if (!owner) return c.json({ error: 'owner is required' }, 400);
     const accounts = await deps.ledger.accountsByOwner(owner);
@@ -378,7 +378,7 @@ export function createApp(deps: {
   }
 
   // Direct links. The UI uses ?id= so a host that 404s a second path segment still reaches this app.
-  app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, c.req.param('id'), 30, now)));
+  app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, c.req.param('id'), 30, now, tzOffsetFrom(c))));
 
   app.post('/accounts/:id/spends', async (c) => {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
@@ -487,7 +487,7 @@ export function createApp(deps: {
   app.get('/accounts/:id/statement.txt', async (c) => {
     const id = c.req.param('id');
     if (!z.string().uuid().safeParse(id).success) return c.text('Invalid account id', 400);
-    const view = await accountView(deps.ledger, deps.spendLogs, personalFinance, id, 100, now);
+    const view = await accountView(deps.ledger, deps.spendLogs, personalFinance, id, 100, now, tzOffsetFrom(c));
     if (!view) return c.text('Account not found', 404);
     const entries = await deps.ledger.entries(id, 200);
     const body = formatLedgerStatement(view, entries, {
@@ -692,6 +692,12 @@ export function createApp(deps: {
   return app;
 }
 
+function tzOffsetFrom(c: { req: { query(name: string): string | undefined } }): number {
+  const raw = Number(c.req.query('tzOffset') ?? '0');
+  if (!Number.isFinite(raw)) return 0;
+  return Math.max(-840, Math.min(840, Math.trunc(raw)));
+}
+
 async function accountView(
   ledger: LedgerReader,
   spendLogs: SpendLogStore,
@@ -699,6 +705,7 @@ async function accountView(
   id: string,
   limit = 30,
   now: () => Date,
+  tzOffsetMinutes = 0,
 ) {
   if (!z.string().uuid().safeParse(id).success) return null;
   const base = await loadAccountView(ledger, id, limit);
@@ -709,7 +716,7 @@ async function accountView(
   const habits = buildHabitsFromEntries(allSpends, now(), base.currency, profile.periodStart);
   const spends = allSpends.slice(0, 80);
   const incomes = allIncomes.slice(0, 80);
-  const patterns = buildSpendingPatterns(allSpends, allIncomes, now(), profile);
+  const patterns = buildSpendingPatterns(allSpends, allIncomes, now(), profile, tzOffsetMinutes);
   const activityFeed = buildActivityFeed(
     base.transfers,
     spends,

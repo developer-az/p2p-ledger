@@ -107,12 +107,6 @@ export function GuidedLedgerStory({
   onHandoff?: (hookId: string | null) => void;
 }) {
   const [step, setStep] = useState(0);
-  const [anim, setAnim] = useState(0);
-
-  useEffect(() => {
-    const id = window.setInterval(() => setAnim((a) => a + 1), 70);
-    return () => window.clearInterval(id);
-  }, []);
 
   const scene = SCENES[Math.min(step, SCENES.length - 1)]!;
   const last = step >= SCENES.length - 1;
@@ -135,7 +129,7 @@ export function GuidedLedgerStory({
         <strong>guided intro</strong> · scene {step + 1}/{SCENES.length}
       </div>
       <div className="pane-bd story-layout">
-        <PixelStage layout={scene.layout} actors={scene.actors} animTick={anim} />
+        <PixelStage layout={scene.layout} actors={scene.actors} />
         <div className="story-terminal">
           <p className="step-label">{scene.id}</p>
           <h2 className="story-headline">{scene.title}</h2>

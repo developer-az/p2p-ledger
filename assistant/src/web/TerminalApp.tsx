@@ -76,6 +76,16 @@ function BbLink({
   );
 }
 
+
+function LiveClock() {
+  const [time, setTime] = useState(() => new Date().toLocaleTimeString());
+  useEffect(() => {
+    const t = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return <span className="bb-dim">{time}</span>;
+}
+
 export function TerminalApp() {
   const inputRef = useRef<HTMLInputElement>(null);
   const chatLock = useRef(false);
@@ -96,7 +106,6 @@ export function TerminalApp() {
   const [raceResult, setRaceResult] = useState<RaceResult | null>(null);
   const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null);
   const [log, setLog] = useState<string[]>([]);
-  const [clock, setClock] = useState(() => new Date());
   const [hiddenTransferIds, setHiddenTransferIds] = useState<Set<string>>(() => new Set());
   const [pendingHideId, setPendingHideId] = useState<string | null>(null);
   const [skipDeleteConfirm, setSkipDeleteConfirm] = useState(false);
@@ -105,11 +114,6 @@ export function TerminalApp() {
   const append = useCallback((line: string) => {
     const ts = new Date().toISOString().slice(11, 19);
     setLog((prev) => [...prev.slice(-80), `${ts} ${line}`]);
-  }, []);
-
-  useEffect(() => {
-    const t = setInterval(() => setClock(new Date()), 1000);
-    return () => clearInterval(t);
   }, []);
 
   useEffect(() => {
@@ -711,7 +715,7 @@ export function TerminalApp() {
               <span className="bb-hi">{view.balance}</span>
             </>
           )}
-          <span className="bb-dim">{clock.toLocaleTimeString()}</span>
+          <LiveClock />
         </span>
         <span className="bb-fn">F1 HELP · F2 DEMO · F3 LEDGER CHECK</span>
         <a className="bb-dim" href={REPO} target="_blank" rel="noreferrer">SRC</a>

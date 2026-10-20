@@ -115,14 +115,36 @@ export class LedgerError extends Error {
 }
 
 export class HttpLedgerClient implements LedgerReader, LedgerWriter, LedgerAuditor {
+  private readonly accountCache = new Map<string, { value: Account | null; expiresAt: number }>();
+  private readonly inFlightAccounts = new Map<string, Promise<Account | null>>();
+
   constructor(
     private readonly baseUrl: string,
     private readonly timeoutMs = 20_000,
     private readonly retryDelayMs = 4_000,
   ) {}
 
-  getAccount(id: string) {
-    return this.getOrNull<Account>(`/v1/accounts/${encodeURIComponent(id)}`);
+  clearCache(): void {
+    this.accountCache.clear();
+  }
+
+  async getAccount(id: string): Promise<Account | null> {
+    const cached = this.accountCache.get(id);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+    const inFlight = this.inFlightAccounts.get(id);
+    if (inFlight) return inFlight;
+
+    const promise = this.getOrNull<Account>(`/v1/accounts/${encodeURIComponent(id)}`)
+      .then((account) => {
+        this.accountCache.set(id, { value: account, expiresAt: Date.now() + 5_000 });
+        return account;
+      })
+      .finally(() => {
+        this.inFlightAccounts.delete(id);
+      });
+
+    this.inFlightAccounts.set(id, promise);
+    return promise;
   }
 
   accountsByOwner(ownerId: string) {
@@ -141,16 +163,19 @@ export class HttpLedgerClient implements LedgerReader, LedgerWriter, LedgerAudit
     return this.request<LedgerEntry[]>('GET', `/v1/accounts/${encodeURIComponent(accountId)}/entries?limit=${limit}`);
   }
 
-  openAccount(ownerId: string, currency: string) {
+  async openAccount(ownerId: string, currency: string) {
+    this.clearCache();
     return this.request<Account>('POST', '/v1/accounts', { ownerId, currency });
   }
 
-  deposit(accountId: string, amountMinor: number, idempotencyKey: string) {
+  async deposit(accountId: string, amountMinor: number, idempotencyKey: string) {
+    this.clearCache();
     return this.request<Transfer>('POST', `/v1/accounts/${encodeURIComponent(accountId)}/deposits`,
       { amountMinor }, idempotencyKey);
   }
 
-  transfer(req: Parameters<LedgerWriter['transfer']>[0], idempotencyKey: string) {
+  async transfer(req: Parameters<LedgerWriter['transfer']>[0], idempotencyKey: string) {
+    this.clearCache();
     return this.request<Transfer>('POST', '/v1/transfers', req, idempotencyKey);
   }
 
@@ -171,11 +196,13 @@ export class HttpLedgerClient implements LedgerReader, LedgerWriter, LedgerAudit
     }
   }
 
-  postTransfer(req: TransferRequest, idempotencyKey: string) {
+  async postTransfer(req: TransferRequest, idempotencyKey: string) {
+    this.clearCache();
     return this.write('/v1/transfers', req, idempotencyKey);
   }
 
-  postDeposit(accountId: string, body: { amountMinor: number; memo?: string }, idempotencyKey: string) {
+  async postDeposit(accountId: string, body: { amountMinor: number; memo?: string }, idempotencyKey: string) {
+    this.clearCache();
     return this.write(`/v1/accounts/${encodeURIComponent(accountId)}/deposits`, body, idempotencyKey);
   }
 

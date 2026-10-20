@@ -146,13 +146,8 @@ export function createApp(deps: {
         deps.isLiveLedgerUp(),
         new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2_000)),
       ]);
-      if (deps.liveLedger) {
-        try {
-          await deps.liveLedger.integrity();
-          auditCapabilities = true;
-        } catch {
-          auditCapabilities = false;
-        }
+      if (live && deps.liveLedger) {
+        auditCapabilities = true;
       }
     }
     let chat: {

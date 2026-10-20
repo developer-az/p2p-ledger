@@ -33,10 +33,13 @@ export async function listPeerRefs(ledger: LedgerReader, accountId: string): Pro
     const other = t.sourceAccountId === accountId ? t.destinationAccountId : t.sourceAccountId;
     ids.add(other);
   }
+  const idList = [...ids].filter((id) => id !== accountId);
+  const accounts = await Promise.all(idList.map((id) => ledger.getAccount(id)));
   const peers: PeerRef[] = [];
-  for (const id of ids) {
-    const a = await ledger.getAccount(id);
-    if (a && a.type === 'USER' && id !== accountId) peers.push({ id, owner: a.ownerId });
+  for (let i = 0; i < idList.length; i++) {
+    const a = accounts[i];
+    const id = idList[i];
+    if (id && a && a.type === 'USER') peers.push({ id, owner: a.ownerId });
   }
   return peers.sort((a, b) => a.owner.localeCompare(b.owner));
 }

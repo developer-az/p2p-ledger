@@ -19,3 +19,5 @@ credentials.json
 .terraform.lock.hcl
 evals/results/
 assistant/evals/results/
+*.log
+.cursor/

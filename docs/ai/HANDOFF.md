@@ -42,3 +42,6 @@ Rebased performance optimizations onto latest `origin/main` (commit `0f0b70f`), 
 - Vitest suite passed: 29 test files, 129 tests.
 - TypeScript compiler (`tsc --noEmit`) and Vite production build passed.
 - Branch rebased cleanly on latest `origin/main` (`0f0b70f`) with zero conflicts.
+
+## Pull Request
+- PR #13 is open, fully rebased, and mergeable: https://github.com/developer-az/p2p-ledger/pull/13

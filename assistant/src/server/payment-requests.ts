@@ -3,6 +3,14 @@ import { databaseUrlFromEnv } from './integrity-postgres.js';
 
 export type RequestStatus = 'PENDING' | 'PAID' | 'DECLINED' | 'CANCELLED';
 
+/**
+ * Where an outside settlement happened. The request book stays rail-agnostic:
+ * Zelle, Cash App, cash and crypto all settle the same way today, and a future
+ * rail integration replaces the note with a real money movement — see docs/PRODUCT.md.
+ */
+export const SETTLE_RAILS = ['zelle', 'cashapp', 'venmo', 'cash', 'crypto', 'other'] as const;
+export type SettleRail = (typeof SETTLE_RAILS)[number];
+
 /** "Sam asks Alex for $18.00 for Uber." Money only moves when the payer accepts. */
 export interface PaymentRequest {
   id: string;
@@ -12,8 +20,10 @@ export interface PaymentRequest {
   currency: string;
   memo: string | null;
   status: RequestStatus;
-  /** The ledger transfer that settled this request, once paid. */
+  /** The ledger transfer that settled this request, once paid in-app. */
   transferId: string | null;
+  /** Set when the requester recorded an outside settlement (Zelle, cash, …). */
+  settledVia: SettleRail | null;
   /**
    * How many times the ledger declined a payment attempt. It is part of the idempotency key:
    * a double click shares one key (so money moves once), but a decline is stored under its key
@@ -41,13 +51,14 @@ export interface PaymentRequestStore {
   noteDecline(id: string): Promise<number>;
   /**
    * Moves a PENDING request to a final status. Returns null if it was already resolved,
-   * so two racing clicks cannot both win.
+   * so two racing clicks cannot both win. `settledVia` marks an outside settlement.
    */
   resolve(
     id: string,
     status: Exclude<RequestStatus, 'PENDING'>,
     transferId: string | null,
     now?: Date,
+    settledVia?: SettleRail | null,
   ): Promise<PaymentRequest | null>;
 }
 
@@ -64,6 +75,7 @@ export class InMemoryPaymentRequestStore implements PaymentRequestStore {
       memo: input.memo ?? null,
       status: 'PENDING',
       transferId: null,
+      settledVia: null,
       declinedAttempts: 0,
       createdAt: now.toISOString(),
       resolvedAt: null,
@@ -97,11 +109,13 @@ export class InMemoryPaymentRequestStore implements PaymentRequestStore {
     status: Exclude<RequestStatus, 'PENDING'>,
     transferId: string | null,
     now = new Date(),
+    settledVia: SettleRail | null = null,
   ): Promise<PaymentRequest | null> {
     const row = this.rows.get(id);
     if (!row || row.status !== 'PENDING') return null;
     row.status = status;
     row.transferId = transferId;
+    row.settledVia = settledVia;
     row.resolvedAt = now.toISOString();
     return { ...row };
   }
@@ -118,11 +132,13 @@ create table if not exists payment_requests (
     status               text        not null default 'PENDING'
                          check (status in ('PENDING', 'PAID', 'DECLINED', 'CANCELLED')),
     transfer_id          uuid,
+    settled_via          text,
     declined_attempts    int         not null default 0,
     created_at           timestamptz not null default now(),
     resolved_at          timestamptz,
     constraint request_distinct_accounts check (requester_account_id <> payer_account_id)
 );
+alter table payment_requests add column if not exists settled_via text;
 create index if not exists payment_requests_requester_idx on payment_requests (requester_account_id, created_at desc);
 create index if not exists payment_requests_payer_idx on payment_requests (payer_account_id, created_at desc);
 `;
@@ -139,6 +155,7 @@ function fromRow(row: Row): PaymentRequest {
     memo: (row.memo as string | null) ?? null,
     status: row.status as RequestStatus,
     transferId: row.transfer_id ? String(row.transfer_id) : null,
+    settledVia: (row.settled_via as SettleRail | null) ?? null,
     declinedAttempts: Number(row.declined_attempts ?? 0),
     createdAt: new Date(String(row.created_at)).toISOString(),
     resolvedAt: row.resolved_at ? new Date(String(row.resolved_at)).toISOString() : null,
@@ -146,7 +163,7 @@ function fromRow(row: Row): PaymentRequest {
 }
 
 const COLUMNS =
-  'id, requester_account_id, payer_account_id, amount_minor, currency, memo, status, transfer_id, declined_attempts, created_at, resolved_at';
+  'id, requester_account_id, payer_account_id, amount_minor, currency, memo, status, transfer_id, settled_via, declined_attempts, created_at, resolved_at';
 
 /** Same database as the ledger, but a separate table the ledger service never reads. */
 export class PostgresPaymentRequestStore implements PaymentRequestStore {
@@ -226,15 +243,16 @@ export class PostgresPaymentRequestStore implements PaymentRequestStore {
     status: Exclude<RequestStatus, 'PENDING'>,
     transferId: string | null,
     now = new Date(),
+    settledVia: SettleRail | null = null,
   ): Promise<PaymentRequest | null> {
     const c = await this.client();
     try {
       // The status guard in the WHERE clause is what makes a double click safe.
       const res = await c.query(
-        `update payment_requests set status = $2, transfer_id = $3, resolved_at = $4
+        `update payment_requests set status = $2, transfer_id = $3, resolved_at = $4, settled_via = $5
          where id = $1 and status = 'PENDING'
          returning ${COLUMNS}`,
-        [id, status, transferId, now.toISOString()],
+        [id, status, transferId, now.toISOString(), settledVia],
       );
       return res.rows[0] ? fromRow(res.rows[0] as Row) : null;
     } finally {

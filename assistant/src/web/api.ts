@@ -312,6 +312,10 @@ export interface PracticeBootstrap {
 
 export type RequestStatus = 'PENDING' | 'PAID' | 'DECLINED' | 'CANCELLED';
 
+/** Rails a request can settle over outside the app — future rails plug in here. */
+export const SETTLE_RAILS = ['zelle', 'cashapp', 'venmo', 'cash', 'crypto', 'other'] as const;
+export type SettleRail = (typeof SETTLE_RAILS)[number];
+
 export interface PaymentRequestView {
   id: string;
   requesterAccountId: string;
@@ -324,6 +328,8 @@ export interface PaymentRequestView {
   memo: string | null;
   status: RequestStatus;
   transferId: string | null;
+  /** Set when the requester recorded an outside settlement (Zelle, cash, …). */
+  settledVia: SettleRail | null;
   declinedAttempts: number;
   createdAt: string;
   resolvedAt: string | null;
@@ -524,6 +530,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ accountId }),
     }),
+  /** Requester confirms the money arrived outside the app (Zelle, Cash App, cash, crypto…). */
+  settleRequest: (requestId: string, accountId: string, settledVia: SettleRail) =>
+    call<{ request: PaymentRequestView }>(`/api/requests/${encodeURIComponent(requestId)}/settle`, {
+      method: 'POST',
+      body: JSON.stringify({ accountId, settledVia }),
+    }),
   entries: (accountId: string, limit = 50) =>
     call<{ accountId: string; currency: string; entries: LedgerEntryRow[] }>(
       `/api/accounts/${encodeURIComponent(accountId)}/entries?limit=${limit}`,
@@ -545,6 +557,8 @@ export const api = {
       model: string;
       route?: 'gemini' | 'anthropic' | 'ledger-fallback';
       fallbackReason?: string;
+      /** True when the answer came from the LLM guard cache (no model call). */
+      cached?: boolean;
     }>('/api/chat', {
       method: 'POST',
       body: JSON.stringify({ accountId, messages: messages.map(({ role, text }) => ({ role, text })) }),

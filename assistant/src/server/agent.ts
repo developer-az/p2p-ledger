@@ -43,6 +43,8 @@ export interface AssistantReply {
   route?: 'gemini' | 'anthropic' | 'openrouter' | 'ledger-fallback';
   /** Set when route is ledger-fallback. */
   fallbackReason?: string;
+  /** True when the LLM guard served this from cache or a shared in-flight call. */
+  cached?: boolean;
 }
 
 export async function runAssistant(opts: {

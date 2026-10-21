@@ -1,47 +1,60 @@
-# Engineering Handoff: Performance Optimizations (Rebased on Latest Main)
+# Engineering Handoff: Production Revamp — Design, Settle Up Wedge, LLM Flood Guard
 
 ## Overview
-Rebased performance optimizations onto latest `origin/main` (commit `0f0b70f`), resolving all branch divergences and conflicts with merged PRs #10, #11, and #12.
+Revamped the consumer app for production: quiet-luxury design system, a rail-agnostic
+"Settle Up" wedge (request / split / settle on any rail), and an LLM guard that stops
+repeats and budget overruns from flooding the Gemini API. Verified: 31 test files /
+144 tests pass, `tsc --noEmit` clean, `vite build` clean, live smoke of the new
+endpoint passed (settle → PAID + rail, double settle → 409, wrong actor → 403).
 
 ## Changes Completed
 
-### 1. Database Indexing (`ledger-service`)
-- **File:** `ledger-service/src/main/resources/db/migration/V2__performance_indexes.sql`
-- **Fixes:**
-  - Added composite index on `transfers(destination_account_id, created_at)` and keyset indexes on `(destination_account_id, id desc)` and `(source_account_id, id desc)` to eliminate full table scans during transfer lookups in `TransferRepository.findByAccount()`.
-  - Added partial index on `transfers(id) where status = 'REJECTED'` for `AuditRepository.rejectedWithEntries()`.
-  - Added covering index `ledger_entries(account_id, amount_minor)` enabling index-only scans for `AuditRepository.accountsDrifted()`.
-  - Added partial index `outbox_events(published_at, created_at) where published_at is not null` for P95 latency percentile queries.
+### 1. LLM flood guard (`assistant/src/server/llm-guard.ts`, wired into `app.ts /api/chat`)
+- Answer cache: normalized question + conversation tail per account, 10 min TTL,
+  400-entry eviction. Repeated questions cost zero model calls.
+- In-flight coalescing: identical concurrent questions (double click, two tabs,
+  StrictMode double effects) share one Gemini call.
+- Daily budget: 40 calls/account/day and 300/day app-wide; over budget the
+  deterministic `answerFromLedger` answers with `route: 'ledger-fallback'`.
+- `trimHistory` caps the model payload at the newest 10 messages.
+- Replies gain `cached?: true`; only cache misses are billed. Producer failures are
+  not cached, so the next ask retries.
+- Docs: `docs/AI-SCALE.md` (call path, layered throttles, scale-out plan via Redis/Upstash).
 
-### 2. N+1 Queries & Request Hotspots (`assistant/src/server`)
-- **Files:**
-  - `assistant/src/server/peer-ledger.ts`
-  - `assistant/src/server/ledger.ts`
-  - `assistant/src/server/app.ts`
-- **Fixes:**
-  - Converted sequential `for ... of` await loop in `listPeerRefs()` to concurrent `Promise.all` resolution.
-  - Added in-flight request coalescing and short-lived caching (5s TTL) in `HttpLedgerClient.getAccount()` to eliminate duplicate account HTTP roundtrips between `loadAccountView()` and `listPeerRefs()`. Cache is purged upon write mutations (`openAccount`, `deposit`, `transfer`, `postDeposit`, `postTransfer`).
-  - Removed full 8-query database integrity run from `/api/bootstrap` startup probe.
+### 2. Settle Up wedge — rail-agnostic settlement
+- **Server** (`payment-requests.ts`, `app.ts`): `settledVia` column
+  (`zelle | cashapp | venmo | cash | crypto | other`) with idempotent migration
+  (`alter table add column if not exists`), and `POST /api/requests/:id/settle` —
+  the requester confirms outside payment; request closes `PAID` with the rail on the
+  receipt and `transferId: null`. Requester-only (403), double-resolve safe (409).
+- **Web** (`app/SettleUp.tsx`, `api.ts`): `SettleUpSheet` (Ask & split tab with peer
+  picker and even-split preview; Settle tab with Pay-in-app / Decline and per-rail
+  settlement chips), `NeedsYouCard` on Home (Pay / Decline inline, record-rail entry),
+  quick action "Settle up" on the Home row. `splitShares` matches the server's
+  `splitEvenly` (floor + leftover cents to first shares).
 
-### 3. Re-render Loops & 60fps Animations (`assistant/src/web`)
-- **Files:**
-  - `assistant/src/web/TerminalApp.tsx`
-  - `assistant/src/web/pixel/PixelStage.tsx`
-  - `assistant/src/web/GuidedLedgerStory.tsx`
-- **Fixes:**
-  - Isolated the 1,000ms clock interval into `<LiveClock />` leaf component, preventing root-level re-render thrashing.
-  - Replaced 70ms React interval re-renders in `GuidedLedgerStory` with an internal `requestAnimationFrame` loop in `PixelStage`, throttling canvas buffer resizing to client dimension changes and upgrading canvas animation to 60fps.
-
-### 4. Bundle Optimization & Vendor Splitting (`assistant`)
-- **File:** `assistant/vite.config.ts`
-- **Fixes:**
-  - Added Rollup manual chunking to isolate `vendor-react` (`react`, `react-dom`) from application code.
-  - Reduced main application bundle chunk size from 323.83 kB down to 104.90 kB (28.97 kB gzipped) — a 68% reduction in initial app payload.
+### 3. Design & UX revamp (`app.css`, `index.html`)
+- New quiet-luxury token system: bone `#f4f1ea` / ink `#131211` / champagne
+  `#d8b36a` (dark: `#0d0c0a` / `#f2ede3` / `#d2b074`), replacing the lime startup
+  look; hairline rules, tighter radii (16/10), restrained shadows.
+- Shell: monogram brand mark (hairline circle), letterspaced uppercase wordmark and
+  nav tabs (underline active state), uppercase micro-caps footer with hairline rule,
+  serif display headings (`h2` → Instrument Serif), DM Mono for request amounts.
+- Money hero card retoned ink + champagne; quick-row auto-fits 5 tiles.
+- `index.html`: title "Settle · the private money book", new description and theme
+  colors matching the palette.
 
 ## Verification
-- Vitest suite passed: 29 test files, 129 tests.
-- TypeScript compiler (`tsc --noEmit`) and Vite production build passed.
-- Branch rebased cleanly on latest `origin/main` (`0f0b70f`) with zero conflicts.
+- `npx vitest run`: 31 files, 144 tests (incl. new `test/llm-guard.test.ts`,
+  `test/settle-up.test.ts`).
+- `npm run build` (tsc + vite): clean; main app chunk 115 kB (31 kB gzip).
+- Live smoke (`node --import tsx src/server/main.ts`, practice mode): demo seed,
+  settle flow 200/409/403 as designed, `/api/chat` answers from ledger fallback with
+  no LLM key — zero Gemini calls.
 
-## Pull Request
-- PR #13 is open, fully rebased, and mergeable: https://github.com/developer-az/p2p-ledger/pull/13
+## Notes / next steps
+- LlmGuard state is per-process; for strict budgets across instances, port the three
+  maps to Redis/KV behind the same interface (keys already namespaced).
+- A future Zelle/Cash App integration replaces `settledVia` recording with a real
+  money movement at the same endpoint — no workflow change.
+- Previous session context (perf work, PR #13) superseded by this revamp on main.

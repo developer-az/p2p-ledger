@@ -5,6 +5,7 @@ import { buildFeed, type FeedItem } from './feed.js';
 import { FeedList } from './FeedList.js';
 import { displayName, greeting, money } from './format.js';
 import { moneyPlan } from './money-plan.js';
+import { NeedsYouCard } from './SettleUp.js';
 import type { WalletData } from './data.js';
 import { EmptyState, Icon, ProgressRing, Skeleton } from './ui.js';
 
@@ -12,6 +13,7 @@ export interface HomeActions {
   addMoney: () => void;
   logSpend: (preset?: { category?: SpendCategory; amountMinor?: number }) => void;
   logIncome: () => void;
+  settleUp: () => void;
   ask: (question?: string) => void;
   openItem: (item: FeedItem) => void;
   seeAll: () => void;
@@ -70,6 +72,10 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
           <span className="quick-icon"><Icon name="plus" size={22} /></span>
           <span className="quick-copy"><strong>Log spend</strong><small>2 taps</small></span>
         </button>
+        <button type="button" className="quick" onClick={actions.settleUp}>
+          <span className="quick-icon"><Icon name="split" size={20} /></span>
+          <span className="quick-copy"><strong>Settle up</strong><small>ask · split · any rail</small></span>
+        </button>
         <button type="button" className="quick" onClick={actions.addMoney}>
           <span className="quick-icon"><Icon name="bank" size={20} /></span>
           <span className="quick-copy"><strong>Add money</strong><small>to wallet</small></span>
@@ -86,6 +92,8 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
 
       <div className="home-grid">
         <div className="stack">
+          <NeedsYouCard me={me} onOpen={actions.settleUp} />
+
           <WeekCard plan={plan} dots={dots} weekChange={weekChange} onSetup={() => actions.setup(plan.hasBaseline ? 2 : 0)} onInsights={actions.seeInsights} />
 
           <section className="card" aria-labelledby="recent">

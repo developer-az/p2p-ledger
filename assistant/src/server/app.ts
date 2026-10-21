@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { runAssistant } from './agent.js';
+import { runAssistant, type AssistantReply } from './agent.js';
 import { booksCheck, paymentTrail, racePayment, replayPayment, tamperWithPayment } from './console.js';
 import { seedDemo } from './demo.js';
 import { seedDemoHabits, type DemoPersona } from './demo-habits.js';
@@ -40,6 +40,8 @@ import {
 import { explainDecline } from './peer-ledger.js';
 import { providerFromEnv } from './providers/index.js';
 import { MAX_MINOR_UI } from './money.js';
+import { LlmGuard, trimHistory } from './llm-guard.js';
+import { SETTLE_RAILS, type SettleRail } from './payment-requests.js';
 
 const openAccountBody = z.object({
   ownerId: z.string().min(1).max(64),
@@ -72,6 +74,11 @@ const requestBody = z.object({
   })).min(1).max(8),
 });
 const requestActorBody = z.object({ accountId: z.string().uuid() });
+/** The requester confirms money arrived outside the app: "paid me on Zelle". */
+const requestSettleBody = z.object({
+  accountId: z.string().uuid(),
+  settledVia: z.enum(SETTLE_RAILS),
+});
 
 const paymentBody = z.object({ accountId: z.string().uuid(), transferId: z.string().uuid() });
 const raceBody = z.object({ accountId: z.string().uuid(), fromAccountId: z.string().uuid() });
@@ -122,11 +129,14 @@ export function createApp(deps: {
   isLiveLedgerUp?: () => Promise<boolean>;
   /** Tests inject a fake model; production loads Gemini/Claude on first chat only. */
   provider?: () => LlmProvider;
+  /** Tests inject a guard with a frozen clock; production builds one per app instance. */
+  llmGuard?: LlmGuard;
   now?: () => Date;
 }) {
   const now = deps.now ?? (() => new Date());
   const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
   const paymentRequests = deps.paymentRequests ?? new InMemoryPaymentRequestStore();
+  const llmGuard = deps.llmGuard ?? new LlmGuard();
   const app = new Hono().basePath('/api');
   const allowChat = rateLimiter(20, 60_000);
   const allowSeed = rateLimiter(3, 60_000);
@@ -371,6 +381,26 @@ export function createApp(deps: {
       return c.json({ request: await requestView(resolved) });
     });
   }
+
+  /**
+   * The wedge: settle a request over any rail. The requester confirms the money
+   * arrived outside the app (Zelle, Cash App, cash, crypto…), the request closes,
+   * and the book keeps the rail on the receipt. No bank integration required.
+   */
+  app.post('/requests/:id/settle', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = requestSettleBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    const request = await paymentRequests.get(c.req.param('id'));
+    if (!request) return c.json({ error: 'Request not found' }, 404);
+    if (request.requesterAccountId !== parsed.data.accountId) {
+      return c.json({ error: 'Only the person who asked can record an outside settlement' }, 403);
+    }
+    const settledVia = parsed.data.settledVia as SettleRail;
+    const resolved = await paymentRequests.resolve(request.id, 'PAID', null, now(), settledVia);
+    if (!resolved) return c.json({ error: `This request was already ${request.status.toLowerCase()}`, request: await requestView(request) }, 409);
+    return c.json({ request: await requestView(resolved) });
+  });
 
   // Direct links. The UI uses ?id= so a host that 404s a second path segment still reaches this app.
   app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, c.req.param('id'), 30, now, tzOffsetFrom(c))));
@@ -627,49 +657,47 @@ export function createApp(deps: {
     if (!allowChat(clientIp(c))) return c.json({ error: 'Too many requests, slow down a little.' }, 429);
     const parsed = chatBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid request', issues: parsed.error.issues }, 400);
-    const { accountId, messages } = parsed.data;
+    const { accountId, messages: rawMessages } = parsed.data;
     const account = await deps.ledger.getAccount(accountId);
     if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+
+    // Only the newest turns go to the model; old history is cost without value.
+    const messages = trimHistory(rawMessages);
+    const question = messages.at(-1)?.text ?? '';
+
+    /** Deterministic ledger answers — used on config errors, budget exhaustion and model failures. */
+    const degrade = async (reason: string): Promise<AssistantReply> => ({
+      ...(await answerFromLedger({ ledger: deps.ledger, spendLogs: deps.spendLogs, accountId, question, now })),
+      route: 'ledger-fallback',
+      fallbackReason: reason,
+    });
+
     let provider: LlmProvider;
     try {
-      if (deps.provider) {
-        provider = deps.provider();
-      } else {
-        const { providerFromEnv } = await import('./providers/index.js');
-        provider = providerFromEnv();
-      }
+      provider = deps.provider ? deps.provider() : providerFromEnv();
     } catch (e) {
       console.error(e);
-      const question = messages.at(-1)?.text ?? '';
-      const reason = llmConfigError(e);
-      return c.json({
-        ...(await answerFromLedger({ ledger: deps.ledger, spendLogs: deps.spendLogs, accountId, question, now })),
-        route: 'ledger-fallback',
-        fallbackReason: reason,
-      });
+      return c.json(await degrade(llmConfigError(e)));
     }
+
     try {
-      const peers = await listPeers(deps.ledger, accountId);
-      return c.json(await runAssistant({
-        provider,
-        ledger: deps.ledger,
-        spendLogs: deps.spendLogs,
+      // Cache → shared in-flight → budgeted fresh call. Same question, one Gemini call.
+      const { reply, cache } = await llmGuard.answer({
         accountId,
         messages,
-        peers,
-        now,
-      }));
+        produce: async () => {
+          const peers = await listPeers(deps.ledger, accountId);
+          return runAssistant({ provider, ledger: deps.ledger, spendLogs: deps.spendLogs, accountId, messages, peers, now });
+        },
+        degrade,
+      });
+      return c.json({ ...reply, cached: cache === 'hit' || cache === 'shared' ? true : undefined });
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
       const errStatus = (e as { status?: number }).status;
       console.error('chat LLM error', errStatus, errMsg.slice(0, 500));
-      const question = messages.at(-1)?.text ?? '';
       // Never 500 the UI for model/config errors — ledger tools still answer.
-      return c.json({
-        ...(await answerFromLedger({ ledger: deps.ledger, spendLogs: deps.spendLogs, accountId, question, now })),
-        route: 'ledger-fallback',
-        fallbackReason: `LLM call failed (${errStatus ?? 'no status'}): ${errMsg.slice(0, 220)}`,
-      });
+      return c.json(await degrade(`LLM call failed (${errStatus ?? 'no status'}): ${errMsg.slice(0, 220)}`));
     }
   });
 

@@ -46,11 +46,12 @@
 
 | Surface | What it answers |
 |---------|-----------------|
-| **Today** | What is my net position, what is left this week, and what needs an answer? |
+| **Today** | What is my net position, what is left this week, what needs an answer (Settle Up), and what needs a log? |
 | **Activity** | Every payment, logged spend and income — grouped by day, with a receipt on each payment. |
 | **Patterns** | Where the money went, how this month is trending, which weekday is expensive, and how fast a card can reach zero. |
 | **Ask** | Read-only questions about your records; the assistant cannot move money. |
 | **Wallet** | Edit the snapshot, review logging stats, fund the demo ledger, download a statement and open the trust lab. |
+| **Settle Up** | The wedge: request money or split a bill, then settle in-app **or on any rail** (Zelle, Cash App, Venmo, cash, crypto) with the rail recorded on the receipt. |
 
 The design rules: **three numbers to start** (cash, card balance, weekly pace), **two taps to log** (amount + category, with recent repeats and undo), and **no mixing** between user logs and ledger transfers. Habit totals never pretend to be a bank feed.
 

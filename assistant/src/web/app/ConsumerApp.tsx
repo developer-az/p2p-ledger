@@ -13,6 +13,7 @@ import { InsightsTab } from './InsightsTab.js';
 import { clearSession, loadSession, saveSession, type Session } from './session.js';
 import { SetupSheet } from './SetupSheet.js';
 import { AddMoneySheet, IncomeSheet, LogSpendSheet } from './SimpleSheets.js';
+import { NeedsYouCard, SettleUpSheet } from './SettleUp.js';
 import { WalletTab } from './WalletTab.js';
 import { Avatar, Confetti, ErrorNotice, Icon, ToastProvider, type IconName } from './ui.js';
 import { Welcome } from './Welcome.js';
@@ -26,7 +27,7 @@ const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'wallet', label: 'Wallet', icon: 'wallet' },
 ];
 
-type Sheetname = null | 'add' | 'log' | 'income' | 'setup';
+type Sheetname = null | 'add' | 'log' | 'income' | 'setup' | 'settle';
 
 const DEMO_STEPS: DemoStepId[] = ['baseline', 'log', 'income', 'patterns', 'pace'];
 
@@ -112,6 +113,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   const [setupStep, setSetupStep] = useState<0 | 1 | 2>(0);
   const [item, setItem] = useState<FeedItem | null>(null);
   const [logPreset, setLogPreset] = useState<{ category?: SpendCategory; amountMinor?: number }>({});
+  const [settleMode, setSettleMode] = useState<'ask' | 'settle'>('ask');
   const [askSeed, setAskSeed] = useState<string | null>(null);
   const [burst, setBurst] = useState(0);
   const [menu, setMenu] = useState(false);
@@ -177,6 +179,10 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   };
   const closeSheet = () => setSheet(null);
   const celebrate = () => setBurst(Date.now());
+  const openSettle = (mode: 'ask' | 'settle' = 'ask') => {
+    setSettleMode(mode);
+    setSheet('settle');
+  };
 
   const openLog = (preset: { category?: SpendCategory; amountMinor?: number } = {}) => {
     setLogPreset(preset);
@@ -297,6 +303,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
                 addMoney: () => setSheet('add'),
                 logSpend: openLog,
                 logIncome: () => setSheet('income'),
+                settleUp: () => openSettle('ask'),
                 ask,
                 openItem: openFeedItem,
                 seeAll: () => go('activity'),
@@ -379,6 +386,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         }}
       />
       <ActivitySheet item={item} accountId={me.id} onClose={() => setItem(null)} onChanged={reload} />
+      <SettleUpSheet open={sheet === 'settle'} onClose={closeSheet} me={me} onChanged={reload} initialMode={settleMode} />
       <Confetti burst={burst} />
     </>
   );

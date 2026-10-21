@@ -124,11 +124,12 @@ Transfer path: idempotency → row locks (PK order) → fraud + balance → doub
 Prerequisites: **Node 22+**, **Docker** (live ledger), **Java 21** + `./mvnw` (ledger tests). [DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ```bash
-# Practice UI only (in-memory ledger)
-cd assistant && cp .env.example .env.local && npm install && npm run dev
+# Practice UI only (in-memory ledger) — first time setup in assistant/
+cd assistant && cp .env.example .env.local && npm install
+npm run dev              # from repo root, or: cd assistant && npm run dev
 
 # Live ledger + terminal (recommended)
-cd assistant && npm run dev:stack
+npm run dev:stack        # from repo root, or: cd assistant && npm run dev:stack
 
 # Tests
 cd ledger-service && ./mvnw verify

@@ -74,13 +74,18 @@ export function DemoGuide({ progress, onStep, onDismiss, onExit, onPatterns }: D
           </p>
         </div>
         <div className="demo-progress" aria-label={`${done.size} of ${STEPS.length} demo steps complete`}>
-          {STEPS.map((step) => (
-            <span
-              key={step.id}
-              className={`demo-dot${done.has(step.id) ? ' is-done' : ''}${next?.id === step.id ? ' is-next' : ''}`}
-              title={step.title}
-            />
-          ))}
+          <div className="demo-progress-track" aria-hidden="true">
+            <span className="demo-progress-fill" style={{ width: `${(Math.min(done.size, STEPS.length) / STEPS.length) * 100}%` }} />
+          </div>
+          <div className="demo-progress-steps">
+            {STEPS.map((step) => (
+              <span
+                key={step.id}
+                className={`demo-dot${done.has(step.id) ? ' is-done' : ''}${next?.id === step.id ? ' is-next' : ''}`}
+                title={step.title}
+              />
+            ))}
+          </div>
         </div>
       </div>
       <div className="demo-actions">

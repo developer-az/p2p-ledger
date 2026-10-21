@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, type CSSProperties, type ReactNode } from 'react';
 import type { AccountRef, SpendCategory } from '../api.js';
 import { categoryMeta } from './categories.js';
 import { buildFeed, type FeedItem } from './feed.js';
@@ -141,16 +141,32 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
 function MoneyHero({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; actions: HomeActions }) {
   const net = plan.netMinor ?? plan.ledgerMinor;
   const left = plan.weekLeftMinor;
+  const projected = plan.projectedCashMinor ?? plan.cashMinor;
   return (
     <section className="hero-card" aria-labelledby="net-label">
       <div className="hero-grid" aria-hidden="true" />
+      <span className="hero-marque" aria-hidden="true">S</span>
       <div className="hero-top">
         <div>
           <p className="hero-label" id="net-label">Net position</p>
           <p className="hero-amount num" aria-live="polite">{money(net)}</p>
           <p className="hero-sub">
-            {plan.cashMinor === null ? 'Cash not set yet' : `${money(plan.cashMinor)} cash`}
-            {plan.creditMinor > 0 ? <> · <span className="hero-debt">{money(plan.creditMinor)} on cards</span></> : ' · no card balance'}
+            {plan.cashMinor === null ? (
+              'Cash not set yet'
+            ) : plan.periodIncomeMinor > 0 || plan.periodSpentMinor > 0 ? (
+              <>
+                {money(projected ?? 0)} projected ({money(plan.cashMinor)} cash
+                {plan.periodIncomeMinor > 0 ? <> + {money(plan.periodIncomeMinor)} income</> : null}
+                {plan.periodSpentMinor > 0 ? <> − {money(plan.periodSpentMinor)} logged spend</> : null}
+                )
+                {plan.creditMinor > 0 ? <> · <span className="hero-debt">{money(plan.creditMinor)} on cards</span></> : ' · no card balance'}
+              </>
+            ) : (
+              <>
+                {money(plan.cashMinor)} cash
+                {plan.creditMinor > 0 ? <> · <span className="hero-debt">{money(plan.creditMinor)} on cards</span></> : ' · no card balance'}
+              </>
+            )}
           </p>
         </div>
         <span className="hero-chip"><Icon name="lock" size={14} /> Private</span>
@@ -196,6 +212,7 @@ function SetupHero({ actions }: { actions: HomeActions }) {
   return (
     <section className="hero-card hero-setup" aria-labelledby="setup-title">
       <div className="hero-grid" aria-hidden="true" />
+      <span className="hero-marque" aria-hidden="true">S</span>
       <p className="hero-label">Your starting point</p>
       <h2 id="setup-title">Three numbers. Then the app does the math.</h2>
       <p className="hero-setup-lede">Cash, card balance, and a weekly pace. No bank login, no spreadsheet, no guilt.</p>
@@ -288,8 +305,13 @@ function PatternPeek({ plan, onInsights, onLog }: { plan: ReturnType<typeof mone
     return `${categoryMeta(c.category).color} ${start}% ${cursor}%`;
   });
   if (cursor < 100) stops.push(`var(--surface-2) ${cursor}% 100%`);
+  const accent = categoryMeta(top.category).color;
   return (
-    <section className="card pattern-peek" aria-labelledby="pattern-title">
+    <section
+      className="card pattern-peek pattern-peek-live"
+      aria-labelledby="pattern-title"
+      style={{ '--peek-accent': accent } as CSSProperties}
+    >
       <div className="card-head">
         <div><p className="eyebrow">Patterns</p><h2 id="pattern-title">Where it went</h2></div>
         <button type="button" className="link-btn" onClick={onInsights}>See all</button>

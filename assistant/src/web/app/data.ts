@@ -1,47 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, type AccountView } from '../api.js';
+import { useMemo } from 'react';
+import type { AccountView } from '../api.js';
+import { LedgerStore, useLedgerStore } from './ledger-store.js';
 
 export interface WalletData {
   view: AccountView;
 }
 
 /**
- * One request, one source of truth. The account view already contains habits,
- * patterns, finance, activity and spend entries, so the consumer app no longer
- * fans out to peers/requests/peer-ledger on every refresh.
+ * The consumer app's data hook. Now a thin view over `LedgerStore`, which owns
+ * the loading, ticket-guarding, optimistic writes and pending queue.
+ *
+ * The returned shape is unchanged for existing screens, and additionally exposes
+ * `run` / `pending` so a screen can apply a local change immediately and reconcile
+ * later (the "frictionless" path, and the hook point for future P2P rails).
  */
 export function useWallet(accountId: string) {
-  const [data, setData] = useState<WalletData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const latest = useRef(0);
-
-  const reload = useCallback(async () => {
-    const ticket = ++latest.current;
-    setError(null);
-    setRefreshing(true);
-    try {
-      const view = await api.account(accountId, 80, new Date().getTimezoneOffset());
-      if (ticket !== latest.current) return;
-      setData({ view });
-    } catch (e) {
-      if (ticket === latest.current) setError((e as Error).message);
-    } finally {
-      if (ticket === latest.current) {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    }
-  }, [accountId]);
-
-  useEffect(() => {
-    setLoading(true);
-    setData(null);
-    setError(null);
-    setRefreshing(false);
-    void reload();
-  }, [reload]);
-
-  return { data, error, loading, refreshing, reload };
+  const { view, error, loading, refreshing, pending, reload, run, store } = useLedgerStore(accountId);
+  const data = useMemo<WalletData | null>(() => (view ? { view } : null), [view]);
+  return { data, error, loading, refreshing, pending, reload, run, store };
 }
+
+export { LedgerStore };
+

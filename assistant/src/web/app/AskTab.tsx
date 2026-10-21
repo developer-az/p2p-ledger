@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type BootstrapResponse, type ToolCall, type Turn } from '../api.js';
+import { useDebouncedCallback, useOnceGuard } from './debounce.js';
 import { Icon } from './ui.js';
 
 const TOOL_WORDS: Record<string, string> = {
@@ -44,6 +45,15 @@ export function AskTab({
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
+  /**
+   * Anti-flooding, client half. A double-tapped send, a held Enter key or two
+   * suggestion taps collapse into one request here — before the network — and
+   * the once-guard swallows an identical repeat inside 600ms. The server still
+   * has its own layers (sliding-window limiter, LlmGuard cache, daily budget).
+   */
+  const askDebounced = useDebouncedCallback((question: string) => void ask(question), 260);
+  const once = useOnceGuard(600);
+
   useEffect(() => {
     setMessages([]);
     setError(null);
@@ -63,7 +73,7 @@ export function AskTab({
 
   async function ask(question: string) {
     const q = question.trim();
-    if (!q || busy) return;
+    if (!q || busy || !once(q)) return;
     const history: Turn[] = [...messages.map(({ role, text: t }) => ({ role, text: t })), { role: 'user', text: q }];
     setMessages((prev) => [...prev, { role: 'user', text: q }]);
     setText('');
@@ -78,7 +88,12 @@ export function AskTab({
           role: 'assistant',
           text: r.answer,
           checked,
-          note: r.route === 'ledger-fallback' ? 'Answered straight from your records.' : undefined,
+          note:
+            r.route === 'ledger-fallback'
+              ? 'Answered straight from your records.'
+              : r.cached
+                ? 'Repeated question — served from the guard cache, no model call.'
+                : undefined,
         },
       ]);
     } catch (e) {
@@ -115,7 +130,7 @@ export function AskTab({
               <p className="muted">Start with a question, or pick one of these.</p>
               <div className="suggestion-grid">
                 {SUGGESTIONS.map((s) => (
-                  <button key={s} type="button" className="suggestion" onClick={() => void ask(s)}>
+                  <button key={s} type="button" className="suggestion" onClick={() => askDebounced(s)}>
                     <Icon name="sparkle" size={16} />
                     <span>{s}</span>
                   </button>
@@ -128,19 +143,25 @@ export function AskTab({
               {m.role === 'assistant' ? <span className="chat-avatar" aria-hidden="true">✦</span> : null}
               <div>
                 <div className={`bubble ${m.role === 'user' ? 'bubble-user' : 'bubble-ai'}`}>{m.text}</div>
-                {m.role === 'assistant' && m.checked && m.checked.length > 0 ? (
+                {m.role === 'assistant' && ((m.checked && m.checked.length > 0) || m.note) ? (
                   <p className="chat-grounding">
-                    Looked at: {m.checked.join(', ')}.{m.note ? ` ${m.note}` : ''}
+                    {m.checked && m.checked.length > 0 ? `Looked at: ${m.checked.join(', ')}.` : ''}{m.note ? ` ${m.note}` : ''}
                   </p>
                 ) : null}
               </div>
             </div>
           ))}
-          {busy ? <div className="bubble bubble-ai faint">Looking through your records…</div> : null}
+          {busy ? (
+            <div className="chat-status" role="status">
+              <span className="marque marque-sm" aria-hidden="true">S</span>
+              <span className="chat-status-bars" aria-hidden="true"><i /><i /><i /></span>
+              <span>The archive is reading your records…</span>
+            </div>
+          ) : null}
           <div ref={endRef} />
         </div>
         {error ? <p className="error-text" role="alert">{error}</p> : null}
-        <form className="chat-form" onSubmit={(e) => { e.preventDefault(); void ask(text); }}>
+        <form className="chat-form" onSubmit={(e) => { e.preventDefault(); askDebounced(text); }}>
           <label className="sr-only" htmlFor="ask-input">Your question</label>
           <input id="ask-input" className="input" placeholder="Ask about your money" value={text} maxLength={400} onChange={(e) => setText(e.target.value)} />
           <button className="btn btn-primary" type="submit" disabled={busy || !text.trim()} aria-label="Send question"><Icon name="send" /></button>

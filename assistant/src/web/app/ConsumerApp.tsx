@@ -16,6 +16,7 @@ import { AddMoneySheet, IncomeSheet, LogSpendSheet } from './SimpleSheets.js';
 import { NeedsYouCard, SettleUpSheet } from './SettleUp.js';
 import { WalletTab } from './WalletTab.js';
 import { Avatar, Confetti, ErrorNotice, Icon, ToastProvider, type IconName } from './ui.js';
+import { FloatingDock, useSwipeNav } from './dock.js';
 import { Welcome } from './Welcome.js';
 
 type Tab = 'today' | 'activity' | 'patterns' | 'ask' | 'wallet';
@@ -26,6 +27,8 @@ const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'ask', label: 'Ask', icon: 'sparkle' },
   { id: 'wallet', label: 'Wallet', icon: 'wallet' },
 ];
+/** Tab order drives swipe direction: left reveals the next tab, right the previous. */
+const TAB_IDS: Tab[] = TABS.map((t) => t.id);
 
 type Sheetname = null | 'add' | 'log' | 'income' | 'setup' | 'settle';
 
@@ -104,7 +107,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   const me = session.account;
   const demo = session.demo === true;
   const demoKey = `settle:demo-progress:${me.id}`;
-  const { data, error, refreshing, reload } = useWallet(me.id);
+  const { data, error, refreshing, reload, run: walletRun } = useWallet(me.id);
   const [tab, setTab] = useState<Tab>('today');
   const [demoProgress, setDemoProgress] = useState<DemoStepId[]>(() => (demo ? loadDemoProgress(demoKey) : []));
   const [showDemoGuide, setShowDemoGuide] = useState(true);
@@ -177,6 +180,8 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
     setTab(t);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+  // Swipe-driven navigation on the main pane. Vertical scrolling still wins.
+  const swipe = useSwipeNav(TAB_IDS, tab, go);
   const closeSheet = () => setSheet(null);
   const celebrate = () => setBurst(Date.now());
   const openSettle = (mode: 'ask' | 'settle' = 'ask') => {
@@ -241,13 +246,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         <div className="topbar-inner">
           <Brand />
           {demo ? <button type="button" className="demo-pill" onClick={() => setShowDemoGuide(true)} title="Open the guided demo">Demo</button> : null}
-          <nav className="tabs" aria-label="Main">
-            {TABS.map((t) => (
-              <button key={t.id} type="button" className="tab" aria-current={tab === t.id ? 'page' : undefined} onClick={() => go(t.id)}>
-                {t.label}
-              </button>
-            ))}
-          </nav>
           <span className="spacer" />
           <div className="top-actions">
             {refreshing ? <span className="sync-pill" role="status" aria-label="Updating your wallet"><span className="sync-dot" /></span> : null}
@@ -285,7 +283,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         </div>
       </header>
 
-      <main id="main" className="main">
+      <main id="main" className="main" {...swipe}>
         {error && !data ? <ErrorNotice message={error} onRetry={() => void reload()} /> : null}
         {error && data ? (
           <div className="notice notice-warn sync-banner" role="status">
@@ -324,6 +322,9 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
               onLog={() => openLog()}
               onSetup={(step) => { setSetupMode('edit'); setSetupStep(step ?? 0); setSheet('setup'); }}
               onAsk={() => ask('What stands out about my spending this month?')}
+              demo={demo}
+              onDemoHome={demo ? () => { go('today'); setShowDemoGuide(true); } : undefined}
+              onShowDemoGuide={demo ? () => setShowDemoGuide(true) : undefined}
             />
           ) : null}
           {tab === 'ask' ? <AskTab accountId={me.id} boot={boot} seed={askSeed} onSeedUsed={() => setAskSeed(null)} /> : null}
@@ -343,15 +344,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         </div>
       </main>
 
-      <nav className="bottom-nav" aria-label="Main">
-        <div className="bottom-nav-inner">
-          {TABS.map((t) => (
-            <button key={t.id} type="button" className="bottom-tab" aria-current={tab === t.id ? 'page' : undefined} onClick={() => go(t.id)}>
-              <Icon name={t.icon} /><span>{t.label}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
+      <FloatingDock tabs={TABS} active={tab} onSelect={go} syncing={refreshing} />
 
       {tab !== 'today' ? (
         <button type="button" className="fab" onClick={() => openLog()} aria-label="Log a spend">
@@ -360,7 +353,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
       ) : null}
 
       <AddMoneySheet open={sheet === 'add'} onClose={closeSheet} me={me} onChanged={reload} />
-      <IncomeSheet open={sheet === 'income'} onClose={closeSheet} me={me} onChanged={reload} onLogged={() => markDemo('income')} />
+      <IncomeSheet open={sheet === 'income'} onClose={closeSheet} me={me} onChanged={reload} walletRun={walletRun} onLogged={() => markDemo('income')} />
       <LogSpendSheet
         open={sheet === 'log'}
         onClose={closeSheet}
@@ -369,6 +362,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         initialCategory={logPreset.category}
         initialAmount={logPreset.amountMinor}
         onChanged={reload}
+        walletRun={walletRun}
         onLogged={() => { celebrate(); markDemo('log'); }}
       />
       <SetupSheet

@@ -1,60 +1,48 @@
-# Engineering Handoff: Production Revamp — Design, Settle Up Wedge, LLM Flood Guard
+# Engineering Handoff: root `npm run dev` + UI/UX polish
+
+## Root DX (latest)
+- Added repo-root `package.json` with `dev` / `dev:stack` delegating to `assistant/` via `npm run … --prefix assistant` (no npm workspaces).
+- Updated `AGENTS.md` with layout and dev commands.
+
+---
+
+# Engineering Handoff: UI/UX polish + hero income fix
 
 ## Overview
-Revamped the consumer app for production: quiet-luxury design system, a rail-agnostic
-"Settle Up" wedge (request / split / settle on any rail), and an LLM guard that stops
-repeats and budget overruns from flooding the Gemini API. Verified: 31 test files /
-144 tests pass, `tsc --noEmit` clean, `vite build` clean, live smoke of the new
-endpoint passed (settle → PAID + rail, double settle → 409, wrong actor → 403).
+Addressed nine consumer-app UI/UX issues in `assistant/src/web/app` (THE AURA shell) plus a plain-terminal refresh for `/ops` (`TerminalApp` + `styles.css`). Net position on Today now follows `finance.projectedCash` so logged income updates the hero amount when a cash baseline exists.
+
+Verified: `cd assistant && npm test && npm run build` — 37 files, 169 tests pass.
 
 ## Changes Completed
 
-### 1. LLM flood guard (`assistant/src/server/llm-guard.ts`, wired into `app.ts /api/chat`)
-- Answer cache: normalized question + conversation tail per account, 10 min TTL,
-  400-entry eviction. Repeated questions cost zero model calls.
-- In-flight coalescing: identical concurrent questions (double click, two tabs,
-  StrictMode double effects) share one Gemini call.
-- Daily budget: 40 calls/account/day and 300/day app-wide; over budget the
-  deterministic `answerFromLedger` answers with `route: 'ledger-fallback'`.
-- `trimHistory` caps the model payload at the newest 10 messages.
-- Replies gain `cached?: true`; only cache misses are billed. Producer failures are
-  not cached, so the next ask retries.
-- Docs: `docs/AI-SCALE.md` (call path, layered throttles, scale-out plan via Redis/Upstash).
+### 1. Hero card contrast (`app.css`)
+- Gallery hero locked to obsidian (`#0c0c0b`) in all color schemes so `.hero-week` / `ProgressRing` on-dark text is never light-on-light.
+- Explicit light text tokens for week title, mini stats, and chip copy.
 
-### 2. Settle Up wedge — rail-agnostic settlement
-- **Server** (`payment-requests.ts`, `app.ts`): `settledVia` column
-  (`zelle | cashapp | venmo | cash | crypto | other`) with idempotent migration
-  (`alter table add column if not exists`), and `POST /api/requests/:id/settle` —
-  the requester confirms outside payment; request closes `PAID` with the rail on the
-  receipt and `transferId: null`. Requester-only (403), double-resolve safe (409).
-- **Web** (`app/SettleUp.tsx`, `api.ts`): `SettleUpSheet` (Ask & split tab with peer
-  picker and even-split preview; Settle tab with Pay-in-app / Decline and per-rail
-  settlement chips), `NeedsYouCard` on Home (Pay / Decline inline, record-rail entry),
-  quick action "Settle up" on the Home row. `splitShares` matches the server's
-  `splitEvenly` (floor + leftover cents to first shares).
+### 2. Patterns peek hierarchy (`Home.tsx`, `app.css`)
+- Live peek card uses category accent via `--peek-accent`, gradient fill, and pill legend chips.
 
-### 3. Design & UX revamp (`app.css`, `index.html`)
-- New quiet-luxury token system: bone `#f4f1ea` / ink `#131211` / champagne
-  `#d8b36a` (dark: `#0d0c0a` / `#f2ede3` / `#d2b074`), replacing the lime startup
-  look; hairline rules, tighter radii (16/10), restrained shadows.
-- Shell: monogram brand mark (hairline circle), letterspaced uppercase wordmark and
-  nav tabs (underline active state), uppercase micro-caps footer with hairline rule,
-  serif display headings (`h2` → Instrument Serif), DM Mono for request amounts.
-- Money hero card retoned ink + champagne; quick-row auto-fits 5 tiles.
-- `index.html`: title "Settle · the private money book", new description and theme
-  colors matching the palette.
+### 3. Demo guide premium feel (`DemoGuide.tsx`, `app.css`)
+- Metal rail, progress bar + step dots, typography/spacing/button treatment upgraded.
 
-## Verification
-- `npx vitest run`: 31 files, 144 tests (incl. new `test/llm-guard.test.ts`,
-  `test/settle-up.test.ts`).
-- `npm run build` (tsc + vite): clean; main app chunk 115 kB (31 kB gzip).
-- Live smoke (`node --import tsx src/server/main.ts`, practice mode): demo seed,
-  settle flow 200/409/403 as designed, `/api/chat` answers from ledger fallback with
-  no LLM key — zero Gemini calls.
+### 4. Topbar experience (`app.css`)
+- Refined brand spacing, demo pill (ink + chrome halo), wallet chip depth, Ask control caps.
 
-## Notes / next steps
-- LlmGuard state is per-process; for strict budgets across instances, port the three
-  maps to Redis/KV behind the same interface (keys already namespaced).
-- A future Zelle/Cash App integration replaces `settledVia` recording with a real
-  money movement at the same endpoint — no workflow change.
-- Previous session context (perf work, PR #13) superseded by this revamp on main.
+### 5. Log spend sheet (`app.css`)
+- Framed amount hero, pressed quick-amount chips, dashed “Again?” block.
+
+### 6. Hero amount / income bug (`money-plan.ts`, `money-plan.test.ts`)
+- `netMinor` derives from `finance.projectedCash` (includes period income, optional spend subtraction) minus credit owed.
+
+### 7. Demo Patterns navigation (`InsightsTab.tsx`, `ConsumerApp.tsx`)
+- Sticky demo bar on Patterns; one-time smoke overlay with back-to-Today + show guide; sessionStorage dismiss.
+
+### 8. Setup weekly pace chips (`SetupSheet.tsx`, `app.css`)
+- Pace chips scale from cash balance (% of balance + suggestion); toggle renamed with contextual hint for projected cash.
+
+### 9. Engineering console (`TerminalApp.tsx`, `styles.css`)
+- Terminal-style top bar (green accent, lowercase labels), `← settle app` link to `/`.
+
+## Notes / follow-ups
+- Demo smoke uses `sessionStorage` key `settle:demo-patterns-smoke`; clear it in devtools to re-show the overlay.
+- Income/spend sheets now call `ledger-store.run` via `ledger-mutations.ts` so hero, week ring, and patterns update before the refetch finishes.

@@ -704,7 +704,8 @@ export function TerminalApp() {
   return (
     <div className="bb" onKeyDown={onKeyDown}>
       <header className="bb-top">
-        <span className="bb-logo">HABIT</span>
+        <a className="bb-app-link" href="/">← settle app</a>
+        <span className="bb-logo">habit-console</span>
         <span className="bb-ticker">
           <span className={boot.live ? 'bb-up' : 'bb-down'}>{liveTag}</span>
           <span>{auditTag}</span>
@@ -717,8 +718,8 @@ export function TerminalApp() {
           )}
           <LiveClock />
         </span>
-        <span className="bb-fn">F1 HELP · F2 DEMO · F3 LEDGER CHECK</span>
-        <a className="bb-dim" href={REPO} target="_blank" rel="noreferrer">SRC</a>
+        <span className="bb-fn">f1 help · f2 demo · f3 ledger check</span>
+        <a className="bb-dim" href={REPO} target="_blank" rel="noreferrer">src</a>
       </header>
 
       {!account && (

@@ -7,7 +7,8 @@ that holds up as the app grows.
 
 ```
 Browser → POST /api/chat
-  1. IP rate limit            20 req/min          (app.ts, rateLimiter)
+  0. Client debounce          260 ms + 600 ms once-guard  (app/debounce.ts, AskTab.tsx)
+  1. IP rate limit            20 req/min, sliding window  (rate-limit.ts, app.ts)
   2. History trim             last 10 messages    (llm-guard.ts, trimHistory)
   3. LlmGuard
      ├─ answer cache          same question, <10 min → free
@@ -19,20 +20,27 @@ Browser → POST /api/chat
 
 The overflow problem this solves: a double-clicked question, a refreshed page or a
 "what's my balance?" asked three times used to each cost a full Gemini round-trip
-(tool loop included — up to 6 model steps per question). Now repeats are answered
-from memory and identical concurrent asks fuse into one call. When the daily budget
-is spent, answers come from `fallback.ts` (ledger tools, no model) instead of
-burning quota into 429s.
+(tool loop included — up to 6 model steps per question). Now the browser collapses
+the burst before it sends, repeats are answered from memory, and identical
+concurrent asks fuse into one call. When the daily budget is spent, answers come
+from `fallback.ts` (ledger tools, no model) instead of burning quota into 429s.
 
-Rate-limiting is deliberately layered:
+Rate-limiting is deliberately layered, cheapest first:
 
 | Layer | Scope | Protects against |
 |---|---|---|
-| `rateLimiter(20, 60s)` | per IP | one noisy visitor |
-| LlmGuard cache + coalescing | per instance | duplicate work |
+| `debounce` + `useOnceGuard` | per browser | duplicate requests ever being sent |
+| `rateLimiter(20, 60s)` — sliding window | per IP | one noisy visitor; returns `Retry-After` |
+| LlmGuard cache + coalescing | per instance | duplicate work that got through |
 | LlmGuard daily budget | per account / app | quota burn across visitors |
 | `GEMINI_MIN_INTERVAL_MS` | per provider | free-tier 5 req/min pacing |
 | Fallback chain + ledger fallback | per request | any provider outage |
+
+The IP limiter is a **sliding-window log**, not a fixed counter, so a burst either
+side of a window boundary cannot double the allowance. It keeps at most `limit`
+timestamps per key, so memory is bounded by traffic shape, not volume; idle keys are
+evicted past `maxKeys` (20 000). A refused request returns `429` with `Retry-After`
+in seconds — see `rate-limit.ts`.
 
 Configuration: `LLM_DAILY_LIMIT` (default 300), `LLM_ACCOUNT_DAILY_LIMIT`
 (default 40), `LLM_CACHE_TTL_MS` (default 600000) — see `llm-guard.ts`.

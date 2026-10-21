@@ -41,6 +41,7 @@ import { explainDecline } from './peer-ledger.js';
 import { providerFromEnv } from './providers/index.js';
 import { MAX_MINOR_UI } from './money.js';
 import { LlmGuard, trimHistory } from './llm-guard.js';
+import { rateLimiter, retryAfterSeconds } from './rate-limit.js';
 import { SETTLE_RAILS, type SettleRail } from './payment-requests.js';
 
 const openAccountBody = z.object({
@@ -104,21 +105,12 @@ const recordIncomeBody = z.object({
   occurredAt: z.string().datetime().optional(),
 });
 
-/** Fixed-window limiter per client IP: protects the free LLM quota from one noisy visitor. */
-function rateLimiter(limit: number, windowMs: number) {
-  const hits = new Map<string, { count: number; resetAt: number }>();
-  return (key: string): boolean => {
-    const now = Date.now();
-    const entry = hits.get(key);
-    if (!entry || entry.resetAt <= now) {
-      hits.set(key, { count: 1, resetAt: now + windowMs });
-      return true;
-    }
-    entry.count++;
-    return entry.count <= limit;
-  };
-}
-
+/**
+ * Rate limiters are built once per app instance (see rate-limit.ts). The chat
+ * limiter guards the paid LLM quota; the rest guard writes. All of them are
+ * sliding-window and per client IP, so a burst cannot be doubled by straddling
+ * a fixed-window boundary.
+ */
 export function createApp(deps: {
   ledger: CompositeLedger;
   practice: PracticeLedger;
@@ -653,8 +645,25 @@ export function createApp(deps: {
     return 'error' in result ? c.json(result, 400) : c.json(result);
   });
 
+  /**
+   * The LLM route. Anti-flooding is layered, cheapest first:
+   *   1. sliding-window IP limit (below) — rejects a burst before any work runs;
+   *   2. `trimHistory` — caps what is even treated as context;
+   *   3. `LlmGuard` — cache hit → shared in-flight → daily budget → provider;
+   *   4. `answerFromLedger` — deterministic answers once the budget/quota is gone,
+   *      so the person still gets a correct answer with zero model calls.
+   * A rejected request carries `Retry-After` so clients back off politely instead
+   * of retrying in a hot loop.
+   */
   app.post('/chat', async (c) => {
-    if (!allowChat(clientIp(c))) return c.json({ error: 'Too many requests, slow down a little.' }, 429);
+    const verdict = allowChat.check(clientIp(c));
+    if (!verdict.allowed) {
+      return c.json(
+        { error: 'Too many requests, slow down a little.', retryAfterMs: verdict.retryAfterMs },
+        429,
+        { 'Retry-After': retryAfterSeconds(verdict) },
+      );
+    }
     const parsed = chatBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid request', issues: parsed.error.issues }, 400);
     const { accountId, messages: rawMessages } = parsed.data;

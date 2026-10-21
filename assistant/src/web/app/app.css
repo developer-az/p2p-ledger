@@ -1,76 +1,88 @@
-/* Settle: quiet-luxury money app. Bone, ink and one champagne accent.
-   Editorial type, hairline rules, tabular numerals. Scoped under .app so the
-   ops console keeps its own look. */
+/* THE AURA — Settle's house identity.
+   High-contrast monochrome: porcelain light, obsidian dark, chrome as the only
+   metal. Brutalist-but-elegant type (refined grotesque + editorial serif, with a
+   gothic marque reserved for the brand stamp), hairline rules, tabular numerals.
+   Scoped under .app so the /ops console keeps its own look. */
 
 .app {
-  --bg: #f4f1ea;
-  --bg-2: #ede8de;
-  --surface: #fcfaf6;
-  --surface-2: #f1ede4;
-  --surface-3: #e7e0d2;
-  --ink: #131211;
-  --ink-2: #3a3733;
-  --muted: #5c574f;
-  --faint: #857c6e;
-  --line: #e2dccf;
-  --line-strong: #c9c0ae;
-  --accent: #8a6a3b;
-  --accent-hover: #6e5227;
-  --accent-ink: #fbf8f1;
-  --accent-soft: #efe6d2;
-  --lime: #d8b36a;
-  --lime-ink: #241b08;
-  --coral: #a6483b;
-  --coral-soft: #f3e4de;
-  --good: #2e6b4f;
-  --good-soft: #e3eee6;
-  --bad: #a6483b;
-  --bad-soft: #f3e4de;
-  --warn: #8a6a3b;
-  --warn-soft: #f2e9d6;
-  --violet: #8c7b63;
-  --violet-soft: #efe9dd;
-  --shadow: 0 1px 2px rgb(19 18 17 / 4%), 0 12px 30px rgb(19 18 17 / 5%);
-  --shadow-lg: 0 24px 70px rgb(19 18 17 / 20%);
-  --radius: 16px;
-  --radius-sm: 10px;
+  /* THE AURA — high-contrast monochrome. Porcelain and obsidian, chrome as the
+     only metal. Nothing else is allowed to carry colour. */
+  --bg: #f2f1ee;
+  --bg-2: #e8e7e3;
+  --surface: #ffffff;
+  --surface-2: #f7f6f4;
+  --surface-3: #e5e3df;
+  --ink: #0a0a0a;
+  --ink-2: #1a1a1a;
+  --muted: #57554f;
+  --faint: #8b8880;
+  --line: #dedcd6;
+  --line-strong: #a9a69e;
+  /* The accent is ink itself: in a house palette the contrast is the accent. */
+  --accent: #0a0a0a;
+  --accent-hover: #2b2b2b;
+  --accent-ink: #ffffff;
+  --accent-soft: #ecebe7;
+  /* `lime` keeps its token name (many rules read it) but is now the chrome metal. */
+  --lime: #d9d9d5;
+  --lime-ink: #0a0a0a;
+  --coral: #9c3b2e;
+  --coral-soft: #f2e4e0;
+  --good: #1f5f42;
+  --good-soft: #e2ece6;
+  --bad: #9c3b2e;
+  --bad-soft: #f2e4e0;
+  --warn: #6b5a22;
+  --warn-soft: #efe9d7;
+  --violet: #6f6d68;
+  --violet-soft: #edece9;
+  --metal: #b9b9b3;
+  --metal-sheen: linear-gradient(135deg, #fdfdfb 0%, #cacac5 38%, #8f8f8a 62%, #e8e8e4 100%);
+  --shadow: 0 1px 1px rgb(10 10 10 / 5%), 0 10px 24px rgb(10 10 10 / 6%);
+  --shadow-lg: 0 30px 80px rgb(10 10 10 / 26%);
+  --radius: 6px;
+  --radius-sm: 3px;
   --font: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --display: "Instrument Serif", "Iowan Old Style", Georgia, "Times New Roman", serif;
   --mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Reserved for the marque only: the gothic signature, used sparingly like a
+     Chrome Hearts stamp. Never for body copy or numbers. */
+  --marque: "UnifrakturMaguntia", var(--display);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   .app {
-    --bg: #0d0c0a;
-    --bg-2: #121110;
-    --surface: #171512;
-    --surface-2: #1e1b17;
-    --surface-3: #262219;
-    --ink: #f2ede3;
-    --ink-2: #d8d2c4;
-    --muted: #a69e8d;
-    --faint: #7e7666;
-    --line: #2b2721;
-    --line-strong: #3d372d;
-    --accent: #d2b074;
-    --accent-hover: #e2c68f;
-    --accent-ink: #17120a;
-    --accent-soft: #2a2314;
-    --lime: #d8b36a;
-    --lime-ink: #241b08;
-    --coral: #d28572;
-    --coral-soft: #331b15;
+    --bg: #08080a;
+    --bg-2: #0e0e10;
+    --surface: #121214;
+    --surface-2: #191919;
+    --surface-3: #242426;
+    --ink: #f4f4f2;
+    --ink-2: #d6d6d2;
+    --muted: #a4a29c;
+    --faint: #7b7973;
+    --line: #29292c;
+    --line-strong: #3d3d41;
+    --accent: #f4f4f2;
+    --accent-hover: #ffffff;
+    --accent-ink: #0a0a0a;
+    --accent-soft: #1e1e20;
+    --lime: #d9d9d5;
+    --lime-ink: #0a0a0a;
+    --coral: #e0907e;
+    --coral-soft: #2c1a16;
     --good: #7fbf9a;
-    --good-soft: #122419;
+    --good-soft: #12241a;
     --bad: #e0907e;
-    --bad-soft: #331713;
-    --warn: #d2b074;
-    --warn-soft: #2c2412;
-    --violet: #b3a189;
-    --violet-soft: #2a241a;
-    --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 18px 40px rgb(0 0 0 / 24%);
-    --shadow-lg: 0 30px 80px rgb(0 0 0 / 60%);
+    --bad-soft: #2c1a16;
+    --warn: #cbb065;
+    --warn-soft: #262214;
+    --violet: #a9a7a1;
+    --violet-soft: #1e1e20;
+    --metal: #3a3a3d;
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 18px 40px rgb(0 0 0 / 30%);
+    --shadow-lg: 0 40px 90px rgb(0 0 0 / 65%);
     color-scheme: dark;
   }
 }
@@ -109,13 +121,20 @@
   backdrop-filter: blur(18px) saturate(1.15);
   border-bottom: 1px solid var(--line);
 }
-.app .topbar-inner { max-width: 1180px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; gap: 22px; }
-.app .brand { font-weight: 600; font-size: 1.02rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); text-decoration: none; display: flex; align-items: center; gap: 11px; }
+.app .topbar-inner {
+  max-width: 1180px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; gap: 16px;
+  min-height: 58px;
+}
+.app .brand {
+  font-weight: 600; font-size: 0.92rem; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--ink); text-decoration: none; display: flex; align-items: center; gap: 12px;
+  padding-right: 4px;
+}
 .app .brand-mark {
-  width: 32px; height: 32px; border-radius: 50%;
-  border: 1px solid var(--ink); background: transparent; color: var(--ink);
+  width: 34px; height: 34px; border-radius: 0;
+  border: 1px solid var(--ink); background: var(--metal-sheen); color: var(--ink);
   display: grid; place-items: center;
-  font-family: var(--display); font-size: 1.06rem; font-weight: 400; letter-spacing: 0;
+  font-family: var(--marque); font-size: 1.2rem; font-weight: 400; letter-spacing: 0;
 }
 .app .brand-word { font-weight: 600; }
 .app .tabs { display: flex; gap: 4px; margin-left: 14px; }
@@ -147,10 +166,14 @@
 .app .sync-banner .link-btn { white-space: nowrap; }
 .app .menu-wrap { position: relative; }
 .app .wallet-chip {
-  display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line-strong); background: var(--surface);
-  border-radius: 999px; padding: 4px 13px 4px 4px; font-weight: 650; font-size: 0.92rem;
+  display: inline-flex; align-items: center; gap: 9px;
+  border: 1px solid var(--line-strong); background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+  border-radius: 999px; padding: 5px 14px 5px 5px; font-weight: 650; font-size: 0.86rem;
+  letter-spacing: 0.02em; box-shadow: 0 1px 0 rgb(255 255 255 / 40%) inset;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
-.app .wallet-chip:hover { border-color: var(--ink); }
+.app .wallet-chip:hover { border-color: var(--ink); box-shadow: var(--shadow); }
+.app .wallet-chip .avatar { box-shadow: 0 0 0 1px var(--line-strong); }
 .app .main { max-width: 1180px; margin: 0 auto; padding: 34px 24px 130px; }
 .app .view { animation: view-in 280ms cubic-bezier(.2,.7,.2,1) both; }
 @keyframes view-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -316,41 +339,81 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 }
 .app .streak-pill strong { color: var(--ink); font-size: 0.95rem; }
 .app .demo-pill {
-  display: inline-flex; align-items: center; border: 0; border-radius: 999px; padding: 4px 9px;
-  background: var(--lime); color: var(--lime-ink); font-size: 0.68rem; font-weight: 750;
-  text-transform: uppercase; letter-spacing: 0.08em;
+  display: inline-flex; align-items: center; border: 1px solid color-mix(in srgb, var(--ink) 22%, var(--line));
+  border-radius: 999px; padding: 6px 12px; cursor: pointer;
+  background: var(--ink); color: var(--bg); font-size: 0.64rem; font-weight: 750;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--metal) 35%, transparent);
+  transition: transform 120ms ease, box-shadow 160ms ease;
 }
-.app .demo-pill:hover { background: color-mix(in srgb, var(--lime) 82%, #fff); }
+.app .demo-pill:hover { transform: translateY(-1px); box-shadow: 0 0 0 4px color-mix(in srgb, var(--metal) 50%, transparent); }
 
 .app .demo-guide {
-  border: 1px solid color-mix(in srgb, var(--lime) 55%, var(--line));
-  background: color-mix(in srgb, var(--lime) 20%, var(--surface));
-  border-radius: 22px; padding: 18px 20px;
+  position: relative; overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, var(--line));
+  background: linear-gradient(145deg, var(--surface) 0%, color-mix(in srgb, var(--surface-2) 80%, var(--bg)) 100%);
+  border-radius: var(--radius); padding: 22px 24px;
+  box-shadow: var(--shadow);
 }
-.app .demo-guide-top { display: flex; align-items: center; gap: 10px; }
+.app .demo-guide::before {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 3px;
+  background: var(--metal-sheen);
+}
+.app .demo-guide-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .app .demo-badge {
-  display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 4px 9px;
-  background: var(--lime); color: var(--lime-ink); font-size: 0.68rem; font-weight: 750;
-  text-transform: uppercase; letter-spacing: 0.08em;
+  display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 11px;
+  background: var(--ink); color: var(--bg); font-size: 0.66rem; font-weight: 750;
+  text-transform: uppercase; letter-spacing: 0.12em;
 }
-.app .demo-count { font-size: 0.76rem; font-weight: 650; color: var(--muted); }
-.app .demo-hide { margin-left: auto; border: 0; background: none; color: var(--muted); display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; }
-.app .demo-hide:hover { background: rgb(0 0 0 / 6%); color: var(--ink); }
-.app .demo-guide-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: end; margin-top: 10px; }
-.app .demo-guide h2 { font-family: var(--display); font-weight: 400; font-size: 1.6rem; margin-top: 2px; }
-.app .demo-guide p { color: var(--muted); font-size: 0.9rem; margin-top: 3px; max-width: 66ch; }
-.app .demo-progress { display: flex; gap: 5px; padding-bottom: 6px; }
-.app .demo-dot { width: 9px; height: 9px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 14%, transparent); }
+.app .demo-count {
+  font-size: 0.72rem; font-weight: 700; color: var(--muted);
+  letter-spacing: 0.14em; text-transform: uppercase;
+}
+.app .demo-hide { margin-left: auto; border: 1px solid var(--line); background: var(--surface); color: var(--muted); display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-sm); }
+.app .demo-hide:hover { border-color: var(--ink); color: var(--ink); }
+.app .demo-guide-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(140px, 200px); gap: 22px; align-items: end; margin-top: 14px; }
+.app .demo-guide h2 { font-family: var(--display); font-weight: 400; font-size: clamp(1.45rem, 3vw, 1.85rem); margin-top: 4px; letter-spacing: -0.02em; }
+.app .demo-guide p { color: var(--muted); font-size: 0.94rem; margin-top: 8px; max-width: 58ch; line-height: 1.55; }
+.app .demo-progress {
+  display: grid; gap: 8px; padding-bottom: 2px;
+}
+.app .demo-progress-track {
+  height: 4px; border-radius: 999px; background: var(--surface-3); overflow: hidden;
+}
+.app .demo-progress-fill {
+  display: block; height: 100%; border-radius: inherit; background: var(--ink);
+  transition: width 400ms cubic-bezier(.2,.7,.2,1);
+}
+.app .demo-progress-steps { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.app .demo-dot { width: 8px; height: 8px; border-radius: 2px; background: var(--surface-3); transition: background 200ms ease, transform 200ms ease; }
 .app .demo-dot.is-done { background: var(--ink); }
-.app .demo-dot.is-next { box-shadow: 0 0 0 3px color-mix(in srgb, var(--lime) 60%, transparent); }
-.app .demo-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
-.app .demo-actions .btn { background: var(--surface); border-color: color-mix(in srgb, var(--ink) 18%, var(--line)); }
-.app .demo-actions .btn-primary { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.app .demo-dot.is-next { background: var(--metal); transform: scale(1.15); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink) 18%, transparent); }
+.app .demo-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.app .demo-actions .btn-primary { min-width: 148px; }
 .app .demo-actions .btn:not(.btn-primary) {
   border-color: transparent; background: transparent; color: var(--muted);
-  min-height: 36px; padding: 6px 4px; text-decoration: underline; text-underline-offset: 4px;
+  min-height: 38px; padding: 6px 8px; text-decoration: underline; text-underline-offset: 4px; font-weight: 650;
 }
-.app .demo-actions .btn:not(.btn-primary):hover:not(:disabled) { background: transparent; border-color: transparent; color: var(--ink); }
+.app .demo-actions .btn:not(.btn-primary):hover:not(:disabled) { color: var(--ink); }
+
+.app .demo-patterns-bar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 14px 16px; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface-2) 70%, var(--bg));
+}
+.app .demo-patterns-copy { display: grid; gap: 6px; max-width: 52ch; }
+.app .demo-patterns-copy p { font-size: 0.88rem; color: var(--muted); margin: 0; }
+.app .demo-patterns-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.app .demo-smoke {
+  position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px;
+  background: rgb(8 8 10 / 72%); backdrop-filter: blur(10px);
+}
+.app .demo-smoke-card {
+  width: min(440px, 100%); padding: 24px 22px; border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--line-strong); box-shadow: var(--shadow-lg);
+  display: grid; gap: 10px;
+}
+.app .demo-smoke-card h2 { font-family: var(--display); font-weight: 400; font-size: 1.55rem; letter-spacing: -0.02em; }
 
 .app .welcome-demo-note { color: var(--muted); font-size: 0.88rem; margin-top: 10px; }
 .app .welcome-own-link { display: inline-block; margin-top: 10px; font-size: 0.88rem; font-weight: 650; color: var(--accent); text-underline-offset: 4px; }
@@ -433,11 +496,26 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .week-dot.is-today .week-dot-fill { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
 .app .week-dot-label { font-size: 0.68rem; font-weight: 650; color: var(--faint); text-transform: uppercase; }
 
-.app .pattern-peek .peek-body { display: flex; align-items: center; gap: 16px; }
+.app .pattern-peek { overflow: hidden; }
+.app .pattern-peek-live {
+  border-color: color-mix(in srgb, var(--peek-accent, var(--ink)) 35%, var(--line));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--peek-accent, var(--surface-2)) 14%, var(--surface)) 0%,
+    var(--surface) 55%
+  );
+}
+.app .pattern-peek-live .peek-cat { color: var(--ink); font-size: 1.05rem; }
+.app .pattern-peek-live .eyebrow { color: color-mix(in srgb, var(--peek-accent, var(--ink)) 55%, var(--muted)); }
+.app .pattern-peek .peek-body { display: flex; align-items: center; gap: 16px; margin-top: 4px; }
 .app .peek-cat { font-weight: 700; }
-.app .peek-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-.app .peek-legend span { display: inline-flex; align-items: center; gap: 5px; font-size: 0.76rem; color: var(--muted); }
-.app .peek-legend i { width: 8px; height: 8px; border-radius: 3px; }
+.app .peek-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.app .peek-legend span {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 650;
+  color: var(--ink); padding: 4px 8px; border-radius: var(--radius-sm);
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.app .peek-legend i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
 
 .app .donut { position: relative; flex: none; width: 92px; height: 92px; border-radius: 50%; }
 .app .donut::after { content: ""; position: absolute; inset: 24%; border-radius: 50%; background: var(--surface); }
@@ -677,10 +755,10 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 /* ---------- Sheets ---------- */
 
 .app-sheet { border: 0; padding: 0; background: transparent; max-width: none; max-height: none; width: 100%; height: 100%; color: inherit; overflow: visible; }
-.app-sheet::backdrop { background: rgb(8 12 10 / 58%); backdrop-filter: blur(4px); }
+.app-sheet::backdrop { background: rgb(8 8 10 / 58%); backdrop-filter: blur(6px); }
 .app-sheet-wrap { display: grid; place-items: center; width: 100%; height: 100%; padding: 18px; }
 .app-sheet-panel {
-  width: min(540px, 100%); max-height: min(92vh, 820px); overflow: auto; border-radius: 26px; box-shadow: var(--shadow-lg);
+  width: min(540px, 100%); max-height: min(92vh, 820px); overflow: auto; border-radius: var(--radius); box-shadow: var(--shadow-lg);
   background: var(--surface); color: var(--ink); border: 1px solid var(--line); padding: 24px;
   font-family: var(--font); font-size: 16px; line-height: 1.5;
 }
@@ -690,7 +768,7 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app-sheet-sub { color: var(--muted); font-size: 0.88rem; margin-top: 4px; }
 @media (max-width: 640px) {
   .app-sheet-wrap { align-items: end; padding: 0; }
-  .app-sheet-panel { width: 100%; max-height: 94vh; border-radius: 26px 26px 0 0; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+  .app-sheet-panel { width: 100%; max-height: 94vh; border-radius: var(--radius) var(--radius) 0 0; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 }
 
 /* ---------- Setup ---------- */
@@ -708,20 +786,29 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .setup-amount span { font-family: var(--display); font-size: 2.4rem; color: var(--faint); }
 .app .setup-amount input { border: 0; background: none; outline: none; font-family: var(--display); font-size: 3.4rem; line-height: 1; width: 100%; letter-spacing: -0.03em; }
 .app .setup-chips { margin-top: 6px; }
-.app .setup-toggle { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 0.9rem; font-weight: 600; }
-.app .setup-toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+.app .setup-toggle-block { display: grid; gap: 6px; margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+.app .setup-toggle { display: flex; align-items: flex-start; gap: 10px; font-size: 0.9rem; font-weight: 650; line-height: 1.35; }
+.app .setup-toggle input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); flex: none; }
+.app .setup-toggle-hint { margin: 0; font-size: 0.82rem; }
 .app .setup-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
 .app .setup-actions .btn-primary { min-width: 150px; }
 
 /* ---------- Log spend ---------- */
 
-.app .log-form { display: grid; gap: 16px; }
-.app .log-amount { display: flex; align-items: center; justify-content: center; gap: 4px; border-bottom: 1px solid var(--line); padding: 4px 0 10px; }
-.app .log-amount span { font-family: var(--display); font-size: 2.6rem; color: var(--faint); }
+.app .log-form { display: grid; gap: 18px; }
+.app .log-amount {
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 12px 14px;
+  background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface) 100%);
+}
+.app .log-amount span { font-family: var(--display); font-size: 2.4rem; color: var(--faint); align-self: center; }
 .app .log-amount input { border: 0; background: none; outline: none; font-family: var(--display); font-size: clamp(3rem, 9vw, 4.4rem); line-height: 1; text-align: center; width: 100%; letter-spacing: -0.03em; }
 .app .log-amount input::placeholder { color: var(--line-strong); }
-.app .log-quick { justify-content: center; }
-.app .again { display: grid; gap: 7px; }
+.app .log-quick { justify-content: center; gap: 8px; }
+.app .log-quick .chip { font-weight: 700; min-height: 38px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); }
+.app .log-quick .chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.app .again { display: grid; gap: 8px; padding: 12px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px dashed var(--line-strong); }
+.app .again .chip-again { font-weight: 650; }
 .app .cat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .app .cat-tile {
   display: grid; justify-items: center; gap: 5px; padding: 11px 6px; border-radius: 15px;
@@ -890,3 +977,193 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
   .app *, .app *::before, .app *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
   .app .view { animation: none; }
 }
+
+/* ==========================================================================
+   THE AURA — house components
+   Added on top of the base sheet above. These rules own the identity layer:
+   the marque, the floating dock, the gallery hero and the AI status language.
+   ========================================================================== */
+
+/* ---------- Marque: the gothic house stamp ---------- */
+
+/* Used like a Chrome Hearts logo: the mark on the door, not the wallpaper.
+   One per screen, never in body copy, never for money. */
+.app .marque {
+  font-family: var(--marque);
+  font-size: 1.6rem;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+.app .marque-sm { font-size: 1.05rem; }
+.app .brand-word {
+  font-weight: 700; letter-spacing: 0.34em; text-transform: uppercase; font-size: 0.92rem;
+  margin-left: 2px;
+}
+
+/* ---------- Shell: hairline house, floating chrome dock ---------- */
+
+.app .topbar {
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(22px) saturate(1.12);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 35%) inset;
+}
+.app .top-ask {
+  letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.72rem; font-weight: 750;
+  padding: 9px 15px;
+}
+/* The old inline tab row is retired — navigation now lives on the dock. */
+.app .tabs { display: none; }
+
+.app .float-dock {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: 22px; z-index: 40;
+  max-width: calc(100vw - 24px);
+  animation: dock-in 420ms cubic-bezier(.2,.7,.2,1) both;
+}
+@keyframes dock-in { from { opacity: 0; transform: translate(-50%, 14px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.app .float-dock-inner {
+  display: flex; align-items: center; gap: 2px;
+  padding: 6px;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  backdrop-filter: blur(22px) saturate(1.15);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  box-shadow: 0 20px 50px rgb(10 10 10 / 16%);
+}
+.app .dock-item {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 0; background: none; color: var(--muted);
+  padding: 10px 16px; border-radius: 999px;
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase;
+  transition: color 160ms ease, background 160ms ease, transform 120ms ease;
+}
+.app .dock-item:hover { color: var(--ink); }
+.app .dock-item:active { transform: scale(0.97); }
+.app .dock-item[aria-current="page"] { background: var(--ink); color: var(--bg); }
+.app .dock-icon { display: grid; place-items: center; }
+.app .dock-pulse {
+  position: absolute; top: 5px; right: 8px; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--lime); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 22%, transparent);
+  animation: sync-pulse 900ms ease-in-out infinite alternate;
+}
+.app .bottom-nav { display: none !important; }
+
+/* ---------- Gallery hero: the money piece ---------- */
+
+.app .hero-card {
+  /* Obsidian hero stays dark in every theme — ring + week copy must not invert. */
+  background: #0c0c0b; color: #f2ede3;
+  border-radius: var(--radius);
+  padding: 34px;
+  box-shadow: var(--shadow);
+}
+/* The marque watermarked behind the number, like a stamp on a garment tag. */
+.app .hero-marque {
+  position: absolute; right: 22px; top: 10px;
+  font-family: var(--marque); font-size: clamp(4rem, 12vw, 8.4rem);
+  line-height: 1; color: rgb(255 255 255 / 8%);
+  pointer-events: none; user-select: none;
+}
+@media (prefers-color-scheme: dark) {
+  .app .hero-marque { color: rgb(0 0 0 / 26%); }
+}
+.app .hero-label { letter-spacing: 0.24em; }
+.app .hero-amount {
+  font-family: var(--mono); font-weight: 500;
+  letter-spacing: -0.045em;
+  background: var(--metal-sheen);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  /* Chrome number on obsidian: the one place the metal is allowed to shine. */
+}
+.app .hero-card .eyebrow, .app .hero-card .muted { color: rgb(242 237 227 / 58%); }
+.app .hero-card .btn { border-color: rgb(255 255 255 / 22%); color: #f2ede3; }
+.app .hero-bottom { border-top: 1px solid rgb(255 255 255 / 12%); }
+.app .hero-week-title { color: #fffdf6; }
+.app .hero-week-sub { color: rgb(245 241 231 / 62%); }
+.app .hero-sub { color: rgb(245 241 231 / 64%); }
+.app .hero-mini span { color: rgb(245 241 231 / 50%); }
+.app .hero-mini strong { color: #fffdf6; }
+.app .hero-chip { border-radius: 0; letter-spacing: 0.14em; text-transform: uppercase; font-size: 0.66rem; color: rgb(245 241 231 / 82%); border-color: rgb(255 255 255 / 22%); }
+
+/* ---------- Dashboard micro-interactions ---------- */
+
+/* A restrained lift, never a bounce. Cards are gallery frames. */
+.app .card, .app .quick, .app .story, .app .feature { transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease; }
+.app .card:hover { border-color: var(--line-strong); }
+.app .quick { border-radius: var(--radius); }
+.app .quick:hover { transform: translateY(-2px); border-color: var(--ink); }
+.app .quick-primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.app .quick-primary .quick-icon { background: var(--bg); color: var(--ink); }
+.app .quick-primary .quick-copy small { color: color-mix(in srgb, var(--bg) 60%, transparent); }
+.app .quick-primary:hover { background: var(--ink-2); border-color: var(--ink-2); }
+.app .quick-icon { border-radius: var(--radius-sm); }
+.app .btn { border-radius: 0; }
+.app .btn-primary { background: var(--ink); color: var(--bg); }
+.app .btn-lime { background: var(--metal-sheen); color: var(--lime-ink); letter-spacing: 0.1em; text-transform: uppercase; }
+.app .btn-lime:hover:not(:disabled) { background: color-mix(in srgb, var(--metal) 60%, var(--surface)); border-color: transparent; }
+.app .chip, .app .rail-badge, .app .pill { letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.66rem; }
+.app .input, .app .search { border-radius: 0; }
+/* Letterspaced caps for section eyebrows: the Dior/YSL tell. */
+.app .eyebrow { letter-spacing: 0.26em; }
+.app .page-title { font-weight: 700; letter-spacing: -0.035em; }
+.app .card h2 { letter-spacing: -0.01em; }
+/* Kill the flat pastel fills on the story tiles in favour of hairlines. */
+.app .story { background: transparent; border-left-width: 2px; border-radius: var(--radius-sm); }
+.app .story-good { border-left-color: var(--good); }
+.app .story-warn { border-left-color: var(--warn); }
+.app .badge.is-earned { background: color-mix(in srgb, var(--metal) 34%, var(--surface)); border-color: var(--line-strong); }
+.app .badge { border-radius: var(--radius-sm); }
+.app .week-dot-fill, .app .week-track, .app .week-track > span { border-radius: 2px; }
+.app .donut::after { background: var(--surface); }
+
+/* ---------- AI status language ---------- */
+
+/* Latency is communicated as house state, never as a spinner. "The archive"
+   is the house name for the read-only record the assistant consults. */
+.app .chat-status {
+  display: inline-flex; align-items: center; gap: 10px;
+  border: 1px solid var(--line); border-left: 2px solid var(--ink);
+  background: var(--surface-2); border-radius: var(--radius-sm);
+  padding: 10px 14px; font-size: 0.86rem; color: var(--muted);
+}
+.app .chat-status .marque-sm { color: var(--ink); }
+.app .chat-status-bars { display: inline-flex; gap: 3px; }
+.app .chat-status-bars i {
+  width: 4px; height: 14px; background: var(--metal); border-radius: 1px;
+  animation: aura-bars 1s ease-in-out infinite;
+}
+.app .chat-status-bars i:nth-child(2) { animation-delay: 120ms; }
+.app .chat-status-bars i:nth-child(3) { animation-delay: 240ms; }
+@keyframes aura-bars { 0%, 100% { transform: scaleY(0.45); opacity: 0.5; } 50% { transform: scaleY(1); opacity: 1; } }
+.app .chat-cached { font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
+.app .skeleton { border-radius: var(--radius-sm); }
+
+/* ---------- Welcome mock: obsidian, no green cast ---------- */
+
+.app .phone { background: #0a0a0a; border-color: rgb(255 255 255 / 10%); }
+.app .phone-card { background: linear-gradient(145deg, #1a1a1a, #0a0a0a); }
+.app .phone-ring { border-color: rgb(255 255 255 / 16%); border-top-color: var(--metal); }
+.app .phone-fab { background: var(--metal-sheen); color: var(--lime-ink); letter-spacing: 0.12em; text-transform: uppercase; }
+.app .phone-row > strong.is-in, .app .phone-icon.is-in { color: var(--metal); }
+.app .welcome-copy h1 { font-family: var(--display); }
+.app .welcome-copy h1 em { color: var(--ink); font-style: italic; }
+
+/* ---------- Dock responsiveness ---------- */
+
+@media (max-width: 760px) {
+  .app .float-dock { bottom: calc(12px + env(safe-area-inset-bottom)); width: calc(100vw - 20px); }
+  .app .float-dock-inner { justify-content: space-between; padding: 6px; }
+  /* Equal columns, icon over label — the phone dock idiom, still house-styled. */
+  .app .dock-item {
+    flex: 1; flex-direction: column; gap: 3px; padding: 8px 2px;
+    border-radius: var(--radius-sm); font-size: 0.58rem; letter-spacing: 0.1em;
+  }
+  .app .dock-pulse { top: 2px; right: 12px; }
+  .app .fab { bottom: calc(88px + env(safe-area-inset-bottom)); }
+  .app .hero-card { padding: 24px; }
+  .app .hero-marque { right: 12px; top: 6px; }
+}
+

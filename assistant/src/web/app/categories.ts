@@ -6,15 +6,21 @@ export interface CategoryMeta {
   color: string;
 }
 
+/**
+ * Category colours are a monochrome ramp, not a rainbow — the house palette only
+ * allows one metal (chrome), so categories are distinguished by weight, not hue.
+ * Values are CSS expressions over theme tokens, so the ramp inverts with the
+ * theme automatically (ink on porcelain / porcelain on obsidian).
+ */
 export const CATEGORY_META: Record<SpendCategory, CategoryMeta> = {
-  dining: { label: 'Dining', emoji: '🍜', color: '#ff8a5b' },
-  groceries: { label: 'Groceries', emoji: '🛒', color: '#8ed081' },
-  transport: { label: 'Transport', emoji: '🚌', color: '#7cc4ff' },
-  entertainment: { label: 'Fun', emoji: '🎟️', color: '#c9b8ff' },
-  housing: { label: 'Housing', emoji: '🏠', color: '#ffd166' },
-  shopping: { label: 'Shopping', emoji: '🛍️', color: '#ff9fb2' },
-  health: { label: 'Health', emoji: '💊', color: '#6ee7b7' },
-  other: { label: 'Other', emoji: '✨', color: '#b8b8b8' },
+  dining: { label: 'Dining', emoji: '🍜', color: 'var(--ink)' },
+  groceries: { label: 'Groceries', emoji: '🛒', color: 'color-mix(in srgb, var(--ink) 74%, var(--surface))' },
+  transport: { label: 'Transport', emoji: '🚌', color: 'color-mix(in srgb, var(--ink) 60%, var(--surface))' },
+  entertainment: { label: 'Fun', emoji: '🎟️', color: 'color-mix(in srgb, var(--ink) 48%, var(--surface))' },
+  housing: { label: 'Housing', emoji: '🏠', color: 'color-mix(in srgb, var(--ink) 38%, var(--surface))' },
+  shopping: { label: 'Shopping', emoji: '🛍️', color: 'color-mix(in srgb, var(--ink) 30%, var(--surface))' },
+  health: { label: 'Health', emoji: '💊', color: 'color-mix(in srgb, var(--ink) 22%, var(--surface))' },
+  other: { label: 'Other', emoji: '✨', color: 'color-mix(in srgb, var(--ink) 14%, var(--surface))' },
 };
 
 export function categoryMeta(category: string): CategoryMeta {

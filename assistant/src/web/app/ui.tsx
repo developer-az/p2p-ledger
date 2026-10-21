@@ -257,7 +257,8 @@ export function ProgressRing({
   );
 }
 
-const CONFETTI_COLORS = ['#d7f26b', '#ff8a5b', '#c9b8ff', '#7cc4ff', '#ffd166', '#8ed081'];
+/* Chrome flakes, not party confetti — the celebration has to look like the house. */
+const CONFETTI_COLORS = ['#ffffff', '#d9d9d5', '#b9b9b3', '#8f8f8a', '#fdfdfb', '#6f6f6a'];
 
 /** A short, CSS-only celebration. Key it with a changing number to replay. */
 export function Confetti({ burst }: { burst: number }) {

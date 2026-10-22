@@ -7,6 +7,8 @@ import { displayName, greeting, money } from './format.js';
 import { moneyPlan } from './money-plan.js';
 import { NeedsYouCard } from './SettleUp.js';
 import type { WalletData } from './data.js';
+import { MediaPhoto } from './MediaPhoto.js';
+import { PHOTO } from './visual-assets.js';
 import { EmptyState, Icon, ProgressRing, Skeleton } from './ui.js';
 
 export interface HomeActions {
@@ -211,6 +213,7 @@ function MoneyHero({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; acti
 function SetupHero({ actions }: { actions: HomeActions }) {
   return (
     <section className="hero-card hero-setup" aria-labelledby="setup-title">
+      <MediaPhoto className="hero-setup-photo" src={PHOTO.setupHero} alt="" />
       <div className="hero-grid" aria-hidden="true" />
       <span className="hero-marque" aria-hidden="true">S</span>
       <p className="hero-label">Your starting point</p>
@@ -289,7 +292,8 @@ function PatternPeek({ plan, onInsights, onLog }: { plan: ReturnType<typeof mone
   const top = categories[0];
   if (!top) {
     return (
-      <section className="card pattern-peek" aria-labelledby="pattern-title">
+      <section className="card pattern-peek pattern-peek-empty" aria-labelledby="pattern-title">
+        <MediaPhoto className="pattern-peek-photo" src={PHOTO.patternsEmpty} alt="" />
         <div className="card-head">
           <div><p className="eyebrow">Patterns</p><h2 id="pattern-title">Your money has a shape</h2></div>
         </div>

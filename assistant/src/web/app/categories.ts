@@ -6,16 +6,19 @@ export interface CategoryMeta {
   color: string;
 }
 
-/** Distinct hues for charts and legends (donut, peek, Patterns). */
+/**
+ * Chart palette: hues spaced ~45° apart so donut segments stay easy to tell apart
+ * (avoids red/orange and green/teal pairs that looked alike on the wheel).
+ */
 export const CATEGORY_META: Record<SpendCategory, CategoryMeta> = {
-  dining: { label: 'Dining', emoji: '🍜', color: '#d94f3d' },
-  groceries: { label: 'Groceries', emoji: '🛒', color: '#2f9e55' },
-  transport: { label: 'Transport', emoji: '🚌', color: '#3b7fd4' },
-  entertainment: { label: 'Fun', emoji: '🎟️', color: '#9b59e8' },
-  housing: { label: 'Housing', emoji: '🏠', color: '#c9922a' },
-  shopping: { label: 'Shopping', emoji: '🛍️', color: '#e06b9a' },
-  health: { label: 'Health', emoji: '💊', color: '#1fad9b' },
-  other: { label: 'Other', emoji: '✨', color: '#8a8f98' },
+  dining: { label: 'Dining', emoji: '🍜', color: '#d55e00' },
+  groceries: { label: 'Groceries', emoji: '🛒', color: '#009e73' },
+  transport: { label: 'Transport', emoji: '🚌', color: '#0072b2' },
+  entertainment: { label: 'Fun', emoji: '🎟️', color: '#cc79a7' },
+  housing: { label: 'Housing', emoji: '🏠', color: '#e69f00' },
+  shopping: { label: 'Shopping', emoji: '🛍️', color: '#56b4e9' },
+  health: { label: 'Health', emoji: '💊', color: '#785ef0' },
+  other: { label: 'Other', emoji: '✨', color: '#64748b' },
 };
 
 export function categoryMeta(category: string): CategoryMeta {

@@ -1,3 +1,5 @@
+import { MediaPhoto } from './MediaPhoto.js';
+import { DEMO_STEP_PHOTO } from './visual-assets.js';
 import { Icon } from './ui.js';
 
 export type DemoStepId = 'baseline' | 'log' | 'income' | 'patterns' | 'pace';
@@ -65,6 +67,13 @@ export function DemoGuide({ progress, onStep, onDismiss, onExit, onPatterns }: D
         </button>
       </div>
       <div className="demo-guide-body">
+        {next && !complete ? (
+          <MediaPhoto
+            className="demo-guide-photo"
+            src={DEMO_STEP_PHOTO[next.id]}
+            alt=""
+          />
+        ) : null}
         <div>
           <h2 id="demo-title">{complete ? 'You have seen the whole loop.' : next?.title}</h2>
           <p>

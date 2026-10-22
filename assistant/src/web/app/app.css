@@ -371,7 +371,19 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 }
 .app .demo-hide { margin-left: auto; border: 1px solid var(--line); background: var(--surface); color: var(--muted); display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-sm); }
 .app .demo-hide:hover { border-color: var(--ink); color: var(--ink); }
-.app .demo-guide-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(140px, 200px); gap: 22px; align-items: end; margin-top: 14px; }
+.app .demo-guide-body {
+  display: grid; grid-template-columns: 112px minmax(0, 1fr) minmax(140px, 200px);
+  gap: 18px 22px; align-items: end; margin-top: 14px;
+}
+.app .demo-guide-photo {
+  grid-row: span 2; width: 112px; height: 112px; object-fit: cover; border-radius: 16px;
+  border: 1px solid var(--line-strong); box-shadow: var(--shadow);
+  animation: settle-photo-in 0.55s ease both;
+}
+@keyframes settle-photo-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
 .app .demo-guide h2 { font-family: var(--display); font-weight: 400; font-size: clamp(1.45rem, 3vw, 1.85rem); margin-top: 4px; letter-spacing: -0.02em; }
 .app .demo-guide p { color: var(--muted); font-size: 0.94rem; margin-top: 8px; max-width: 58ch; line-height: 1.55; }
 .app .demo-progress {
@@ -693,8 +705,19 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .welcome-actions { margin-top: 24px; }
 .app .legal { font-size: 0.82rem; color: var(--faint); margin-top: 12px; }
 
-.app .welcome-visual { position: relative; display: flex; justify-content: center; padding: 18px 0; }
+.app .welcome-visual { position: relative; display: flex; justify-content: center; padding: 18px 0; min-height: 420px; }
+.app .welcome-scene-photo {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 28px;
+  filter: saturate(1.05) contrast(1.02); opacity: 0.38;
+  mask-image: radial-gradient(ellipse 85% 75% at 50% 45%, #000 20%, transparent 72%);
+}
+.app .welcome-lottie-wrap {
+  position: absolute; right: 4%; top: 6%; width: 120px; height: 120px; z-index: 2; pointer-events: none;
+  opacity: 0.92; animation: settle-float 5s ease-in-out infinite;
+}
+.app .welcome-lottie, .app .welcome-lottie-host { width: 100%; height: 100%; }
 .app .phone {
+  position: relative; z-index: 3;
   width: min(330px, 100%); border-radius: 34px; background: #151a17; color: #f5f1e7; padding: 16px;
   box-shadow: 0 30px 70px rgb(12 15 13 / 30%); border: 1px solid rgb(255 255 255 / 8%);
   transform: rotate(-1.5deg);
@@ -725,11 +748,33 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .float-card span { grid-row: span 2; font-size: 1.2rem; }
 .app .float-card strong { font-size: 0.8rem; }
 .app .float-card small { color: var(--faint); font-size: 0.68rem; }
-.app .float-one { left: -14px; top: -8px; transform: rotate(-3deg); }
-.app .float-two { right: -10px; bottom: 46px; transform: rotate(2deg); }
+.app .float-one { left: -14px; top: -8px; transform: rotate(-3deg); animation: settle-float 4.5s ease-in-out infinite; z-index: 4; }
+.app .float-two { right: -10px; bottom: 46px; transform: rotate(2deg); animation: settle-float 5.5s ease-in-out infinite reverse; z-index: 4; }
+@keyframes settle-float {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -8px; }
+}
 
 .app .welcome-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .app .feature { border-top: 1px solid var(--line-strong); padding-top: 18px; }
+.app .feature-media { display: grid; gap: 12px; }
+.app .feature-photo {
+  width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 14px;
+  border: 1px solid var(--line); box-shadow: var(--shadow);
+}
+.app .hero-setup-photo {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.22;
+  border-radius: inherit; pointer-events: none;
+}
+.app .hero-setup { overflow: hidden; }
+.app .pattern-peek-empty { position: relative; overflow: hidden; }
+.app .pattern-peek-photo {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.12;
+  pointer-events: none;
+}
+.app .pattern-peek-empty .card-head,
+.app .pattern-peek-empty .muted,
+.app .pattern-peek-empty .btn { position: relative; z-index: 1; }
 .app .feature-icon { font-size: 1.4rem; }
 .app .feature h2 { font-size: 1.08rem; margin-top: 10px; }
 .app .feature p { color: var(--muted); margin-top: 6px; font-size: 0.92rem; }
@@ -920,6 +965,7 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
   .app .hello h1 { font-size: 2.3rem; }
   .app .demo-guide { padding: 14px 16px; }
   .app .demo-guide-body { grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 6px; }
+  .app .demo-guide-photo { grid-row: auto; width: 100%; height: 140px; }
   .app .demo-guide h2 { font-size: 1.3rem; }
   .app .demo-guide p { font-size: 0.82rem; }
   .app .demo-actions { margin-top: 10px; }

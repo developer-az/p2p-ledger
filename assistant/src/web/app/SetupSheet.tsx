@@ -53,7 +53,7 @@ export function SetupSheet({
     setCashText(textFromMinor(profile?.walletCashMinor ?? suggestedCashMinor));
     setCreditText(textFromMinor(profile?.creditOwedMinor ?? 0));
     setBudgetText(textFromMinor(profile?.weeklyBudgetMinor));
-    setAffectsWallet(mode === 'onboarding' ? false : (profile?.spendLogsAffectWallet ?? false));
+    setAffectsWallet(profile?.spendLogsAffectWallet ?? true);
     setBusy(false);
     setError(null);
   }, [open, profile, mode, initialStep, suggestedCashMinor]);
@@ -62,14 +62,19 @@ export function SetupSheet({
   const creditParsed = parseMinor(creditText);
   const creditMinor = creditParsed ?? 0;
   const budgetMinor = parseMinor(budgetText);
+  const balanceForPace = cashMinor ?? profile?.walletCashMinor ?? suggestedCashMinor ?? null;
   const suggestion = useMemo(
-    () => suggestedWeeklyBudget(cashMinor, 0),
-    [cashMinor],
+    () => suggestedWeeklyBudget(balanceForPace, 0),
+    [balanceForPace],
   );
   const suggestions = useMemo(() => {
+    if (balanceForPace === null || balanceForPace <= 0) {
+      return [...new Set([5_000, suggestion, 10_000, 15_000])].sort((a, b) => a - b);
+    }
+    const pct = (share: number) => Math.max(5_000, Math.round((balanceForPace * share) / 1000) * 1000);
     const base = suggestion;
-    return [...new Set([Math.max(5_000, Math.round(base * 0.7 / 1000) * 1000), base, Math.round(base * 1.5 / 1000) * 1000])];
-  }, [suggestion]);
+    return [...new Set([pct(0.1), pct(0.18), base, pct(0.25)])].sort((a, b) => a - b);
+  }, [balanceForPace, suggestion]);
 
   const canContinue = step === 0
     ? cashMinor !== null
@@ -174,7 +179,10 @@ export function SetupSheet({
           <div className="setup-panel">
             <div className="setup-icon">🎯</div>
             <h3>What feels comfortable to spend in a week?</h3>
-            <p className="muted">A pace, not a punishment. We&apos;ll show what&apos;s left without judging the number.</p>
+            <p className="muted">
+              This is your weekly spending pace — how much you&apos;re okay logging before the ring fills up.
+              It is not your net. Net is cash plus income minus logged spend minus card balance; each spend you log lowers net.
+            </p>
             <label className="setup-amount">
               <span>$</span>
               <input
@@ -194,12 +202,19 @@ export function SetupSheet({
               ))}
             </div>
             {mode === 'edit' ? (
-              <label className="setup-toggle">
-                <input type="checkbox" checked={affectsWallet} onChange={(e) => setAffectsWallet(e.target.checked)} />
-                <span>New logs reduce my available cash</span>
-              </label>
+              <div className="setup-toggle-block">
+                <label className="setup-toggle">
+                  <input type="checkbox" checked={affectsWallet} onChange={(e) => setAffectsWallet(e.target.checked)} />
+                  <span>Subtract new spends from projected cash</span>
+                </label>
+                <p className="hint setup-toggle-hint">
+                  {affectsWallet
+                    ? 'Each spend you log lowers the net number on Today until you edit cash again.'
+                    : 'Spends stay as history only — your cash baseline stays where you set it.'}
+                </p>
+              </div>
             ) : null}
-            <p className="hint">You can change the plan whenever life changes. That is the point.</p>
+            <p className="hint">Pace chips scale from your cash balance ({balanceForPace === null ? 'set cash first' : money(balanceForPace)}). Change the plan whenever life changes.</p>
           </div>
         ) : null}
 

@@ -11,7 +11,11 @@ import {
 } from '../api.js';
 import { categoryLabel, categoryMeta } from './categories.js';
 import { money } from './format.js';
+import { recordIncomeMutation, recordSpendMutation } from './ledger-mutations.js';
+import type { OptimisticMutation, OptimisticResult } from './ledger-store.js';
 import { Sheet, useToast } from './ui.js';
+
+type WalletRun = (mutation: OptimisticMutation) => Promise<OptimisticResult>;
 
 export { categoryLabel } from './categories.js';
 
@@ -97,12 +101,14 @@ export function IncomeSheet({
   onClose,
   me,
   onChanged,
+  walletRun,
   onLogged,
 }: {
   open: boolean;
   onClose: () => void;
   me: AccountRef;
   onChanged: () => Promise<void>;
+  walletRun?: WalletRun;
   onLogged?: () => void;
 }) {
   const toast = useToast();
@@ -128,8 +134,13 @@ export function IncomeSheet({
     setBusy(true);
     setError(null);
     try {
-      await api.recordIncome(me.id, { amountMinor: minor, source, note: note.trim() || undefined });
-      await onChanged();
+      if (walletRun) {
+        const result = await walletRun(recordIncomeMutation(me.id, minor, source, note.trim() || undefined));
+        if (!result.ok) throw new Error(result.error ?? 'Could not log income');
+      } else {
+        await api.recordIncome(me.id, { amountMinor: minor, source, note: note.trim() || undefined });
+        await onChanged();
+      }
       onLogged?.();
       toast(`${money(minor)} of ${SOURCE_LABELS[source].toLowerCase()} logged`, { tone: 'good' });
       onClose();
@@ -181,6 +192,7 @@ export function LogSpendSheet({
   initialCategory,
   initialAmount,
   onChanged,
+  walletRun,
   onLogged,
 }: {
   open: boolean;
@@ -190,6 +202,7 @@ export function LogSpendSheet({
   initialCategory?: SpendCategory;
   initialAmount?: number;
   onChanged: () => Promise<void>;
+  walletRun?: WalletRun;
   onLogged?: () => void;
 }) {
   const toast = useToast();
@@ -228,22 +241,42 @@ export function LogSpendSheet({
     setBusy(true);
     setError(null);
     try {
-      const result = await api.recordSpend(me.id, { amountMinor: minor, category, note: note.trim() || undefined });
-      await onChanged();
+      let spendId: string | undefined;
+      if (walletRun) {
+        const base = recordSpendMutation(me.id, minor, category, note.trim() || undefined);
+        const result = await walletRun({
+          ...base,
+          commit: async () => {
+            const created = await api.recordSpend(me.id, {
+              amountMinor: minor,
+              category,
+              note: note.trim() || undefined,
+            });
+            spendId = created.id;
+          },
+        });
+        if (!result.ok) throw new Error(result.error ?? 'Could not log spend');
+      } else {
+        const result = await api.recordSpend(me.id, { amountMinor: minor, category, note: note.trim() || undefined });
+        spendId = result.id;
+        await onChanged();
+      }
       onLogged?.();
       toast(`Logged ${money(minor)} · ${categoryLabel(category)}`, {
         tone: 'good',
-        action: {
+        action: spendId
+          ? {
           label: 'Undo',
           onClick: () => {
-            void api.deleteSpend(me.id, result.id)
+            void api.deleteSpend(me.id, spendId!)
               .then(async () => {
                 await onChanged();
                 toast('Log removed');
               })
               .catch((e: Error) => toast(e.message, { tone: 'bad' }));
           },
-        },
+        }
+          : undefined,
       });
       onClose();
     } catch (e) {
@@ -256,8 +289,8 @@ export function LogSpendSheet({
   return (
     <Sheet
       open={open}
-      title="Log a spend"
-      subtitle="What left your pocket? Two taps and you're done."
+      title="What did you buy?"
+      subtitle="Amount + category. That’s it — your week ring updates right away."
       size="wide"
       onClose={onClose}
     >

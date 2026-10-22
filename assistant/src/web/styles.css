@@ -523,16 +523,26 @@ code { font-size: .92em; padding: 0 4px; background: var(--sunken); color: var(-
 .bb-top {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   flex-wrap: wrap;
-  padding: 6px 12px;
-  background: #1a1814;
-  border-bottom: 2px solid var(--accent);
+  padding: 8px 14px;
+  background: #050505;
+  border-bottom: 1px solid #2a2a2a;
+  font-size: 12px;
 }
+.bb-app-link {
+  color: var(--bb-up);
+  text-decoration: none;
+  letter-spacing: 0.04em;
+  padding: 2px 0;
+  border-bottom: 1px solid transparent;
+}
+.bb-app-link:hover { border-bottom-color: var(--bb-up); }
 .bb-logo {
-  font-weight: 800;
-  color: var(--accent);
-  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
 }
 .bb-ticker {
   display: flex;
@@ -543,9 +553,10 @@ code { font-size: .92em; padding: 0 4px; background: var(--sunken); color: var(-
 .bb-ticker span { white-space: nowrap; }
 .bb-up { color: var(--bb-up); font-weight: 700; }
 .bb-down { color: var(--bb-down); font-weight: 700; }
-.bb-hi { color: var(--accent); font-weight: 600; }
-.bb-dim { color: var(--dim); }
-.bb-fn { margin-left: auto; color: var(--muted); font-size: 10px; }
+.bb-hi { color: var(--bb-up); font-weight: 600; }
+.bb-dim { color: var(--dim); text-decoration: none; letter-spacing: 0.04em; }
+.bb-dim:hover { color: var(--text-2); }
+.bb-fn { margin-left: auto; color: var(--dim); font-size: 11px; letter-spacing: 0.02em; }
 .bb-landing {
   padding: 16px 12px;
   border-bottom: 1px solid var(--line);
@@ -586,11 +597,12 @@ code { font-size: .92em; padding: 0 4px; background: var(--sunken); color: var(-
   margin: 0;
   padding: 4px 8px;
   font-size: 11px;
-  font-weight: 700;
-  color: var(--accent);
-  background: #1a1814;
+  font-weight: 600;
+  color: var(--text-2);
+  background: #080808;
   border-bottom: 1px solid var(--line);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
 }
 .bb-hd-sub {
   font-weight: 500;

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { AccountRef } from '../api.js';
-import { money } from './format.js';
+import { money, parseMoney } from './format.js';
 import { moneyPlan } from './money-plan.js';
 import { TrustTab } from './TrustTab.js';
 import type { WalletData } from './data.js';
@@ -27,6 +27,10 @@ export function WalletTab({
   if (!data) return <Skeleton height={420} />;
   const plan = moneyPlan(data.view);
   const patterns = data.view.patterns;
+  const periodIncomeMinor = parseMoney(data.view.finance?.periodTotals.income) ?? patterns?.month.incomeMinor ?? 0;
+  const projectedMinor = plan.projectedCashMinor ?? plan.cashMinor;
+  const incomeLiftMinor =
+    projectedMinor !== null && plan.cashMinor !== null ? projectedMinor - plan.cashMinor : 0;
 
   return (
     <div className="wallet-page">
@@ -51,11 +55,17 @@ export function WalletTab({
                 <div className="snapshot-net">
                   <span>Net position</span>
                   <strong className="num">{money(plan.netMinor ?? plan.ledgerMinor)}</strong>
-                  <span className="muted">cash minus card balance</span>
+                  <span className="muted">Projected cash minus card balance</span>
                 </div>
                 <div className="snapshot-rows">
-                  <div><span>💵 Cash</span><strong className="num">{money(plan.cashMinor ?? 0)}</strong></div>
-                  <div><span>💳 Cards</span><strong className="num">{money(plan.creditMinor)}</strong></div>
+                  <div><span>💵 Cash baseline</span><strong className="num">{money(plan.cashMinor ?? 0)}</strong></div>
+                  {periodIncomeMinor > 0 ? (
+                    <div><span>📥 Logged income (period)</span><strong className="num">{money(periodIncomeMinor)}</strong></div>
+                  ) : null}
+                  {incomeLiftMinor !== 0 ? (
+                    <div><span>📊 Projected cash</span><strong className="num">{money(projectedMinor ?? 0)}</strong></div>
+                  ) : null}
+                  <div><span>💳 Cards owed</span><strong className="num">{money(plan.creditMinor)}</strong></div>
                   <div><span>🎯 Weekly pace</span><strong className="num">{plan.budgetMinor === null ? 'Not set' : money(plan.budgetMinor)}</strong></div>
                 </div>
               </>

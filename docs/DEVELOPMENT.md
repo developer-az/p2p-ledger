@@ -67,9 +67,8 @@ Vercel production also needs `LEDGER_URL` pointing at your Render ledger URL.
 No Docker. Good for UI and unit tests; **no** PostgreSQL persistence.
 
 ```bash
-cd assistant
-npm install
-npm run dev          # http://localhost:5173 — Vite proxies /api to embedded server
+cd assistant && npm install
+npm run dev          # from repo root, or from assistant/ — http://localhost:5173
 ```
 
 ### 2. Full stack (recommended for P2P + bank corridors)
@@ -77,9 +76,8 @@ npm run dev          # http://localhost:5173 — Vite proxies /api to embedded s
 PostgreSQL + Java ledger + terminal UI:
 
 ```bash
-cd assistant
-npm install
-npm run dev:stack    # docker compose up + Vite
+cd assistant && npm install
+npm run dev:stack    # from repo root, or from assistant/ — docker compose up + Vite
 ```
 
 Wait until `ledger` logs show the app healthy, then open **http://localhost:5173**.

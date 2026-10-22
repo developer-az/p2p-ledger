@@ -1,0 +1,9 @@
+{
+  "name": "p2p-ledger",
+  "private": true,
+  "description": "Repo root convenience scripts; Node app lives in assistant/",
+  "scripts": {
+    "dev": "npm run dev --prefix assistant",
+    "dev:stack": "npm run dev:stack --prefix assistant"
+  }
+}

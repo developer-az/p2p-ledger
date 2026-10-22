@@ -3,6 +3,9 @@ import { api, type AccountRef, type BootstrapResponse } from '../api.js';
 import { loadSavedWallets, rememberWallet } from '../wallet-store.js';
 import { displayName, money } from './format.js';
 import type { Session } from './session.js';
+import { MediaPhoto } from './MediaPhoto.js';
+import { LottieMark } from './LottieMark.js';
+import { PHOTO } from './visual-assets.js';
 import { Avatar, Icon, useToast } from './ui.js';
 
 /** Letters and digits only, so the owner id is safe to put in a URL. */
@@ -97,7 +100,7 @@ export function Welcome({
           </p>
           <div className="row-wrap welcome-actions">
             <button type="button" className="btn btn-primary btn-lg" onClick={() => void tryDemo()} disabled={!boot || busy !== null}>
-              {busy === 'demo' ? 'Setting up…' : 'Start the guided demo'}
+              {busy === 'demo' ? 'Setting up…' : 'Try the 5-step tour'}
               {busy !== 'demo' ? <Icon name="sparkle" size={18} /> : null}
             </button>
             <a className="btn btn-lg" href="#how">See how it works</a>
@@ -115,6 +118,10 @@ export function Welcome({
         </div>
 
         <div className="welcome-visual" aria-label="A preview of the Settle app">
+          <MediaPhoto className="welcome-scene-photo" src={PHOTO.welcomeScene} alt="" />
+          <div className="welcome-lottie-wrap" aria-hidden="true">
+            <LottieMark className="welcome-lottie" label="Savings animation" />
+          </div>
           <div className="phone">
             <div className="phone-top">
               <span className="phone-dot" /><span className="phone-dot" /><span className="phone-dot" />
@@ -175,18 +182,18 @@ export function Welcome({
       ) : null}
 
       <section className="welcome-features" id="how" aria-label="How it works">
-        <article className="feature">
-          <span className="feature-icon">💵</span>
+        <article className="feature feature-media">
+          <MediaPhoto className="feature-photo" src={PHOTO.featureBaseline} alt="" />
           <h2>Three numbers, once</h2>
           <p>Cash, card balance, a weekly pace. Thirty seconds — no bank connection, no spreadsheet.</p>
         </article>
-        <article className="feature">
-          <span className="feature-icon">✌️</span>
+        <article className="feature feature-media">
+          <MediaPhoto className="feature-photo" src={PHOTO.featureLog} alt="" />
           <h2>Two taps to log</h2>
           <p>Amount, category, done. The app turns small logs into a week you can actually see.</p>
         </article>
-        <article className="feature">
-          <span className="feature-icon">📈</span>
+        <article className="feature feature-media">
+          <MediaPhoto className="feature-photo" src={PHOTO.featurePatterns} alt="" />
           <h2>Patterns, not guesswork</h2>
           <p>A calendar heatmap, category shifts and a weekly pace that shows where the month is heading.</p>
         </article>

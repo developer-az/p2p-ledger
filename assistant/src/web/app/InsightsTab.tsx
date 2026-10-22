@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { categoryMeta } from './categories.js';
 import { money, percent } from './format.js';
 import { milestones, nextMilestone } from './milestones.js';
@@ -13,11 +13,15 @@ export function InsightsTab({
   onLog,
   onSetup,
   onAsk,
+  demo,
+  onDemoHome,
 }: {
   data: WalletData | null;
   onLog: () => void;
   onSetup: (step?: 0 | 1 | 2) => void;
   onAsk: () => void;
+  demo?: boolean;
+  onDemoHome?: () => void;
 }) {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [weeklyPayment, setWeeklyPayment] = useState(5_000);
@@ -33,6 +37,11 @@ export function InsightsTab({
 
   return (
     <div className="patterns">
+      {demo && onDemoHome ? (
+        <div className="demo-patterns-bar" role="region" aria-label="Demo navigation">
+          <button type="button" className="btn btn-primary btn-sm" onClick={onDemoHome}>← Back to demo home</button>
+        </div>
+      ) : null}
       <header className="patterns-head">
         <div>
           <p className="eyebrow">Patterns</p>

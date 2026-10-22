@@ -1,3 +1,5 @@
+import { MediaPhoto } from './MediaPhoto.js';
+import { DEMO_STEP_PHOTO } from './visual-assets.js';
 import { Icon } from './ui.js';
 
 export type DemoStepId = 'baseline' | 'log' | 'income' | 'patterns' | 'pace';
@@ -58,13 +60,20 @@ export function DemoGuide({ progress, onStep, onDismiss, onExit, onPatterns }: D
   return (
     <section className="demo-guide" aria-labelledby="demo-title">
       <div className="demo-guide-top">
-        <span className="demo-badge"><Icon name="sparkle" size={13} /> Guided demo</span>
+        <span className="demo-badge"><Icon name="sparkle" size={13} /> Your quest</span>
         <span className="demo-count">{Math.min(done.size, STEPS.length)} / {STEPS.length} done</span>
         <button type="button" className="demo-hide" onClick={onDismiss} aria-label="Hide demo guide">
           <Icon name="x" size={16} />
         </button>
       </div>
       <div className="demo-guide-body">
+        {next && !complete ? (
+          <MediaPhoto
+            className="demo-guide-photo"
+            src={DEMO_STEP_PHOTO[next.id]}
+            alt=""
+          />
+        ) : null}
         <div>
           <h2 id="demo-title">{complete ? 'You have seen the whole loop.' : next?.title}</h2>
           <p>
@@ -74,13 +83,18 @@ export function DemoGuide({ progress, onStep, onDismiss, onExit, onPatterns }: D
           </p>
         </div>
         <div className="demo-progress" aria-label={`${done.size} of ${STEPS.length} demo steps complete`}>
-          {STEPS.map((step) => (
-            <span
-              key={step.id}
-              className={`demo-dot${done.has(step.id) ? ' is-done' : ''}${next?.id === step.id ? ' is-next' : ''}`}
-              title={step.title}
-            />
-          ))}
+          <div className="demo-progress-track" aria-hidden="true">
+            <span className="demo-progress-fill" style={{ width: `${(Math.min(done.size, STEPS.length) / STEPS.length) * 100}%` }} />
+          </div>
+          <div className="demo-progress-steps">
+            {STEPS.map((step) => (
+              <span
+                key={step.id}
+                className={`demo-dot${done.has(step.id) ? ' is-done' : ''}${next?.id === step.id ? ' is-next' : ''}`}
+                title={step.title}
+              />
+            ))}
+          </div>
         </div>
       </div>
       <div className="demo-actions">

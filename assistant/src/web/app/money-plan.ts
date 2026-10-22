@@ -14,6 +14,8 @@ export interface MoneyPlan {
   weekProgress: number;
   overBudget: boolean;
   projectedCashMinor: number | null;
+  periodIncomeMinor: number;
+  periodSpentMinor: number;
   streakDays: number;
   activeDays30d: number;
   topCategory: PatternCategory | null;
@@ -26,15 +28,18 @@ export function moneyPlan(view: AccountView | null | undefined): MoneyPlan {
   const cashMinor = profile?.walletCashMinor ?? null;
   const creditMinor = profile?.creditOwedMinor ?? 0;
   const ledgerMinor = parseMoney(view?.balance) ?? 0;
+  const projectedCashMinor = parseMoney(view?.finance?.projectedCash) ?? cashMinor;
   const budgetMinor = profile?.weeklyBudgetMinor ?? null;
   const weekSpentMinor = patterns?.week.spentMinor ?? 0;
   const weekLeftMinor = budgetMinor === null ? null : Math.max(0, budgetMinor - weekSpentMinor);
   const weekProgress = budgetMinor && budgetMinor > 0 ? weekSpentMinor / budgetMinor : 0;
+  const periodIncomeMinor = parseMoney(view?.finance?.periodTotals.income) ?? patterns?.month.incomeMinor ?? 0;
+  const periodSpentMinor = parseMoney(view?.finance?.periodTotals.spent) ?? 0;
   return {
     hasBaseline: cashMinor !== null,
     cashMinor,
     creditMinor,
-    netMinor: cashMinor === null ? null : cashMinor - creditMinor,
+    netMinor: cashMinor === null ? null : (projectedCashMinor ?? cashMinor) - creditMinor,
     ledgerMinor,
     budgetMinor,
     weekSpentMinor,
@@ -42,6 +47,8 @@ export function moneyPlan(view: AccountView | null | undefined): MoneyPlan {
     weekProgress,
     overBudget: budgetMinor !== null && weekSpentMinor > budgetMinor,
     projectedCashMinor: parseMoney(view?.finance?.projectedCash) ?? cashMinor,
+    periodIncomeMinor,
+    periodSpentMinor,
     streakDays: patterns?.streak.currentDays ?? 0,
     activeDays30d: patterns?.streak.loggedDays30d ?? 0,
     topCategory: patterns?.totals.topCategory ?? null,

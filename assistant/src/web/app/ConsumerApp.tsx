@@ -13,8 +13,11 @@ import { InsightsTab } from './InsightsTab.js';
 import { clearSession, loadSession, saveSession, type Session } from './session.js';
 import { SetupSheet } from './SetupSheet.js';
 import { AddMoneySheet, IncomeSheet, LogSpendSheet } from './SimpleSheets.js';
+import { NeedsYouCard, SettleUpSheet } from './SettleUp.js';
 import { WalletTab } from './WalletTab.js';
 import { Avatar, Confetti, ErrorNotice, Icon, ToastProvider, type IconName } from './ui.js';
+import { FloatingDock, useSwipeNav } from './dock.js';
+import { AppPreloader } from './Preloader.js';
 import { Welcome } from './Welcome.js';
 
 type Tab = 'today' | 'activity' | 'patterns' | 'ask' | 'wallet';
@@ -25,8 +28,10 @@ const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'ask', label: 'Ask', icon: 'sparkle' },
   { id: 'wallet', label: 'Wallet', icon: 'wallet' },
 ];
+/** Tab order drives swipe direction: left reveals the next tab, right the previous. */
+const TAB_IDS: Tab[] = TABS.map((t) => t.id);
 
-type Sheetname = null | 'add' | 'log' | 'income' | 'setup';
+type Sheetname = null | 'add' | 'log' | 'income' | 'setup' | 'settle';
 
 const DEMO_STEPS: DemoStepId[] = ['baseline', 'log', 'income', 'patterns', 'pace'];
 
@@ -46,10 +51,17 @@ export function ConsumerApp() {
   const [boot, setBoot] = useState<BootstrapResponse | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(() => loadSession());
+  const [bootReady, setBootReady] = useState(false);
 
   useEffect(() => {
     document.title = 'Settle · know your money, keep the habit';
-    api.bootstrap().then(setBoot).catch((e: Error) => setBootError(e.message));
+    document.documentElement.classList.add('settle-smooth-scroll');
+    const minSplash = new Promise<void>((resolve) => { window.setTimeout(resolve, 720); });
+    void Promise.all([
+      api.bootstrap().then(setBoot).catch((e: Error) => setBootError(e.message)),
+      minSplash,
+    ]).finally(() => setBootReady(true));
+    return () => document.documentElement.classList.remove('settle-smooth-scroll');
   }, []);
 
   const start = useCallback((next: Session) => {
@@ -63,7 +75,8 @@ export function ConsumerApp() {
 
   return (
     <ToastProvider>
-      <div className="app">
+      <AppPreloader visible={!bootReady} />
+      <div className={`app${bootReady ? ' app-ready' : ''}`}>
         <a className="skip" href="#main">Skip to content</a>
         {session && boot ? (
           <Signed boot={boot} session={session} onSwitch={start} onSignOut={signOut} />
@@ -103,7 +116,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   const me = session.account;
   const demo = session.demo === true;
   const demoKey = `settle:demo-progress:${me.id}`;
-  const { data, error, refreshing, reload } = useWallet(me.id);
+  const { data, error, refreshing, reload, run: walletRun } = useWallet(me.id);
   const [tab, setTab] = useState<Tab>('today');
   const [demoProgress, setDemoProgress] = useState<DemoStepId[]>(() => (demo ? loadDemoProgress(demoKey) : []));
   const [showDemoGuide, setShowDemoGuide] = useState(true);
@@ -112,6 +125,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   const [setupStep, setSetupStep] = useState<0 | 1 | 2>(0);
   const [item, setItem] = useState<FeedItem | null>(null);
   const [logPreset, setLogPreset] = useState<{ category?: SpendCategory; amountMinor?: number }>({});
+  const [settleMode, setSettleMode] = useState<'ask' | 'settle'>('ask');
   const [askSeed, setAskSeed] = useState<string | null>(null);
   const [burst, setBurst] = useState(0);
   const [menu, setMenu] = useState(false);
@@ -175,8 +189,14 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
     setTab(t);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+  // Swipe-driven navigation on the main pane. Vertical scrolling still wins.
+  const swipe = useSwipeNav(TAB_IDS, tab, go);
   const closeSheet = () => setSheet(null);
   const celebrate = () => setBurst(Date.now());
+  const openSettle = (mode: 'ask' | 'settle' = 'ask') => {
+    setSettleMode(mode);
+    setSheet('settle');
+  };
 
   const openLog = (preset: { category?: SpendCategory; amountMinor?: number } = {}) => {
     setLogPreset(preset);
@@ -235,13 +255,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         <div className="topbar-inner">
           <Brand />
           {demo ? <button type="button" className="demo-pill" onClick={() => setShowDemoGuide(true)} title="Open the guided demo">Demo</button> : null}
-          <nav className="tabs" aria-label="Main">
-            {TABS.map((t) => (
-              <button key={t.id} type="button" className="tab" aria-current={tab === t.id ? 'page' : undefined} onClick={() => go(t.id)}>
-                {t.label}
-              </button>
-            ))}
-          </nav>
           <span className="spacer" />
           <div className="top-actions">
             {refreshing ? <span className="sync-pill" role="status" aria-label="Updating your wallet"><span className="sync-dot" /></span> : null}
@@ -279,7 +292,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         </div>
       </header>
 
-      <main id="main" className="main">
+      <main id="main" className="main" {...swipe}>
         {error && !data ? <ErrorNotice message={error} onRetry={() => void reload()} /> : null}
         {error && data ? (
           <div className="notice notice-warn sync-banner" role="status">
@@ -297,6 +310,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
                 addMoney: () => setSheet('add'),
                 logSpend: openLog,
                 logIncome: () => setSheet('income'),
+                settleUp: () => openSettle('ask'),
                 ask,
                 openItem: openFeedItem,
                 seeAll: () => go('activity'),
@@ -317,6 +331,8 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
               onLog={() => openLog()}
               onSetup={(step) => { setSetupMode('edit'); setSetupStep(step ?? 0); setSheet('setup'); }}
               onAsk={() => ask('What stands out about my spending this month?')}
+              demo={demo}
+              onDemoHome={demo ? () => { go('today'); setShowDemoGuide(true); } : undefined}
             />
           ) : null}
           {tab === 'ask' ? <AskTab accountId={me.id} boot={boot} seed={askSeed} onSeedUsed={() => setAskSeed(null)} /> : null}
@@ -336,24 +352,16 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         </div>
       </main>
 
-      <nav className="bottom-nav" aria-label="Main">
-        <div className="bottom-nav-inner">
-          {TABS.map((t) => (
-            <button key={t.id} type="button" className="bottom-tab" aria-current={tab === t.id ? 'page' : undefined} onClick={() => go(t.id)}>
-              <Icon name={t.icon} /><span>{t.label}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
+      <FloatingDock tabs={TABS} active={tab} onSelect={go} syncing={refreshing} />
 
       {tab !== 'today' ? (
-        <button type="button" className="fab" onClick={() => openLog()} aria-label="Log a spend">
-          <Icon name="plus" size={24} /><span>Log spend</span>
+        <button type="button" className="fab" onClick={() => openLog()} aria-label="Log what you spent">
+          <Icon name="plus" size={24} /><span>I spent $</span>
         </button>
       ) : null}
 
       <AddMoneySheet open={sheet === 'add'} onClose={closeSheet} me={me} onChanged={reload} />
-      <IncomeSheet open={sheet === 'income'} onClose={closeSheet} me={me} onChanged={reload} onLogged={() => markDemo('income')} />
+      <IncomeSheet open={sheet === 'income'} onClose={closeSheet} me={me} onChanged={reload} walletRun={walletRun} onLogged={() => markDemo('income')} />
       <LogSpendSheet
         open={sheet === 'log'}
         onClose={closeSheet}
@@ -362,6 +370,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         initialCategory={logPreset.category}
         initialAmount={logPreset.amountMinor}
         onChanged={reload}
+        walletRun={walletRun}
         onLogged={() => { celebrate(); markDemo('log'); }}
       />
       <SetupSheet
@@ -379,6 +388,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         }}
       />
       <ActivitySheet item={item} accountId={me.id} onClose={() => setItem(null)} onChanged={reload} />
+      <SettleUpSheet open={sheet === 'settle'} onClose={closeSheet} me={me} onChanged={reload} initialMode={settleMode} />
       <Confetti burst={burst} />
     </>
   );

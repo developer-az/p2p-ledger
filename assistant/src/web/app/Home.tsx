@@ -1,17 +1,21 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, type CSSProperties, type ReactNode } from 'react';
 import type { AccountRef, SpendCategory } from '../api.js';
 import { categoryMeta } from './categories.js';
 import { buildFeed, type FeedItem } from './feed.js';
 import { FeedList } from './FeedList.js';
 import { displayName, greeting, money } from './format.js';
 import { moneyPlan } from './money-plan.js';
+import { NeedsYouCard } from './SettleUp.js';
 import type { WalletData } from './data.js';
+import { MediaPhoto } from './MediaPhoto.js';
+import { PHOTO } from './visual-assets.js';
 import { EmptyState, Icon, ProgressRing, Skeleton } from './ui.js';
 
 export interface HomeActions {
   addMoney: () => void;
   logSpend: (preset?: { category?: SpendCategory; amountMinor?: number }) => void;
   logIncome: () => void;
+  settleUp: () => void;
   ask: (question?: string) => void;
   openItem: (item: FeedItem) => void;
   seeAll: () => void;
@@ -42,12 +46,12 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
     : 0;
 
   return (
-    <div className="home">
+    <div className="home stagger-in">
       <header className="hello">
         <div>
           <p className="eyebrow">{greeting()} · {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
           <h1>Hi, {displayName(me.owner)}.</h1>
-          <p className="page-sub">A calm look at your spending, and one small thing you can do next.</p>
+          <p className="page-sub">Your streak, your week, one tap to log — no spreadsheet required.</p>
         </div>
         <div className="hello-badges">
           <span className="streak-pill" title="Consecutive days with a logged spend">
@@ -65,27 +69,29 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
 
       {plan.hasBaseline ? <MoneyHero plan={plan} actions={actions} /> : <SetupHero actions={actions} />}
 
-      <section className="quick-row" aria-label="Quick actions">
-        <button type="button" className="quick quick-primary" onClick={() => actions.logSpend()}>
-          <span className="quick-icon"><Icon name="plus" size={22} /></span>
-          <span className="quick-copy"><strong>Log spend</strong><small>2 taps</small></span>
+      <section className="quick-row play-tiles" aria-label="What do you want to do?">
+        <button type="button" className="quick quick-primary quick-play" onClick={() => actions.logSpend()}>
+          <span className="quick-emoji" aria-hidden="true">💸</span>
+          <span className="quick-copy"><strong>I spent something</strong><small>Pick amount + category</small></span>
         </button>
-        <button type="button" className="quick" onClick={actions.addMoney}>
-          <span className="quick-icon"><Icon name="bank" size={20} /></span>
-          <span className="quick-copy"><strong>Add money</strong><small>to wallet</small></span>
+        <button type="button" className="quick quick-play" onClick={actions.logIncome}>
+          <span className="quick-emoji" aria-hidden="true">💰</span>
+          <span className="quick-copy"><strong>Money came in</strong><small>Paycheck, side gig, refund</small></span>
         </button>
-        <button type="button" className="quick" onClick={actions.logIncome}>
-          <span className="quick-icon"><Icon name="receive" size={20} /></span>
-          <span className="quick-copy"><strong>Log income</strong><small>money in</small></span>
+        <button type="button" className="quick quick-play" onClick={actions.settleUp}>
+          <span className="quick-emoji" aria-hidden="true">👋</span>
+          <span className="quick-copy"><strong>Split with someone</strong><small>Who owes who</small></span>
         </button>
-        <button type="button" className="quick" onClick={() => actions.setup(2)}>
-          <span className="quick-icon"><Icon name="target" size={20} /></span>
-          <span className="quick-copy"><strong>Weekly pace</strong><small>{plan.budgetMinor === null ? 'set a plan' : 'adjust'}</small></span>
+        <button type="button" className="quick quick-play" onClick={() => actions.setup(2)}>
+          <span className="quick-emoji" aria-hidden="true">🎯</span>
+          <span className="quick-copy"><strong>Weekly goal</strong><small>{plan.budgetMinor === null ? 'Set your pace' : 'Tweak your pace'}</small></span>
         </button>
       </section>
 
       <div className="home-grid">
         <div className="stack">
+          <NeedsYouCard me={me} onOpen={actions.settleUp} />
+
           <WeekCard plan={plan} dots={dots} weekChange={weekChange} onSetup={() => actions.setup(plan.hasBaseline ? 2 : 0)} onInsights={actions.seeInsights} />
 
           <section className="card" aria-labelledby="recent">
@@ -98,10 +104,10 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
             </div>
             {habitFeed.length === 0 ? (
               <EmptyState
-                title="A clean page"
-                action={<button type="button" className="btn btn-primary" onClick={() => actions.logSpend()}>Log your first spend</button>}
+                title="Level 1: log one thing"
+                action={<button type="button" className="btn btn-primary btn-play" onClick={() => actions.logSpend()}>Log coffee or lunch ☕</button>}
               >
-                Log a coffee or add money. Your history starts here.
+                One log unlocks your week ring and patterns. Takes about 5 seconds.
               </EmptyState>
             ) : (
               <FeedList items={habitFeed.slice(0, 5)} onOpen={actions.openItem} grouped={false} />
@@ -133,16 +139,32 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
 function MoneyHero({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; actions: HomeActions }) {
   const net = plan.netMinor ?? plan.ledgerMinor;
   const left = plan.weekLeftMinor;
+  const projected = plan.projectedCashMinor ?? plan.cashMinor;
   return (
     <section className="hero-card" aria-labelledby="net-label">
       <div className="hero-grid" aria-hidden="true" />
+      <span className="hero-marque" aria-hidden="true">S</span>
       <div className="hero-top">
         <div>
           <p className="hero-label" id="net-label">Net position</p>
           <p className="hero-amount num" aria-live="polite">{money(net)}</p>
           <p className="hero-sub">
-            {plan.cashMinor === null ? 'Cash not set yet' : `${money(plan.cashMinor)} cash`}
-            {plan.creditMinor > 0 ? <> · <span className="hero-debt">{money(plan.creditMinor)} on cards</span></> : ' · no card balance'}
+            {plan.cashMinor === null ? (
+              'Cash not set yet'
+            ) : plan.periodIncomeMinor > 0 || plan.periodSpentMinor > 0 ? (
+              <>
+                {money(projected ?? 0)} projected ({money(plan.cashMinor)} cash
+                {plan.periodIncomeMinor > 0 ? <> + {money(plan.periodIncomeMinor)} income</> : null}
+                {plan.periodSpentMinor > 0 ? <> − {money(plan.periodSpentMinor)} logged spend</> : null}
+                )
+                {plan.creditMinor > 0 ? <> · <span className="hero-debt">{money(plan.creditMinor)} on cards</span></> : ' · no card balance'}
+              </>
+            ) : (
+              <>
+                {money(plan.cashMinor)} cash
+                {plan.creditMinor > 0 ? <> · <span className="hero-debt">{money(plan.creditMinor)} on cards</span></> : ' · no card balance'}
+              </>
+            )}
           </p>
         </div>
         <span className="hero-chip"><Icon name="lock" size={14} /> Private</span>
@@ -150,6 +172,7 @@ function MoneyHero({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; acti
 
       <div className="hero-bottom">
         <div className="hero-week">
+          <button type="button" className="hero-ring-tap" onClick={() => actions.logSpend()} aria-label="Log a spend">
           <ProgressRing
             value={plan.budgetMinor === null ? 0 : plan.weekProgress}
             tone="onDark"
@@ -160,12 +183,13 @@ function MoneyHero({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; acti
             <strong>{left === null ? '—' : money(left)}</strong>
             <span>left</span>
           </ProgressRing>
+          </button>
           <div>
             <p className="hero-week-title">{plan.budgetMinor === null ? 'No weekly pace yet' : 'Left this week'}</p>
             <p className="hero-week-sub">
               {plan.budgetMinor === null
                 ? 'Set a gentle number to make the rest of the week feel lighter.'
-                : `${money(plan.weekSpentMinor)} of ${money(plan.budgetMinor)} used`}
+                : `${money(plan.weekSpentMinor)} of ${money(plan.budgetMinor)} used · tap the ring to log`}
             </p>
             {plan.budgetMinor === null ? (
               <button type="button" className="hero-link" onClick={() => actions.setup(2)}>Set a plan →</button>
@@ -187,7 +211,9 @@ function MoneyHero({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; acti
 function SetupHero({ actions }: { actions: HomeActions }) {
   return (
     <section className="hero-card hero-setup" aria-labelledby="setup-title">
+      <MediaPhoto className="hero-setup-photo" src={PHOTO.setupHero} alt="" />
       <div className="hero-grid" aria-hidden="true" />
+      <span className="hero-marque" aria-hidden="true">S</span>
       <p className="hero-label">Your starting point</p>
       <h2 id="setup-title">Three numbers. Then the app does the math.</h2>
       <p className="hero-setup-lede">Cash, card balance, and a weekly pace. No bank login, no spreadsheet, no guilt.</p>
@@ -264,7 +290,8 @@ function PatternPeek({ plan, onInsights, onLog }: { plan: ReturnType<typeof mone
   const top = categories[0];
   if (!top) {
     return (
-      <section className="card pattern-peek" aria-labelledby="pattern-title">
+      <section className="card pattern-peek pattern-peek-empty" aria-labelledby="pattern-title">
+        <MediaPhoto className="pattern-peek-photo" src={PHOTO.patternsEmpty} alt="" />
         <div className="card-head">
           <div><p className="eyebrow">Patterns</p><h2 id="pattern-title">Your money has a shape</h2></div>
         </div>
@@ -280,8 +307,13 @@ function PatternPeek({ plan, onInsights, onLog }: { plan: ReturnType<typeof mone
     return `${categoryMeta(c.category).color} ${start}% ${cursor}%`;
   });
   if (cursor < 100) stops.push(`var(--surface-2) ${cursor}% 100%`);
+  const accent = categoryMeta(top.category).color;
   return (
-    <section className="card pattern-peek" aria-labelledby="pattern-title">
+    <section
+      className="card pattern-peek pattern-peek-live"
+      aria-labelledby="pattern-title"
+      style={{ '--peek-accent': accent } as CSSProperties}
+    >
       <div className="card-head">
         <div><p className="eyebrow">Patterns</p><h2 id="pattern-title">Where it went</h2></div>
         <button type="button" className="link-btn" onClick={onInsights}>See all</button>

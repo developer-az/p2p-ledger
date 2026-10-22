@@ -1,47 +1,35 @@
-# Engineering Handoff: Performance Optimizations (Rebased on Latest Main)
+# Engineering Handoff (latest)
 
-## Overview
-Rebased performance optimizations onto latest `origin/main` (commit `0f0b70f`), resolving all branch divergences and conflicts with merged PRs #10, #11, and #12.
+## Session: sheet backdrop dismiss vs text selection
+- **Bug:** Setup weekly pace (and other `Sheet` modals) closed when triple-click / drag-select in inputs because the full `app-sheet-wrap` had `data-backdrop` and a naive dialog `onClick` treated release outside the panel as dismiss.
+- **Fix:** `shouldDismissSheet()` in `sheet-dismiss.ts` — dismiss only when pointer down **and** up are outside `app-sheet-panel`; capture-phase `onPointerDownCapture` on `<dialog>`; removed wrap `data-backdrop`. Unit tests in `test/sheet-dismiss.test.ts`.
+- **Audit:** All modals use shared `Sheet` (`SetupSheet`, `SimpleSheets`, `SettleUp`, `ActivitySheet`). Header menu uses `mousedown` + `contains(menuRef)` only (unchanged).
 
-## Changes Completed
+## Session: motion, preloader, playful copy
+- Branded **AppPreloader** (~720ms) with S marque + ring; smooth scroll on `html`.
+- Home **play tiles** (emoji + plain language), tappable week ring, staggered section entrance.
+- Demo badge “Your quest”; log sheet title “What did you buy?”; FAB “I spent $”.
+- `prefers-reduced-motion` disables decorative animation.
 
-### 1. Database Indexing (`ledger-service`)
-- **File:** `ledger-service/src/main/resources/db/migration/V2__performance_indexes.sql`
-- **Fixes:**
-  - Added composite index on `transfers(destination_account_id, created_at)` and keyset indexes on `(destination_account_id, id desc)` and `(source_account_id, id desc)` to eliminate full table scans during transfer lookups in `TransferRepository.findByAccount()`.
-  - Added partial index on `transfers(id) where status = 'REJECTED'` for `AuditRepository.rejectedWithEntries()`.
-  - Added covering index `ledger_entries(account_id, amount_minor)` enabling index-only scans for `AuditRepository.accountsDrifted()`.
-  - Added partial index `outbox_events(published_at, created_at) where published_at is not null` for P95 latency percentile queries.
+## Session: category colors, demo Patterns, spend→net, favicon
 
-### 2. N+1 Queries & Request Hotspots (`assistant/src/server`)
-- **Files:**
-  - `assistant/src/server/peer-ledger.ts`
-  - `assistant/src/server/ledger.ts`
-  - `assistant/src/server/app.ts`
-- **Fixes:**
-  - Converted sequential `for ... of` await loop in `listPeerRefs()` to concurrent `Promise.all` resolution.
-  - Added in-flight request coalescing and short-lived caching (5s TTL) in `HttpLedgerClient.getAccount()` to eliminate duplicate account HTTP roundtrips between `loadAccountView()` and `listPeerRefs()`. Cache is purged upon write mutations (`openAccount`, `deposit`, `transfer`, `postDeposit`, `postTransfer`).
-  - Removed full 8-query database integrity run from `/api/bootstrap` startup probe.
+### Done
+- **Category colors:** `categories.ts` uses distinct hex hues per spend category so Pattern peek donuts, Patterns legend, and Insights donut show multi-color segments.
+- **Demo Patterns:** Removed dead `demo-smoke` CSS; Patterns demo bar is sticky with only “← Back to demo home” (no full-screen smoke).
+- **Log spend lowers net:** Onboarding defaults `spendLogsAffectWallet: true`; step 3 copy clarifies weekly pace vs net formula; demo Alex seed sets `spendLogsAffectWallet: true`. Optimistic path in `ledger-mutations.ts` already respects `profile.spendLogsAffectWallet`.
+- **Favicon:** Root cause was missing `public/` asset and no `<link rel="icon">` in `index.html`. Added `assistant/public/favicon.svg` and icon link; Vite serves it at `/favicon.svg` on dev (5173).
 
-### 3. Re-render Loops & 60fps Animations (`assistant/src/web`)
-- **Files:**
-  - `assistant/src/web/TerminalApp.tsx`
-  - `assistant/src/web/pixel/PixelStage.tsx`
-  - `assistant/src/web/GuidedLedgerStory.tsx`
-- **Fixes:**
-  - Isolated the 1,000ms clock interval into `<LiveClock />` leaf component, preventing root-level re-render thrashing.
-  - Replaced 70ms React interval re-renders in `GuidedLedgerStory` with an internal `requestAnimationFrame` loop in `PixelStage`, throttling canvas buffer resizing to client dimension changes and upgrading canvas animation to 60fps.
+### Verify
+`cd assistant && npm test && npm run build`
 
-### 4. Bundle Optimization & Vendor Splitting (`assistant`)
-- **File:** `assistant/vite.config.ts`
-- **Fixes:**
-  - Added Rollup manual chunking to isolate `vendor-react` (`react`, `react-dom`) from application code.
-  - Reduced main application bundle chunk size from 323.83 kB down to 104.90 kB (28.97 kB gzipped) — a 68% reduction in initial app payload.
+---
 
-## Verification
-- Vitest suite passed: 29 test files, 129 tests.
-- TypeScript compiler (`tsc --noEmit`) and Vite production build passed.
-- Branch rebased cleanly on latest `origin/main` (`0f0b70f`) with zero conflicts.
+# Engineering Handoff: root `npm run dev` + UI/UX polish
 
-## Pull Request
-- PR #13 is open, fully rebased, and mergeable: https://github.com/developer-az/p2p-ledger/pull/13
+## Root DX
+- Added repo-root `package.json` with `dev` / `dev:stack` delegating to `assistant/` via `npm run … --prefix assistant` (no npm workspaces).
+- Updated `AGENTS.md` with layout and dev commands.
+
+## Prior UI/UX polish (summary)
+- Hero contrast, Patterns peek, Demo guide, topbar, log spend sheet, `netMinor` from `projectedCash`, setup pace chips, `/ops` terminal refresh.
+- Income/spend sheets use `ledger-store.run` via `ledger-mutations.ts`.

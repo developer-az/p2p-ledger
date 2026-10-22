@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { avatarHue, initials } from './format.js';
+import { shouldDismissSheet } from './sheet-dismiss.js';
 
 /* ---------- Icons: small inline SVGs so there is nothing to download ---------- */
 
@@ -150,6 +151,8 @@ export function Sheet({
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const pointerDownTarget = useRef<EventTarget | null>(null);
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
@@ -163,13 +166,23 @@ export function Sheet({
       className="app app-sheet"
       aria-labelledby="sheet-title"
       onClose={onClose}
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+      onPointerDownCapture={(e) => {
+        pointerDownTarget.current = e.target;
+      }}
       onClick={(e) => {
-        // A click on the dimmed area (the dialog element itself or its wrapper) closes the sheet.
-        if (e.target === e.currentTarget || (e.target as HTMLElement).dataset.backdrop) onClose();
+        if (shouldDismissSheet(panelRef.current, pointerDownTarget.current, e.target)) onClose();
+        pointerDownTarget.current = null;
       }}
     >
-      <div className="app-sheet-wrap" data-backdrop="true">
-        <div className={`app-sheet-panel${size === 'wide' ? ' app-sheet-panel-wide' : ''}`}>
+      <div className="app-sheet-wrap">
+        <div
+          ref={panelRef}
+          className={`app-sheet-panel${size === 'wide' ? ' app-sheet-panel-wide' : ''}`}
+        >
           <div className="app-sheet-head">
             <div>
               <h2 id="sheet-title">{title}</h2>

@@ -1,5 +1,10 @@
 # Engineering Handoff (latest)
 
+## Session: sheet backdrop dismiss vs text selection
+- **Bug:** Setup weekly pace (and other `Sheet` modals) closed when triple-click / drag-select in inputs because the full `app-sheet-wrap` had `data-backdrop` and a naive dialog `onClick` treated release outside the panel as dismiss.
+- **Fix:** `shouldDismissSheet()` in `sheet-dismiss.ts` — dismiss only when pointer down **and** up are outside `app-sheet-panel`; capture-phase `onPointerDownCapture` on `<dialog>`; removed wrap `data-backdrop`. Unit tests in `test/sheet-dismiss.test.ts`.
+- **Audit:** All modals use shared `Sheet` (`SetupSheet`, `SimpleSheets`, `SettleUp`, `ActivitySheet`). Header menu uses `mousedown` + `contains(menuRef)` only (unchanged).
+
 ## Session: motion, preloader, playful copy
 - Branded **AppPreloader** (~720ms) with S marque + ring; smooth scroll on `html`.
 - Home **play tiles** (emoji + plain language), tappable week ring, staggered section entrance.

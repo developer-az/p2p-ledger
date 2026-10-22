@@ -124,7 +124,7 @@ export async function seedDemoHabits(
     walletCashMinor: profile.cashMinor,
     creditOwedMinor: profile.creditMinor,
     weeklyBudgetMinor: profile.weeklyBudgetMinor,
-    spendLogsAffectWallet: false,
+    spendLogsAffectWallet: true,
   }, now);
   await finance.recordIncome(accountId, {
     amountMinor: profile.incomeMinor,

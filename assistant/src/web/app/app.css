@@ -397,23 +397,11 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .demo-actions .btn:not(.btn-primary):hover:not(:disabled) { color: var(--ink); }
 
 .app .demo-patterns-bar {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px;
-  padding: 14px 16px; border: 1px solid var(--line-strong); border-radius: var(--radius);
-  background: color-mix(in srgb, var(--surface-2) 70%, var(--bg));
+  position: sticky; top: 0; z-index: 25;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 14px;
+  padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface-2) 85%, var(--bg));
 }
-.app .demo-patterns-copy { display: grid; gap: 6px; max-width: 52ch; }
-.app .demo-patterns-copy p { font-size: 0.88rem; color: var(--muted); margin: 0; }
-.app .demo-patterns-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.app .demo-smoke {
-  position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px;
-  background: rgb(8 8 10 / 72%); backdrop-filter: blur(10px);
-}
-.app .demo-smoke-card {
-  width: min(440px, 100%); padding: 24px 22px; border-radius: var(--radius);
-  background: var(--surface); border: 1px solid var(--line-strong); box-shadow: var(--shadow-lg);
-  display: grid; gap: 10px;
-}
-.app .demo-smoke-card h2 { font-family: var(--display); font-weight: 400; font-size: 1.55rem; letter-spacing: -0.02em; }
 
 .app .welcome-demo-note { color: var(--muted); font-size: 0.88rem; margin-top: 10px; }
 .app .welcome-own-link { display: inline-block; margin-top: 10px; font-size: 0.88rem; font-weight: 650; color: var(--accent); text-underline-offset: 4px; }

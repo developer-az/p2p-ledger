@@ -53,7 +53,7 @@ export function SetupSheet({
     setCashText(textFromMinor(profile?.walletCashMinor ?? suggestedCashMinor));
     setCreditText(textFromMinor(profile?.creditOwedMinor ?? 0));
     setBudgetText(textFromMinor(profile?.weeklyBudgetMinor));
-    setAffectsWallet(mode === 'onboarding' ? false : (profile?.spendLogsAffectWallet ?? false));
+    setAffectsWallet(profile?.spendLogsAffectWallet ?? true);
     setBusy(false);
     setError(null);
   }, [open, profile, mode, initialStep, suggestedCashMinor]);
@@ -179,7 +179,10 @@ export function SetupSheet({
           <div className="setup-panel">
             <div className="setup-icon">🎯</div>
             <h3>What feels comfortable to spend in a week?</h3>
-            <p className="muted">A pace, not a punishment. We&apos;ll show what&apos;s left without judging the number.</p>
+            <p className="muted">
+              This is your weekly spending pace — how much you&apos;re okay logging before the ring fills up.
+              It is not your net. Net is cash plus income minus logged spend minus card balance; each spend you log lowers net.
+            </p>
             <label className="setup-amount">
               <span>$</span>
               <input

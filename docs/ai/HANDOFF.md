@@ -1,48 +1,24 @@
-# Engineering Handoff: root `npm run dev` + UI/UX polish
+# Engineering Handoff (latest)
 
-## Root DX (latest)
-- Added repo-root `package.json` with `dev` / `dev:stack` delegating to `assistant/` via `npm run … --prefix assistant` (no npm workspaces).
-- Updated `AGENTS.md` with layout and dev commands.
+## Session: category colors, demo Patterns, spend→net, favicon
+
+### Done
+- **Category colors:** `categories.ts` uses distinct hex hues per spend category so Pattern peek donuts, Patterns legend, and Insights donut show multi-color segments.
+- **Demo Patterns:** Removed dead `demo-smoke` CSS; Patterns demo bar is sticky with only “← Back to demo home” (no full-screen smoke).
+- **Log spend lowers net:** Onboarding defaults `spendLogsAffectWallet: true`; step 3 copy clarifies weekly pace vs net formula; demo Alex seed sets `spendLogsAffectWallet: true`. Optimistic path in `ledger-mutations.ts` already respects `profile.spendLogsAffectWallet`.
+- **Favicon:** Root cause was missing `public/` asset and no `<link rel="icon">` in `index.html`. Added `assistant/public/favicon.svg` and icon link; Vite serves it at `/favicon.svg` on dev (5173).
+
+### Verify
+`cd assistant && npm test && npm run build`
 
 ---
 
-# Engineering Handoff: UI/UX polish + hero income fix
+# Engineering Handoff: root `npm run dev` + UI/UX polish
 
-## Overview
-Addressed nine consumer-app UI/UX issues in `assistant/src/web/app` (THE AURA shell) plus a plain-terminal refresh for `/ops` (`TerminalApp` + `styles.css`). Net position on Today now follows `finance.projectedCash` so logged income updates the hero amount when a cash baseline exists.
+## Root DX
+- Added repo-root `package.json` with `dev` / `dev:stack` delegating to `assistant/` via `npm run … --prefix assistant` (no npm workspaces).
+- Updated `AGENTS.md` with layout and dev commands.
 
-Verified: `cd assistant && npm test && npm run build` — 37 files, 169 tests pass.
-
-## Changes Completed
-
-### 1. Hero card contrast (`app.css`)
-- Gallery hero locked to obsidian (`#0c0c0b`) in all color schemes so `.hero-week` / `ProgressRing` on-dark text is never light-on-light.
-- Explicit light text tokens for week title, mini stats, and chip copy.
-
-### 2. Patterns peek hierarchy (`Home.tsx`, `app.css`)
-- Live peek card uses category accent via `--peek-accent`, gradient fill, and pill legend chips.
-
-### 3. Demo guide premium feel (`DemoGuide.tsx`, `app.css`)
-- Metal rail, progress bar + step dots, typography/spacing/button treatment upgraded.
-
-### 4. Topbar experience (`app.css`)
-- Refined brand spacing, demo pill (ink + chrome halo), wallet chip depth, Ask control caps.
-
-### 5. Log spend sheet (`app.css`)
-- Framed amount hero, pressed quick-amount chips, dashed “Again?” block.
-
-### 6. Hero amount / income bug (`money-plan.ts`, `money-plan.test.ts`)
-- `netMinor` derives from `finance.projectedCash` (includes period income, optional spend subtraction) minus credit owed.
-
-### 7. Demo Patterns navigation (`InsightsTab.tsx`, `ConsumerApp.tsx`)
-- Sticky demo bar on Patterns; one-time smoke overlay with back-to-Today + show guide; sessionStorage dismiss.
-
-### 8. Setup weekly pace chips (`SetupSheet.tsx`, `app.css`)
-- Pace chips scale from cash balance (% of balance + suggestion); toggle renamed with contextual hint for projected cash.
-
-### 9. Engineering console (`TerminalApp.tsx`, `styles.css`)
-- Terminal-style top bar (green accent, lowercase labels), `← settle app` link to `/`.
-
-## Notes / follow-ups
-- Demo smoke uses `sessionStorage` key `settle:demo-patterns-smoke`; clear it in devtools to re-show the overlay.
-- Income/spend sheets now call `ledger-store.run` via `ledger-mutations.ts` so hero, week ring, and patterns update before the refetch finishes.
+## Prior UI/UX polish (summary)
+- Hero contrast, Patterns peek, Demo guide, topbar, log spend sheet, `netMinor` from `projectedCash`, setup pace chips, `/ops` terminal refresh.
+- Income/spend sheets use `ledger-store.run` via `ledger-mutations.ts`.

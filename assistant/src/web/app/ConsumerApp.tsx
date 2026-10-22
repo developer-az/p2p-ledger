@@ -324,7 +324,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
               onAsk={() => ask('What stands out about my spending this month?')}
               demo={demo}
               onDemoHome={demo ? () => { go('today'); setShowDemoGuide(true); } : undefined}
-              onShowDemoGuide={demo ? () => setShowDemoGuide(true) : undefined}
             />
           ) : null}
           {tab === 'ask' ? <AskTab accountId={me.id} boot={boot} seed={askSeed} onSeedUsed={() => setAskSeed(null)} /> : null}

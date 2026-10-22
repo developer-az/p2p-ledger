@@ -15,7 +15,6 @@ export function InsightsTab({
   onAsk,
   demo,
   onDemoHome,
-  onShowDemoGuide,
 }: {
   data: WalletData | null;
   onLog: () => void;
@@ -23,30 +22,9 @@ export function InsightsTab({
   onAsk: () => void;
   demo?: boolean;
   onDemoHome?: () => void;
-  onShowDemoGuide?: () => void;
 }) {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [weeklyPayment, setWeeklyPayment] = useState(5_000);
-  const [demoSmoke, setDemoSmoke] = useState(false);
-  useEffect(() => {
-    if (!demo) {
-      setDemoSmoke(false);
-      return;
-    }
-    try {
-      setDemoSmoke(sessionStorage.getItem('settle:demo-patterns-smoke') !== '1');
-    } catch {
-      setDemoSmoke(true);
-    }
-  }, [demo]);
-  const dismissDemoSmoke = () => {
-    setDemoSmoke(false);
-    try {
-      sessionStorage.setItem('settle:demo-patterns-smoke', '1');
-    } catch {
-      /* session-only fallback */
-    }
-  };
   if (!data) return <Skeleton height={420} />;
 
   const plan = moneyPlan(data.view);
@@ -59,31 +37,9 @@ export function InsightsTab({
 
   return (
     <div className="patterns">
-      {demo && demoSmoke && onDemoHome ? (
-        <div className="demo-smoke" role="dialog" aria-labelledby="demo-smoke-title">
-          <div className="demo-smoke-card">
-            <p className="eyebrow">Patterns · demo</p>
-            <h2 id="demo-smoke-title">This page is deep — you can always get home.</h2>
-            <p className="muted">Explore the heatmap and categories, or return to Today to finish the guided loop.</p>
-            <div className="demo-patterns-actions">
-              <button type="button" className="btn btn-primary btn-sm" onClick={() => { dismissDemoSmoke(); onDemoHome(); }}>← Back to demo home</button>
-              <button type="button" className="btn btn-sm" onClick={dismissDemoSmoke}>Keep exploring</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
       {demo && onDemoHome ? (
         <div className="demo-patterns-bar" role="region" aria-label="Demo navigation">
-          <div className="demo-patterns-copy">
-            <span className="demo-badge"><Icon name="sparkle" size={13} /> Guided demo</span>
-            <p>You&apos;re exploring Patterns — head back to Today to continue the tour.</p>
-          </div>
-          <div className="demo-patterns-actions">
-            <button type="button" className="btn btn-primary btn-sm" onClick={onDemoHome}>← Back to demo home</button>
-            {onShowDemoGuide ? (
-              <button type="button" className="btn btn-sm" onClick={onShowDemoGuide}>Show guide</button>
-            ) : null}
-          </div>
+          <button type="button" className="btn btn-primary btn-sm" onClick={onDemoHome}>← Back to demo home</button>
         </div>
       ) : null}
       <header className="patterns-head">

@@ -100,7 +100,7 @@ export function Welcome({
           </p>
           <div className="row-wrap welcome-actions">
             <button type="button" className="btn btn-primary btn-lg" onClick={() => void tryDemo()} disabled={!boot || busy !== null}>
-              {busy === 'demo' ? 'Setting up…' : 'Start the guided demo'}
+              {busy === 'demo' ? 'Setting up…' : 'Try the 5-step tour'}
               {busy !== 'demo' ? <Icon name="sparkle" size={18} /> : null}
             </button>
             <a className="btn btn-lg" href="#how">See how it works</a>

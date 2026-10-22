@@ -46,12 +46,12 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
     : 0;
 
   return (
-    <div className="home">
+    <div className="home stagger-in">
       <header className="hello">
         <div>
           <p className="eyebrow">{greeting()} · {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
           <h1>Hi, {displayName(me.owner)}.</h1>
-          <p className="page-sub">A calm look at your spending, and one small thing you can do next.</p>
+          <p className="page-sub">Your streak, your week, one tap to log — no spreadsheet required.</p>
         </div>
         <div className="hello-badges">
           <span className="streak-pill" title="Consecutive days with a logged spend">
@@ -69,26 +69,22 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
 
       {plan.hasBaseline ? <MoneyHero plan={plan} actions={actions} /> : <SetupHero actions={actions} />}
 
-      <section className="quick-row" aria-label="Quick actions">
-        <button type="button" className="quick quick-primary" onClick={() => actions.logSpend()}>
-          <span className="quick-icon"><Icon name="plus" size={22} /></span>
-          <span className="quick-copy"><strong>Log spend</strong><small>2 taps</small></span>
+      <section className="quick-row play-tiles" aria-label="What do you want to do?">
+        <button type="button" className="quick quick-primary quick-play" onClick={() => actions.logSpend()}>
+          <span className="quick-emoji" aria-hidden="true">💸</span>
+          <span className="quick-copy"><strong>I spent something</strong><small>Pick amount + category</small></span>
         </button>
-        <button type="button" className="quick" onClick={actions.settleUp}>
-          <span className="quick-icon"><Icon name="split" size={20} /></span>
-          <span className="quick-copy"><strong>Settle up</strong><small>ask · split · any rail</small></span>
+        <button type="button" className="quick quick-play" onClick={actions.logIncome}>
+          <span className="quick-emoji" aria-hidden="true">💰</span>
+          <span className="quick-copy"><strong>Money came in</strong><small>Paycheck, side gig, refund</small></span>
         </button>
-        <button type="button" className="quick" onClick={actions.addMoney}>
-          <span className="quick-icon"><Icon name="bank" size={20} /></span>
-          <span className="quick-copy"><strong>Add money</strong><small>to wallet</small></span>
+        <button type="button" className="quick quick-play" onClick={actions.settleUp}>
+          <span className="quick-emoji" aria-hidden="true">👋</span>
+          <span className="quick-copy"><strong>Split with someone</strong><small>Who owes who</small></span>
         </button>
-        <button type="button" className="quick" onClick={actions.logIncome}>
-          <span className="quick-icon"><Icon name="receive" size={20} /></span>
-          <span className="quick-copy"><strong>Log income</strong><small>money in</small></span>
-        </button>
-        <button type="button" className="quick" onClick={() => actions.setup(2)}>
-          <span className="quick-icon"><Icon name="target" size={20} /></span>
-          <span className="quick-copy"><strong>Weekly pace</strong><small>{plan.budgetMinor === null ? 'set a plan' : 'adjust'}</small></span>
+        <button type="button" className="quick quick-play" onClick={() => actions.setup(2)}>
+          <span className="quick-emoji" aria-hidden="true">🎯</span>
+          <span className="quick-copy"><strong>Weekly goal</strong><small>{plan.budgetMinor === null ? 'Set your pace' : 'Tweak your pace'}</small></span>
         </button>
       </section>
 
@@ -108,10 +104,10 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
             </div>
             {habitFeed.length === 0 ? (
               <EmptyState
-                title="A clean page"
-                action={<button type="button" className="btn btn-primary" onClick={() => actions.logSpend()}>Log your first spend</button>}
+                title="Level 1: log one thing"
+                action={<button type="button" className="btn btn-primary btn-play" onClick={() => actions.logSpend()}>Log coffee or lunch ☕</button>}
               >
-                Log a coffee or add money. Your history starts here.
+                One log unlocks your week ring and patterns. Takes about 5 seconds.
               </EmptyState>
             ) : (
               <FeedList items={habitFeed.slice(0, 5)} onOpen={actions.openItem} grouped={false} />
@@ -176,6 +172,7 @@ function MoneyHero({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; acti
 
       <div className="hero-bottom">
         <div className="hero-week">
+          <button type="button" className="hero-ring-tap" onClick={() => actions.logSpend()} aria-label="Log a spend">
           <ProgressRing
             value={plan.budgetMinor === null ? 0 : plan.weekProgress}
             tone="onDark"
@@ -186,12 +183,13 @@ function MoneyHero({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; acti
             <strong>{left === null ? '—' : money(left)}</strong>
             <span>left</span>
           </ProgressRing>
+          </button>
           <div>
             <p className="hero-week-title">{plan.budgetMinor === null ? 'No weekly pace yet' : 'Left this week'}</p>
             <p className="hero-week-sub">
               {plan.budgetMinor === null
                 ? 'Set a gentle number to make the rest of the week feel lighter.'
-                : `${money(plan.weekSpentMinor)} of ${money(plan.budgetMinor)} used`}
+                : `${money(plan.weekSpentMinor)} of ${money(plan.budgetMinor)} used · tap the ring to log`}
             </p>
             {plan.budgetMinor === null ? (
               <button type="button" className="hero-link" onClick={() => actions.setup(2)}>Set a plan →</button>

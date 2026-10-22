@@ -17,6 +17,7 @@ import { NeedsYouCard, SettleUpSheet } from './SettleUp.js';
 import { WalletTab } from './WalletTab.js';
 import { Avatar, Confetti, ErrorNotice, Icon, ToastProvider, type IconName } from './ui.js';
 import { FloatingDock, useSwipeNav } from './dock.js';
+import { AppPreloader } from './Preloader.js';
 import { Welcome } from './Welcome.js';
 
 type Tab = 'today' | 'activity' | 'patterns' | 'ask' | 'wallet';
@@ -50,10 +51,17 @@ export function ConsumerApp() {
   const [boot, setBoot] = useState<BootstrapResponse | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(() => loadSession());
+  const [bootReady, setBootReady] = useState(false);
 
   useEffect(() => {
     document.title = 'Settle · know your money, keep the habit';
-    api.bootstrap().then(setBoot).catch((e: Error) => setBootError(e.message));
+    document.documentElement.classList.add('settle-smooth-scroll');
+    const minSplash = new Promise<void>((resolve) => { window.setTimeout(resolve, 720); });
+    void Promise.all([
+      api.bootstrap().then(setBoot).catch((e: Error) => setBootError(e.message)),
+      minSplash,
+    ]).finally(() => setBootReady(true));
+    return () => document.documentElement.classList.remove('settle-smooth-scroll');
   }, []);
 
   const start = useCallback((next: Session) => {
@@ -67,7 +75,8 @@ export function ConsumerApp() {
 
   return (
     <ToastProvider>
-      <div className="app">
+      <AppPreloader visible={!bootReady} />
+      <div className={`app${bootReady ? ' app-ready' : ''}`}>
         <a className="skip" href="#main">Skip to content</a>
         {session && boot ? (
           <Signed boot={boot} session={session} onSwitch={start} onSignOut={signOut} />
@@ -346,8 +355,8 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
       <FloatingDock tabs={TABS} active={tab} onSelect={go} syncing={refreshing} />
 
       {tab !== 'today' ? (
-        <button type="button" className="fab" onClick={() => openLog()} aria-label="Log a spend">
-          <Icon name="plus" size={24} /><span>Log spend</span>
+        <button type="button" className="fab" onClick={() => openLog()} aria-label="Log what you spent">
+          <Icon name="plus" size={24} /><span>I spent $</span>
         </button>
       ) : null}
 

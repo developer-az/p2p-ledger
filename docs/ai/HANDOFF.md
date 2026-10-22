@@ -1,5 +1,11 @@
 # Engineering Handoff (latest)
 
+## Session: motion, preloader, playful copy
+- Branded **AppPreloader** (~720ms) with S marque + ring; smooth scroll on `html`.
+- Home **play tiles** (emoji + plain language), tappable week ring, staggered section entrance.
+- Demo badge “Your quest”; log sheet title “What did you buy?”; FAB “I spent $”.
+- `prefers-reduced-motion` disables decorative animation.
+
 ## Session: category colors, demo Patterns, spend→net, favicon
 
 ### Done

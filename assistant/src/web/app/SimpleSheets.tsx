@@ -289,8 +289,8 @@ export function LogSpendSheet({
   return (
     <Sheet
       open={open}
-      title="Log a spend"
-      subtitle="What left your pocket? Two taps and you're done."
+      title="What did you buy?"
+      subtitle="Amount + category. That’s it — your week ring updates right away."
       size="wide"
       onClose={onClose}
     >

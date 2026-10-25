@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { categoryMeta } from './categories.js';
-import { money, percent } from './format.js';
+import { categoryLabel } from './categories.js';
+import { CategoryBars } from './CategoryBars.js';
+import { money } from './format.js';
 import { milestones, nextMilestone } from './milestones.js';
 import { moneyPlan, moneyStory, monthsToClear } from './money-plan.js';
-import { Icon, ProgressRing, Skeleton } from './ui.js';
+import { Icon, Skeleton } from './ui.js';
 import type { WalletData } from './data.js';
 
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -44,21 +45,17 @@ export function InsightsTab({
       ) : null}
       <header className="patterns-head">
         <div>
-          <p className="eyebrow">Patterns</p>
-          <h1>The shape of your money.</h1>
+          <h1>Patterns</h1>
           <p className="page-sub">Built only from what you log. No bank feed, no guessing.</p>
         </div>
         <div className="patterns-head-badges">
-          <span className="streak-pill"><span aria-hidden="true">🔥</span><strong>{plan.streakDays}</strong><span>day streak</span></span>
+          <span className="streak-pill"><span className="streak-mark" aria-hidden="true" /><strong className="num">{plan.streakDays}</strong><span>day streak</span></span>
           <button type="button" className="btn btn-sm" onClick={onAsk}><Icon name="sparkle" size={16} /> Ask about this</button>
         </div>
       </header>
 
       {!hasLogs ? (
         <section className="card empty-patterns">
-          <div className="empty-illustration" aria-hidden="true">
-            <span>☕</span><span>🚌</span><span>🛒</span>
-          </div>
           <h2>Your first pattern is one log away.</h2>
           <p className="muted">Log a coffee, a bus ride, a grocery run. After a few days, this page starts to look like you.</p>
           <div className="row-wrap" style={{ justifyContent: 'center', marginTop: 16 }}>
@@ -71,23 +68,18 @@ export function InsightsTab({
           <div className="patterns-top">
             <section className="card week-focus" aria-labelledby="focus-title">
               <div className="card-head">
-                <div><p className="eyebrow">This week</p><h2 id="focus-title">Your pace</h2></div>
+                <h2 id="focus-title">This week</h2>
                 <button type="button" className="link-btn" onClick={() => onSetup(2)}>Edit plan</button>
               </div>
               <div className="focus-body">
-                <ProgressRing
-                  value={patterns ? patterns.week.budgetMinor ? Math.min(1, patterns.week.spentMinor / patterns.week.budgetMinor) : 0 : 0}
-                  size={132}
-                  stroke={11}
-                  tone={plan.overBudget ? 'bad' : 'accent'}
-                  label="Weekly plan progress"
-                >
-                  <strong>{patterns?.week.remainingMinor === null || patterns?.week.remainingMinor === undefined ? '—' : money(patterns.week.remainingMinor)}</strong>
-                  <span>left</span>
-                </ProgressRing>
                 <div className="focus-copy">
                   <p className="focus-big num">{money(patterns?.week.spentMinor ?? 0)}</p>
-                  <p className="muted">{patterns?.week.budgetMinor ? `of ${money(patterns.week.budgetMinor)} this week` : 'No weekly plan yet'}</p>
+                  <p className="muted">{patterns?.week.budgetMinor ? `of ${money(patterns.week.budgetMinor)} · ${patterns.week.remainingMinor === null ? 'no pace' : `${money(Math.max(0, patterns.week.remainingMinor))} left`}` : 'logged this week · no weekly pace yet'}</p>
+                  {patterns?.week.budgetMinor ? (
+                    <div className="week-track" role="progressbar" aria-label="Weekly pace used" aria-valuemin={0} aria-valuemax={patterns.week.budgetMinor} aria-valuenow={Math.min(patterns.week.spentMinor, patterns.week.budgetMinor)}>
+                      <span className={plan.overBudget ? 'is-over' : ''} style={{ width: `${Math.min(100, (patterns.week.spentMinor / patterns.week.budgetMinor) * 100)}%` }} />
+                    </div>
+                  ) : null}
                   <p className="hint" style={{ marginTop: 8 }}>
                     {patterns && patterns.week.lastWeekSpentMinor > 0
                       ? `${money(Math.abs(patterns.week.spentMinor - patterns.week.lastWeekSpentMinor))} ${patterns.week.spentMinor >= patterns.week.lastWeekSpentMinor ? 'more' : 'less'} than this point last week.`
@@ -99,7 +91,7 @@ export function InsightsTab({
 
             <section className="card month-focus" aria-labelledby="month-title">
               <div className="card-head">
-                <div><p className="eyebrow">{patterns?.month.label}</p><h2 id="month-title">This month</h2></div>
+                <div><h2 id="month-title">This month</h2><p className="card-sub">{patterns?.month.label}</p></div>
               </div>
               <div className="month-grid">
                 <div><span className="stat-label">Logged out</span><strong className="num">{money(patterns?.month.spentMinor ?? 0)}</strong></div>
@@ -116,10 +108,10 @@ export function InsightsTab({
           <section className="card heat-card" aria-labelledby="heat-title">
             <div className="card-head">
               <div>
-                <p className="eyebrow">Eight weeks</p>
-                <h2 id="heat-title">A calendar of your spending</h2>
+                <h2 id="heat-title">Eight weeks of cards</h2>
+                <p className="card-sub">One row per week. A fuller stamp is a bigger day.</p>
               </div>
-              <div className="heat-legend" aria-hidden="true"><span>less</span><i /><i /><i /><i /><span>more</span></div>
+              <div className="heat-legend" aria-hidden="true"><span>Less</span><i /><i /><i /><i /><i /><span>More</span></div>
             </div>
             <div className="heat-body">
               <Heatmap days={patterns?.days ?? []} onSelect={setSelectedDay} selected={selectedDay} />
@@ -155,21 +147,14 @@ export function InsightsTab({
           <div className="patterns-mid">
             <section className="card cat-card" aria-labelledby="cat-title">
               <div className="card-head">
-                <div><p className="eyebrow">Last 30 days</p><h2 id="cat-title">Where it went</h2></div>
+                <div><h2 id="cat-title">Where it went</h2><p className="card-sub">Last 30 days · {money(patterns?.totals.spend30dMinor ?? 0)} logged</p></div>
               </div>
-              <CategoryDonut categories={patterns?.categories ?? []} total={patterns?.totals.spend30dMinor ?? 0} />
-              <ul className="cat-list">
-                {(patterns?.categories ?? []).slice(0, 6).map((c) => (
-                  <li key={c.category}>
-                    <span className="cat-dot" style={{ background: categoryMeta(c.category).color }} />
-                    <span className="cat-name">{categoryMeta(c.category).label}</span>
-                    <span className="cat-share">{c.sharePct}%</span>
-                    <span className="cat-amount num">{money(c.totalMinor)}</span>
-                    {c.changePct !== null && c.changePct !== 0 ? (
-                      <span className={`cat-change ${c.changePct > 0 ? 'is-up' : 'is-down'}`}>
-                        {c.changePct > 0 ? '↑' : '↓'} {Math.abs(c.changePct)}%
-                      </span>
-                    ) : <span className="cat-change faint">new</span>}
+              <CategoryBars categories={(patterns?.categories ?? []).slice(0, 6)} max={Math.max(1, ...(patterns?.categories ?? []).map((c) => c.totalMinor))} />
+              <ul className="cat-changes">
+                {(patterns?.categories ?? []).slice(0, 6).flatMap((c) => (c.changePct === null || c.changePct === 0 ? [] : [{ category: c.category, change: c.changePct }])).slice(0, 3).map((c) => (
+                  <li key={c.category} className={c.change > 0 ? 'is-up' : 'is-down'}>
+                    <span>{categoryLabel(c.category)}</span>
+                    <span className="num">{c.change > 0 ? '+' : '−'}{Math.abs(c.change)}% vs the 30 days before</span>
                   </li>
                 ))}
               </ul>
@@ -177,16 +162,15 @@ export function InsightsTab({
 
             <section className="card weekday-card" aria-labelledby="weekday-title">
               <div className="card-head">
-                <div><p className="eyebrow">Eight-week average</p><h2 id="weekday-title">Your week has a shape</h2></div>
+                <div><h2 id="weekday-title">By weekday</h2><p className="card-sub">Average logged spend over eight weeks</p></div>
               </div>
               <WeekdayBars weekdays={patterns?.weekdays ?? []} />
-              <p className="hint">Bars show average logged spend per day of the week.</p>
             </section>
           </div>
 
           <section className="card story-card" aria-labelledby="story-title">
             <div className="card-head">
-              <div><p className="eyebrow">What stands out</p><h2 id="story-title">Three things worth knowing</h2></div>
+              <h2 id="story-title">What stands out</h2>
             </div>
             <div className="story-grid">
               {stories.slice(0, 3).map((story) => (
@@ -202,7 +186,7 @@ export function InsightsTab({
           {plan.creditMinor > 0 ? (
             <section className="card payoff-card" aria-labelledby="payoff-title">
               <div className="card-head">
-                <div><p className="eyebrow">A way out</p><h2 id="payoff-title">Card payoff, made small</h2></div>
+                <h2 id="payoff-title">Card payoff</h2>
                 <span className="amount">{money(plan.creditMinor)}</span>
               </div>
               <p className="muted">Move the slider. No commitment — just a picture of what a weekly payment does. Interest is not modeled.</p>
@@ -226,13 +210,13 @@ export function InsightsTab({
 
           <section className="card badges-card" aria-labelledby="badges-title">
             <div className="card-head">
-              <div><p className="eyebrow">Small wins</p><h2 id="badges-title">Milestones</h2></div>
+              <h2 id="badges-title">Milestones</h2>
               {next ? <span className="pill">{next.title}</span> : <span className="pill pill-good">All earned</span>}
             </div>
             <div className="badge-row">
               {badges.map((badge) => (
                 <div key={badge.id} className={`badge${badge.earned ? ' is-earned' : ''}`} title={badge.body}>
-                  <span className="badge-emoji" aria-hidden="true">{badge.emoji}</span>
+                  <span className="badge-mark" aria-hidden="true">{badge.earned ? <Icon name="check" size={14} /> : null}</span>
                   <span className="badge-title">{badge.title}</span>
                   <span className="badge-progress" aria-hidden="true"><span style={{ width: `${Math.round(badge.progress * 100)}%` }} /></span>
                 </div>
@@ -286,28 +270,6 @@ function Heatmap({ days, onSelect, selected }: {
             })}
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function CategoryDonut({ categories, total }: { categories: { category: string; totalMinor: number; sharePct: number }[]; total: number }) {
-  let cursor = 0;
-  const stops = categories.map((c) => {
-    const start = cursor;
-    cursor += c.sharePct;
-    return `${categoryMeta(c.category).color} ${start}% ${cursor}%`;
-  });
-  if (cursor < 100) stops.push(`var(--surface-2) ${cursor}% 100%`);
-  const top = categories[0];
-  return (
-    <div className="donut-wrap">
-      <div className="donut donut-lg" style={{ background: `conic-gradient(${stops.join(', ')})` }} role="img" aria-label={`${top ? `${categoryMeta(top.category).label} is ${top.sharePct}% of logged spend` : 'No logged spend'}`}>
-        <span>{money(total)}</span>
-      </div>
-      <div className="donut-caption">
-        <strong>{top ? categoryMeta(top.category).label : 'Nothing logged'}</strong>
-        <span>{top ? `${percent(top.totalMinor, total)}% of the last 30 days` : 'Log a spend to begin'}</span>
       </div>
     </div>
   );

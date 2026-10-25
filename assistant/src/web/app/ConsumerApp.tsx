@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './app.css';
+import './punch-card.css';
 import { api, type BootstrapResponse, type SpendCategory } from '../api.js';
 import { ActivitySheet } from './ActivitySheet.js';
 import { ActivityTab } from './ActivityTab.js';
@@ -56,11 +57,8 @@ export function ConsumerApp() {
   useEffect(() => {
     document.title = 'Settle · know your money, keep the habit';
     document.documentElement.classList.add('settle-smooth-scroll');
-    const minSplash = new Promise<void>((resolve) => { window.setTimeout(resolve, 720); });
-    void Promise.all([
-      api.bootstrap().then(setBoot).catch((e: Error) => setBootError(e.message)),
-      minSplash,
-    ]).finally(() => setBootReady(true));
+    // No minimum splash: the app opens the moment bootstrap answers.
+    void api.bootstrap().then(setBoot).catch((e: Error) => setBootError(e.message)).finally(() => setBootReady(true));
     return () => document.documentElement.classList.remove('settle-smooth-scroll');
   }, []);
 
@@ -101,7 +99,7 @@ export function ConsumerApp() {
 function Brand() {
   return (
     <a className="brand" href="/" aria-label="Settle home">
-      <span className="brand-mark" aria-hidden="true">S</span>
+      <span className="brand-mark" aria-hidden="true" />
       <span className="brand-word">Settle</span>
     </a>
   );
@@ -255,6 +253,13 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         <div className="topbar-inner">
           <Brand />
           {demo ? <button type="button" className="demo-pill" onClick={() => setShowDemoGuide(true)} title="Open the guided demo">Demo</button> : null}
+          <nav className="tabs" aria-label="Sections">
+            {TABS.map((t) => (
+              <button key={t.id} type="button" className="tab" aria-current={t.id === tab ? 'page' : undefined} onClick={() => go(t.id)}>
+                {t.label}
+              </button>
+            ))}
+          </nav>
           <span className="spacer" />
           <div className="top-actions">
             {refreshing ? <span className="sync-pill" role="status" aria-label="Updating your wallet"><span className="sync-dot" /></span> : null}
@@ -356,7 +361,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
 
       {tab !== 'today' ? (
         <button type="button" className="fab" onClick={() => openLog()} aria-label="Log what you spent">
-          <Icon name="plus" size={24} /><span>I spent $</span>
+          <Icon name="plus" size={22} /><span>Log a spend</span>
         </button>
       ) : null}
 

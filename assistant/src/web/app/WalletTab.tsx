@@ -36,8 +36,7 @@ export function WalletTab({
     <div className="wallet-page">
       <header className="patterns-head">
         <div>
-          <p className="eyebrow">Wallet</p>
-          <h1>Your money, your rules.</h1>
+          <h1>Wallet</h1>
           <p className="page-sub">The numbers you set, the habits you keep, and the records behind them.</p>
         </div>
         <button type="button" className="btn btn-sm" onClick={actions.setup}><Icon name="settings" size={16} /> Edit snapshot</button>
@@ -47,7 +46,7 @@ export function WalletTab({
         <div className="stack">
           <section className="card snapshot-card" aria-labelledby="snap-title">
             <div className="card-head">
-              <div><p className="eyebrow">Your snapshot</p><h2 id="snap-title">The whole picture</h2></div>
+              <h2 id="snap-title">Your snapshot</h2>
               <button type="button" className="link-btn" onClick={actions.setup}>Edit</button>
             </div>
             {plan.hasBaseline ? (
@@ -58,15 +57,15 @@ export function WalletTab({
                   <span className="muted">Projected cash minus card balance</span>
                 </div>
                 <div className="snapshot-rows">
-                  <div><span>💵 Cash baseline</span><strong className="num">{money(plan.cashMinor ?? 0)}</strong></div>
+                  <div><span>Cash baseline</span><strong className="num">{money(plan.cashMinor ?? 0)}</strong></div>
                   {periodIncomeMinor > 0 ? (
-                    <div><span>📥 Logged income (period)</span><strong className="num">{money(periodIncomeMinor)}</strong></div>
+                    <div><span>Logged income this period</span><strong className="num">{money(periodIncomeMinor)}</strong></div>
                   ) : null}
                   {incomeLiftMinor !== 0 ? (
-                    <div><span>📊 Projected cash</span><strong className="num">{money(projectedMinor ?? 0)}</strong></div>
+                    <div><span>Projected cash</span><strong className="num">{money(projectedMinor ?? 0)}</strong></div>
                   ) : null}
-                  <div><span>💳 Cards owed</span><strong className="num">{money(plan.creditMinor)}</strong></div>
-                  <div><span>🎯 Weekly pace</span><strong className="num">{plan.budgetMinor === null ? 'Not set' : money(plan.budgetMinor)}</strong></div>
+                  <div><span>Cards owed</span><strong className="num">{money(plan.creditMinor)}</strong></div>
+                  <div><span>Weekly pace</span><strong className="num">{plan.budgetMinor === null ? 'Not set' : money(plan.budgetMinor)}</strong></div>
                 </div>
               </>
             ) : (
@@ -79,7 +78,7 @@ export function WalletTab({
 
           <section className="card" aria-labelledby="habit-title">
             <div className="card-head">
-              <div><p className="eyebrow">The habit</p><h2 id="habit-title">Your logging</h2></div>
+              <h2 id="habit-title">Your logging</h2>
               <button type="button" className="link-btn" onClick={actions.logIncome}>Log income</button>
             </div>
             <div className="mini-stats">
@@ -92,7 +91,7 @@ export function WalletTab({
 
           <section className="card" aria-labelledby="ledger-title">
             <div className="card-head">
-              <div><p className="eyebrow">The records</p><h2 id="ledger-title">Ledger balance</h2></div>
+              <h2 id="ledger-title">Ledger balance</h2>
               <span className="pill">{money(plan.ledgerMinor)}</span>
             </div>
             <p className="muted">The exact demo ledger balance behind deposits and statements. It is separate from the cash snapshot you track yourself.</p>
@@ -105,8 +104,6 @@ export function WalletTab({
 
         <div className="stack">
           <section className="ask-card" aria-labelledby="wallet-ask">
-            <div className="ask-glow" aria-hidden="true" />
-            <p className="eyebrow">A second pair of eyes</p>
             <h2 id="wallet-ask">Ask about your money</h2>
             <p className="ask-lede">Read-only answers from your records. It cannot move a cent.</p>
             <button type="button" className="btn btn-lime btn-sm" onClick={actions.ask}><Icon name="sparkle" size={16} /> Open Ask</button>
@@ -114,7 +111,7 @@ export function WalletTab({
 
           <section className="card trust-teaser" aria-labelledby="trust-title">
             <div className="card-head">
-              <div><p className="eyebrow">The receipts</p><h2 id="trust-title">Your records are honest</h2></div>
+              <h2 id="trust-title">Your records are honest</h2>
               <Icon name="shield" />
             </div>
             <p className="muted">Every ledger entry is two lines that must balance. Open a real entry, retry one, or try to edit history.</p>
@@ -126,7 +123,7 @@ export function WalletTab({
           {showTrust ? <TrustTab me={me} data={data} embedded /> : null}
 
           <section className="card demo-note">
-            <p className="eyebrow">Demo, honestly</p>
+            <h2>A demo, honestly</h2>
             <p className="muted">No real money moves. No passwords yet. A wallet is identified by its id on this device, so treat this as a showcase.</p>
             <div className="row-wrap" style={{ marginTop: 12 }}>
               <a className="btn btn-sm" href="/ops">Engineering console</a>

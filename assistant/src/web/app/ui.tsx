@@ -49,6 +49,15 @@ const PATHS = {
   coffee: 'M5 8h11v6a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5V8zM16 9h2a2 2 0 0 1 0 4h-2M4 21h14',
   smile: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01',
   search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3',
+  // Spend categories: one outline set, so a category reads the same in every list.
+  dining: 'M7 3v7a2 2 0 0 0 2 2v9M7 3v4M11 3v4a2 2 0 0 1-2 2M17 21V3c-2 1.5-3 4-3 7h3',
+  cart: 'M3 4h2l2.4 10.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 7H6M9 20h.01M17 20h.01',
+  bus: 'M6 4h12a1 1 0 0 1 1 1v12H5V5a1 1 0 0 1 1-1zM5 11h14M8 17v3M16 17v3M8.5 14h.01M15.5 14h.01',
+  ticket: 'M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4V7zM14 7v10',
+  bag: 'M5 8h14l-1 12H6L5 8zM9 8V6a3 3 0 0 1 6 0v2',
+  heart: 'M12 20s-7-4.4-7-9.6A4 4 0 0 1 12 8a4 4 0 0 1 7 2.4C19 15.6 12 20 12 20z',
+  dots: 'M6 12h.01M12 12h.01M18 12h.01',
+  cash: 'M3 7h18v10H3V7zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6.5 12h.01M17.5 12h.01',
 } as const;
 
 export type IconName = keyof typeof PATHS;
@@ -270,22 +279,65 @@ export function ProgressRing({
   );
 }
 
-/* Chrome flakes, not party confetti — the celebration has to look like the house. */
-const CONFETTI_COLORS = ['#ffffff', '#d9d9d5', '#b9b9b3', '#8f8f8a', '#fdfdfb', '#6f6f6a'];
+/* ---------- Punch card: the one mark used at every scale ---------- */
+
+export interface PunchSlot {
+  key: string;
+  /** Visible label under the slot (a weekday letter, a step name). Empty string hides it. */
+  label: string;
+  stamped: boolean;
+  today?: boolean;
+  /** Spoken and hover text for the slot. */
+  title: string;
+}
+
+/**
+ * A row of punch slots. A slot that turns stamped while the row is on screen plays the stamp
+ * once; mounting a row (switching tabs, first load) never animates.
+ */
+export function PunchRow({ slots, label, size = 'md' }: { slots: PunchSlot[]; label: string; size?: 'sm' | 'md' | 'lg' }) {
+  const previous = useRef<Map<string, boolean> | null>(null);
+  const fresh = new Set<string>();
+  if (previous.current) {
+    for (const slot of slots) if (slot.stamped && previous.current.get(slot.key) === false) fresh.add(slot.key);
+  }
+  useEffect(() => {
+    previous.current = new Map(slots.map((s) => [s.key, s.stamped]));
+  });
+  return (
+    <ol className={`punch-row punch-${size}`} aria-label={label}>
+      {slots.map((slot) => (
+        <li
+          key={slot.key}
+          className={`punch${slot.stamped ? ' is-stamped' : ''}${slot.today ? ' is-today' : ''}${fresh.has(slot.key) ? ' is-fresh' : ''}`}
+          title={slot.title}
+        >
+          <span className="punch-hole" aria-hidden="true">
+            {slot.stamped ? <Icon name="check" size={size === 'lg' ? 18 : size === 'sm' ? 11 : 14} /> : null}
+          </span>
+          {slot.label ? <span className="punch-label" aria-hidden="true">{slot.label}</span> : null}
+          <span className="sr-only">{slot.title}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** Punch-hole chads: the celebration after a log is the paper falling out of the card. */
+const CHAD_COLORS = ['var(--stock)', 'var(--paper)', 'var(--stock)', 'var(--ink)'];
 
 /** A short, CSS-only celebration. Key it with a changing number to replay. */
 export function Confetti({ burst }: { burst: number }) {
   if (!burst) return null;
   return (
     <div className="confetti" aria-hidden="true" key={burst}>
-      {Array.from({ length: 22 }, (_, i) => (
+      {Array.from({ length: 18 }, (_, i) => (
         <span
           key={i}
           style={{
             left: `${8 + ((i * 37) % 84)}%`,
-            background: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-            animationDelay: `${(i % 7) * 35}ms`,
-            transform: `rotate(${(i * 47) % 360}deg)`,
+            background: CHAD_COLORS[i % CHAD_COLORS.length],
+            animationDelay: `${(i % 6) * 40}ms`,
           }}
         />
       ))}

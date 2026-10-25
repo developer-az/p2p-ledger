@@ -1,5 +1,11 @@
 # Engineering Handoff (latest)
 
+## Session: punch-card consumer redesign (PR branch `redesign/punch-card`)
+- **Concept:** Café loyalty punch card — cobalt card stock (`#1f3fd1`), Bricolage Grotesque, week as `PunchRow`, single-hue `CategoryBars`, stamp animation on fresh logs, chad confetti.
+- **Removed:** Stock photo marketing (`public/media/*`), Lottie, `MediaPhoto` / `visual-assets`.
+- **Added:** `punch-card.css` (tokens + punch/streak/cat-bar/topbar), `CategoryBars.tsx`, `PunchRow` in `ui.tsx`.
+- **Build:** `npm test` (172) + `npm run build` OK after category tile fix (no per-category color).
+
 ## Session: sheet backdrop dismiss vs text selection
 - **Bug:** Setup weekly pace (and other `Sheet` modals) closed when triple-click / drag-select in inputs because the full `app-sheet-wrap` had `data-backdrop` and a naive dialog `onClick` treated release outside the panel as dismiss.
 - **Fix:** `shouldDismissSheet()` in `sheet-dismiss.ts` — dismiss only when pointer down **and** up are outside `app-sheet-panel`; capture-phase `onPointerDownCapture` on `<dialog>`; removed wrap `data-backdrop`. Unit tests in `test/sheet-dismiss.test.ts`.

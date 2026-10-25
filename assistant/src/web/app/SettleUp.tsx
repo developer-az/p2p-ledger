@@ -313,7 +313,6 @@ export function NeedsYouCard({ me, onOpen }: { me: AccountRef; onOpen: () => voi
       <section className="card" aria-labelledby="needs-you">
         <div className="card-head">
           <div>
-            <p className="eyebrow">Settle up</p>
             <h2 id="needs-you">Who owes what</h2>
           </div>
           <button type="button" className="btn btn-sm" onClick={onOpen}><Icon name="split" size={16} /> Ask &amp; split</button>
@@ -327,7 +326,6 @@ export function NeedsYouCard({ me, onOpen }: { me: AccountRef; onOpen: () => voi
     <section className="card" aria-labelledby="needs-you">
       <div className="card-head">
         <div>
-          <p className="eyebrow">Needs you</p>
           <h2 id="needs-you">Settle up</h2>
         </div>
         <button type="button" className="link-btn" onClick={onOpen}>Open</button>

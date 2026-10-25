@@ -109,8 +109,7 @@ export function AskTab({
     <div className="ask-page">
       <header className="patterns-head">
         <div>
-          <p className="eyebrow">Ask</p>
-          <h1>A conversation with your records.</h1>
+          <h1>Ask</h1>
           <p className="page-sub">Read-only answers about your wallet, your habits and your declines. It cannot move money.</p>
         </div>
         <span className="pill pill-good"><Icon name="lock" size={14} /> Read-only</span>
@@ -125,7 +124,7 @@ export function AskTab({
         <div className="chat" aria-live="polite">
           {messages.length === 0 ? (
             <div className="ask-empty">
-              <div className="ask-orb" aria-hidden="true">✦</div>
+              <div className="ask-orb" aria-hidden="true"><Icon name="sparkle" size={22} /></div>
               <h2>What do you want to know?</h2>
               <p className="muted">Start with a question, or pick one of these.</p>
               <div className="suggestion-grid">
@@ -140,7 +139,7 @@ export function AskTab({
           ) : null}
           {messages.map((m, i) => (
             <div key={i} className={`chat-turn chat-${m.role}`}>
-              {m.role === 'assistant' ? <span className="chat-avatar" aria-hidden="true">✦</span> : null}
+              {m.role === 'assistant' ? <span className="chat-avatar" aria-hidden="true"><Icon name="sparkle" size={14} /></span> : null}
               <div>
                 <div className={`bubble ${m.role === 'user' ? 'bubble-user' : 'bubble-ai'}`}>{m.text}</div>
                 {m.role === 'assistant' && ((m.checked && m.checked.length > 0) || m.note) ? (
@@ -153,7 +152,7 @@ export function AskTab({
           ))}
           {busy ? (
             <div className="chat-status" role="status">
-              <span className="marque marque-sm" aria-hidden="true">S</span>
+              <span className="streak-mark" aria-hidden="true" />
               <span className="chat-status-bars" aria-hidden="true"><i /><i /><i /></span>
               <span>The archive is reading your records…</span>
             </div>

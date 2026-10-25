@@ -1,6 +1,4 @@
-import { MediaPhoto } from './MediaPhoto.js';
-import { DEMO_STEP_PHOTO } from './visual-assets.js';
-import { Icon } from './ui.js';
+import { Icon, PunchRow, type PunchSlot } from './ui.js';
 
 export type DemoStepId = 'baseline' | 'log' | 'income' | 'patterns' | 'pace';
 
@@ -29,7 +27,7 @@ const STEPS: StepCopy[] = [
   {
     id: 'log',
     title: 'Log a spend in two taps',
-    body: 'Amount and category. Watch the weekly ring, streak and Patterns update from your own history — not a bank feed.',
+    body: 'Amount and category. Watch today get stamped and Patterns update from your own history — not a bank feed.',
     action: 'Log a spend',
   },
   {
@@ -47,7 +45,7 @@ const STEPS: StepCopy[] = [
   {
     id: 'pace',
     title: 'Adjust the weekly pace',
-    body: 'A plan is a guide, not a punishment. Change it when life changes and the ring follows.',
+    body: 'A plan is a guide, not a punishment. Change it when life changes and the bar follows.',
     action: 'Edit weekly pace',
   },
 ];
@@ -56,46 +54,33 @@ export function DemoGuide({ progress, onStep, onDismiss, onExit, onPatterns }: D
   const done = new Set(progress);
   const next = STEPS.find((s) => !done.has(s.id));
   const complete = done.size >= STEPS.length;
+  const count = Math.min(done.size, STEPS.length);
+  const slots: PunchSlot[] = STEPS.map((step, i) => ({
+    key: step.id,
+    label: String(i + 1),
+    stamped: done.has(step.id),
+    today: next?.id === step.id,
+    title: `${step.title}: ${done.has(step.id) ? 'done' : next?.id === step.id ? 'next' : 'not yet'}`,
+  }));
 
   return (
     <section className="demo-guide" aria-labelledby="demo-title">
       <div className="demo-guide-top">
-        <span className="demo-badge"><Icon name="sparkle" size={13} /> Your quest</span>
-        <span className="demo-count">{Math.min(done.size, STEPS.length)} / {STEPS.length} done</span>
+        <p className="demo-count">Guided demo · {count} of {STEPS.length} stamped</p>
         <button type="button" className="demo-hide" onClick={onDismiss} aria-label="Hide demo guide">
           <Icon name="x" size={16} />
         </button>
       </div>
       <div className="demo-guide-body">
-        {next && !complete ? (
-          <MediaPhoto
-            className="demo-guide-photo"
-            src={DEMO_STEP_PHOTO[next.id]}
-            alt=""
-          />
-        ) : null}
         <div>
           <h2 id="demo-title">{complete ? 'You have seen the whole loop.' : next?.title}</h2>
           <p>
             {complete
-              ? 'Baseline, logging, income, patterns and a weekly pace — that is the product. Your own wallet starts clean whenever you are ready.'
+              ? 'Baseline, logging, income, patterns and a weekly pace: that is the product. Your own wallet starts clean whenever you are ready.'
               : next?.body}
           </p>
         </div>
-        <div className="demo-progress" aria-label={`${done.size} of ${STEPS.length} demo steps complete`}>
-          <div className="demo-progress-track" aria-hidden="true">
-            <span className="demo-progress-fill" style={{ width: `${(Math.min(done.size, STEPS.length) / STEPS.length) * 100}%` }} />
-          </div>
-          <div className="demo-progress-steps">
-            {STEPS.map((step) => (
-              <span
-                key={step.id}
-                className={`demo-dot${done.has(step.id) ? ' is-done' : ''}${next?.id === step.id ? ' is-next' : ''}`}
-                title={step.title}
-              />
-            ))}
-          </div>
-        </div>
+        <PunchRow slots={slots} size="md" label={`${count} of ${STEPS.length} demo steps done`} />
       </div>
       <div className="demo-actions">
         {complete ? (

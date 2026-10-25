@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, type AccountRef, type MoneyProfile } from '../api.js';
 import { money } from './format.js';
 import { suggestedWeeklyBudget } from './money-plan.js';
-import { Sheet, useToast } from './ui.js';
+import { Sheet, useToast, Icon } from './ui.js';
 
 type Step = 0 | 1 | 2;
 
@@ -121,7 +121,7 @@ export function SetupSheet({
 
         {step === 0 ? (
           <div className="setup-panel">
-            <div className="setup-icon">💵</div>
+            <div className="setup-icon" aria-hidden="true"><Icon name="cash" size={22} /></div>
             <h3>What&apos;s in your spending account right now?</h3>
             <p className="muted">Checking, debit, cash in your pocket — the money you can actually spend today.</p>
             <label className="setup-amount">
@@ -148,7 +148,7 @@ export function SetupSheet({
 
         {step === 1 ? (
           <div className="setup-panel">
-            <div className="setup-icon">💳</div>
+            <div className="setup-icon" aria-hidden="true"><Icon name="card" size={22} /></div>
             <h3>What do you owe on cards?</h3>
             <p className="muted">The total balance, not the minimum payment. We keep it separate from cash.</p>
             <label className="setup-amount">
@@ -177,7 +177,7 @@ export function SetupSheet({
 
         {step === 2 ? (
           <div className="setup-panel">
-            <div className="setup-icon">🎯</div>
+            <div className="setup-icon" aria-hidden="true"><Icon name="target" size={22} /></div>
             <h3>What feels comfortable to spend in a week?</h3>
             <p className="muted">
               This is your weekly spending pace — how much you&apos;re okay logging before the ring fills up.

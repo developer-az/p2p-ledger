@@ -1,24 +1,24 @@
 import type { SpendCategory } from '../api.js';
-import type { IconName } from './ui.js';
 
 export interface CategoryMeta {
   label: string;
-  icon: IconName;
+  emoji: string;
+  color: string;
 }
 
 /**
- * Categories are told apart by name and icon, never by colour: every chart draws in the one
- * data hue (the card stock), so a category list reads the same in light, dark and greyscale.
+ * Chart palette: hues spaced ~45° apart so donut segments stay easy to tell apart
+ * (avoids red/orange and green/teal pairs that looked alike on the wheel).
  */
 export const CATEGORY_META: Record<SpendCategory, CategoryMeta> = {
-  dining: { label: 'Dining', icon: 'dining' },
-  groceries: { label: 'Groceries', icon: 'cart' },
-  transport: { label: 'Transport', icon: 'bus' },
-  entertainment: { label: 'Fun', icon: 'ticket' },
-  housing: { label: 'Housing', icon: 'home' },
-  shopping: { label: 'Shopping', icon: 'bag' },
-  health: { label: 'Health', icon: 'heart' },
-  other: { label: 'Other', icon: 'dots' },
+  dining: { label: 'Dining', emoji: '🍜', color: '#d55e00' },
+  groceries: { label: 'Groceries', emoji: '🛒', color: '#009e73' },
+  transport: { label: 'Transport', emoji: '🚌', color: '#0072b2' },
+  entertainment: { label: 'Fun', emoji: '🎟️', color: '#cc79a7' },
+  housing: { label: 'Housing', emoji: '🏠', color: '#e69f00' },
+  shopping: { label: 'Shopping', emoji: '🛍️', color: '#56b4e9' },
+  health: { label: 'Health', emoji: '💊', color: '#785ef0' },
+  other: { label: 'Other', emoji: '✨', color: '#64748b' },
 };
 
 export function categoryMeta(category: string): CategoryMeta {

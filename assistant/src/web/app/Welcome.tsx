@@ -3,8 +3,10 @@ import { api, type AccountRef, type BootstrapResponse } from '../api.js';
 import { loadSavedWallets, rememberWallet } from '../wallet-store.js';
 import { displayName, money } from './format.js';
 import type { Session } from './session.js';
-import { CategoryBars } from './CategoryBars.js';
-import { Avatar, Icon, PunchRow, useToast, type PunchSlot } from './ui.js';
+import { MediaPhoto } from './MediaPhoto.js';
+import { LottieMark } from './LottieMark.js';
+import { PHOTO } from './visual-assets.js';
+import { Avatar, Icon, useToast } from './ui.js';
 
 /** Letters and digits only, so the owner id is safe to put in a URL. */
 function ownerIdFor(name: string): string {
@@ -90,73 +92,87 @@ export function Welcome({
     <div className="welcome">
       <section className="welcome-hero">
         <div className="welcome-copy">
-          <h1>Know your money. Keep the habit.</h1>
+          <p className="eyebrow">Settle · money with intention</p>
+          <h1>Know your money.<br /><em>Keep</em> the habit.</h1>
           <p className="welcome-lede">
-            A money app that works like a punch card. Log what you spend in two taps, get today stamped,
-            and watch the week fill in. No bank login.
+            One calm place for your cash, your cards, and what you actually spend.
+            Log in two taps and watch the week take shape.
           </p>
           <div className="row-wrap welcome-actions">
             <button type="button" className="btn btn-primary btn-lg" onClick={() => void tryDemo()} disabled={!boot || busy !== null}>
-              {busy === 'demo' ? 'Setting up…' : 'Start the guided demo'}
+              {busy === 'demo' ? 'Setting up…' : 'Try the 5-step tour'}
+              {busy !== 'demo' ? <Icon name="sparkle" size={18} /> : null}
             </button>
-            <a className="btn btn-lg" href="#own-wallet">Start my own wallet</a>
+            <a className="btn btn-lg" href="#how">See how it works</a>
           </div>
-          <p className="welcome-demo-note">The demo has a sample history, five steps to try and a real double-entry ledger underneath. Pretend dollars only.</p>
-          {error ? <p className="error-text" role="alert">{error}</p> : null}
-          {bootError ? <div className="notice notice-warn">{bootError}</div> : null}
+          <p className="welcome-demo-note">Sample history, five habits to try, and a real ledger underneath. No setup required.</p>
+          <p className="legal">Demo only. Pretend dollars between demo wallets. No bank login, no real money.</p>
+          <a className="welcome-own-link" href="#own-wallet">Or start with your own clean wallet →</a>
+          {error ? <p className="error-text" role="alert" style={{ marginTop: 10 }}>{error}</p> : null}
+          {bootError ? <div className="notice notice-warn" style={{ marginTop: 12 }}>{bootError}</div> : null}
           {boot && !live ? (
-            <div className="notice notice-warn">
+            <div className="notice notice-warn" style={{ marginTop: 12 }}>
               The live ledger is asleep, so this is practice mode. Everything works, but it resets when the server restarts.
             </div>
           ) : null}
         </div>
 
-        <figure className="welcome-visual" aria-label="Example of the Settle Today screen">
-          <div className="hero-card" data-ui>
-            <div className="hero-top">
-              <div>
-                <p className="hero-label">Net position</p>
-                <p className="hero-amount num">{money(284_750)}</p>
-                <p className="hero-sub">$3,120.00 cash · <span className="hero-debt">$272.50 on cards</span></p>
-              </div>
-              <div className="hero-side">
-                <span className="hero-mini-label">Left this week</span>
-                <strong className="hero-mini num">$38.00</strong>
-                <span className="hero-mini-sub">of $250.00</span>
-              </div>
-            </div>
-            <div className="hero-bottom">
-              <div className="hero-week">
-                <p className="hero-week-title">This week&apos;s card <span className="num">5/7</span></p>
-                <PunchRow slots={EXAMPLE_WEEK} size="lg" label="Example week: 5 of 7 days logged" />
-              </div>
-              <span className="btn btn-on-stock btn-lg" aria-hidden="true"><Icon name="plus" size={18} /> Log a spend</span>
-            </div>
+        <div className="welcome-visual" aria-label="A preview of the Settle app">
+          <MediaPhoto className="welcome-scene-photo" src={PHOTO.welcomeScene} alt="" />
+          <div className="welcome-lottie-wrap" aria-hidden="true">
+            <LottieMark className="welcome-lottie" label="Savings animation" />
           </div>
-          <ul className="list example-list" data-ui>
-            {EXAMPLE_LOGS.map((row) => (
-              <li key={row.title} className="item">
-                <span className={`icon-circle${row.in ? ' icon-in' : ''}`}><Icon name={row.icon} size={18} /></span>
-                <span className="item-body"><span className="item-title">{row.title}</span><span className="item-sub">{row.sub}</span></span>
-                <span className={`amount num${row.in ? ' amount-in' : ''}`}>{row.amount}</span>
-              </li>
-            ))}
-          </ul>
-          <figcaption className="hint">Example week. Your own wallet starts empty.</figcaption>
-        </figure>
+          <div className="phone">
+            <div className="phone-top">
+              <span className="phone-dot" /><span className="phone-dot" /><span className="phone-dot" />
+              <span className="phone-title">Settle</span>
+            </div>
+            <div className="phone-card">
+              <p>Net position</p>
+              <strong>{money(284_750)}</strong>
+              <span>$3,120 cash · $272 on cards</span>
+              <div className="phone-ring">
+                <span>72%</span>
+                <small>of weekly pace</small>
+              </div>
+            </div>
+            <div className="phone-row">
+              <span className="phone-icon">☕</span>
+              <span><strong>Coffee</strong><small>Logged · Dining</small></span>
+              <strong>−$4.50</strong>
+            </div>
+            <div className="phone-row">
+              <span className="phone-icon is-in">↙</span>
+              <span><strong>Salary</strong><small>Logged · Income</small></span>
+              <strong className="is-in">+$2,100</strong>
+            </div>
+            <div className="phone-row">
+              <span className="phone-icon">🛒</span>
+              <span><strong>Groceries</strong><small>Logged · Groceries</small></span>
+              <strong>−$42.10</strong>
+            </div>
+            <div className="phone-fab">+ Log spend</div>
+          </div>
+          <div className="float-card float-one">
+            <span>🔥</span><strong>6-day streak</strong><small>One tap keeps it alive</small>
+          </div>
+          <div className="float-card float-two">
+            <span>🎯</span><strong>$38 left this week</strong><small>You&apos;re on pace</small>
+          </div>
+        </div>
       </section>
 
       {saved.length > 0 ? (
         <section className="card saved-card" aria-labelledby="back">
           <div className="card-head">
-            <h2 id="back">Wallets on this device</h2>
+            <div><p className="eyebrow">This device</p><h2 id="back">Welcome back</h2></div>
           </div>
           <ul className="list">
             {saved.slice(0, 4).map((w) => (
               <li key={w.id}>
                 <button type="button" className="item" onClick={() => onStart({ account: { id: w.id, owner: w.owner }, household: [] })}>
                   <Avatar owner={w.owner} />
-                  <span className="item-body"><span className="item-title">{displayName(w.owner)}</span><span className="item-sub">Open this wallet</span></span>
+                  <span className="item-body"><span className="item-title" style={{ display: 'block' }}>{displayName(w.owner)}</span><span className="item-sub" style={{ display: 'block' }}>Open this wallet</span></span>
                   <Icon name="chevron" />
                 </button>
               </li>
@@ -165,59 +181,39 @@ export function Welcome({
         </section>
       ) : null}
 
-      <section className="welcome-features" id="how" aria-labelledby="how-title">
-        <h2 id="how-title" className="welcome-section-title">How it works</h2>
-        <article className="feature">
-          <div className="feature-ui" data-ui>
-            <dl className="example-numbers">
-              <div><dt>Cash</dt><dd className="num">$3,120.00</dd></div>
-              <div><dt>Cards</dt><dd className="num">$272.50</dd></div>
-              <div><dt>Weekly pace</dt><dd className="num">$250.00</dd></div>
-            </dl>
-          </div>
-          <h3>Three numbers, once</h3>
-          <p>Cash, card balance and a weekly pace. Thirty seconds, no bank connection, editable any time.</p>
+      <section className="welcome-features" id="how" aria-label="How it works">
+        <article className="feature feature-media">
+          <MediaPhoto className="feature-photo" src={PHOTO.featureBaseline} alt="" />
+          <h2>Three numbers, once</h2>
+          <p>Cash, card balance, a weekly pace. Thirty seconds — no bank connection, no spreadsheet.</p>
         </article>
-        <article className="feature">
-          <div className="feature-ui" data-ui>
-            <p className="example-amount num">$4.50</p>
-            <div className="example-cats">
-              {(['dining', 'cart', 'bus', 'ticket'] as const).map((icon, i) => (
-                <span key={icon} className={`cat-tile${i === 0 ? ' is-picked' : ''}`}>
-                  <span className="cat-icon"><Icon name={icon} size={20} /></span>
-                  <span>{['Dining', 'Groceries', 'Transport', 'Fun'][i]}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-          <h3>Two taps to log</h3>
-          <p>Amount, category, done. Each log stamps the day, and your recent spends come back as one-tap repeats.</p>
+        <article className="feature feature-media">
+          <MediaPhoto className="feature-photo" src={PHOTO.featureLog} alt="" />
+          <h2>Two taps to log</h2>
+          <p>Amount, category, done. The app turns small logs into a week you can actually see.</p>
         </article>
-        <article className="feature">
-          <div className="feature-ui" data-ui>
-            <CategoryBars categories={EXAMPLE_CATEGORIES} max={EXAMPLE_CATEGORIES[0]!.totalMinor} />
-          </div>
-          <h3>Patterns from your own logs</h3>
-          <p>Eight weeks of cards, where the money went, your expensive weekday and a card payoff plan.</p>
+        <article className="feature feature-media">
+          <MediaPhoto className="feature-photo" src={PHOTO.featurePatterns} alt="" />
+          <h2>Patterns, not guesswork</h2>
+          <p>A calendar heatmap, category shifts and a weekly pace that shows where the month is heading.</p>
         </article>
       </section>
 
-      <section className="welcome-bottom" id="own-wallet" aria-labelledby="own-title">
+      <section className="welcome-bottom" id="own-wallet">
         <div>
-          <h2 id="own-title">Start your own wallet</h2>
-          <p className="muted">Your cash, cards and logs live on your own wallet id, apart from the demo household. It opens with a $500 simulated deposit so the ledger is never empty.</p>
+          <p className="eyebrow">Your own wallet</p>
+          <h2>Start clean. Keep it yours.</h2>
+          <p className="muted">Your cash, cards and logs live on your wallet id — the demo household never touches them. You start with a $500 simulated deposit and a funded ledger balance, so the wallet is never empty.</p>
         </div>
         <form className="welcome-create" onSubmit={(e) => { e.preventDefault(); void create(); }}>
-          <label className="label" htmlFor="wallet-name">Your first name</label>
-          <div className="welcome-create-row">
-            <input id="wallet-name" className="input" maxLength={40} autoComplete="given-name" value={name} onChange={(e) => setName(e.target.value)} />
-            <button className="btn btn-primary" type="submit" disabled={!name.trim() || busy !== null}>
-              {busy === 'create' ? 'Creating…' : 'Create my wallet'}
-            </button>
-          </div>
+          <label className="sr-only" htmlFor="wallet-name">Your first name</label>
+          <input id="wallet-name" className="input" maxLength={40} placeholder="Your first name" value={name} onChange={(e) => setName(e.target.value)} />
+          <button className="btn btn-primary" type="submit" disabled={!name.trim() || busy !== null}>
+            {busy === 'create' ? 'Creating…' : 'Create my wallet'}
+          </button>
           <p className="hint">
             {live
-              ? 'Saved in PostgreSQL. No password yet: this is a demo identity, not a bank login.'
+              ? 'Persists in PostgreSQL. No password yet — this is a demo identity, not a bank login.'
               : 'Practice mode: this wallet lives in memory and resets when the server restarts.'}
           </p>
         </form>
@@ -225,23 +221,3 @@ export function Welcome({
     </div>
   );
 }
-
-const EXAMPLE_WEEK: PunchSlot[] = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((label, i) => ({
-  key: `example-${i}`,
-  label,
-  stamped: [true, true, false, true, true, true, false][i]!,
-  today: i === 6,
-  title: `Example day ${i + 1}`,
-}));
-
-const EXAMPLE_LOGS = [
-  { title: 'Coffee', sub: 'Dining · today', amount: '−$4.50', icon: 'dining' as const, in: false },
-  { title: 'Paycheck', sub: 'Income · Friday', amount: '+$2,100.00', icon: 'arrowDown' as const, in: true },
-  { title: 'Groceries', sub: 'Groceries · Thursday', amount: '−$42.10', icon: 'cart' as const, in: false },
-];
-
-const EXAMPLE_CATEGORIES = [
-  { category: 'groceries', totalMinor: 31_240, sharePct: 41 },
-  { category: 'dining', totalMinor: 18_450, sharePct: 24 },
-  { category: 'transport', totalMinor: 9_800, sharePct: 13 },
-];

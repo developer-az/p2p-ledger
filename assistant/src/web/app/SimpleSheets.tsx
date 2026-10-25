@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
   api,
   dollarsToMinor,
@@ -13,7 +13,7 @@ import { categoryLabel, categoryMeta } from './categories.js';
 import { money } from './format.js';
 import { recordIncomeMutation, recordSpendMutation } from './ledger-mutations.js';
 import type { OptimisticMutation, OptimisticResult } from './ledger-store.js';
-import { Sheet, useToast, Icon } from './ui.js';
+import { Sheet, useToast } from './ui.js';
 
 type WalletRun = (mutation: OptimisticMutation) => Promise<OptimisticResult>;
 
@@ -331,7 +331,7 @@ export function LogSpendSheet({
                     setText((entry.amountMinor / 100).toFixed(entry.amountMinor % 100 === 0 ? 0 : 2));
                   }}
                 >
-                  <Icon name={categoryMeta(entry.category).icon} size={15} />{entry.note || categoryLabel(entry.category)} · {entry.amount}
+                  {categoryMeta(entry.category).emoji} {entry.note || categoryLabel(entry.category)} · {entry.amount}
                 </button>
               ))}
             </div>
@@ -349,9 +349,10 @@ export function LogSpendSheet({
                   type="button"
                   className="cat-tile"
                   aria-pressed={category === c}
+                  style={{ '--cat': meta.color } as CSSProperties}
                   onClick={() => setCategory(c)}
                 >
-                  <span className="cat-icon" aria-hidden="true"><Icon name={meta.icon} size={20} /></span>
+                  <span className="cat-emoji" aria-hidden="true">{meta.emoji}</span>
                   <span>{meta.label}</span>
                 </button>
               );

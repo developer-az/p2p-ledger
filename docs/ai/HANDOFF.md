@@ -1,10 +1,10 @@
 # Engineering Handoff (latest)
 
-## Session: punch-card consumer redesign (PR branch `redesign/punch-card`)
-- **Concept:** Café loyalty punch card — cobalt card stock (`#1f3fd1`), Bricolage Grotesque, week as `PunchRow`, single-hue `CategoryBars`, stamp animation on fresh logs, chad confetti.
-- **Removed:** Stock photo marketing (`public/media/*`), Lottie, `MediaPhoto` / `visual-assets`.
-- **Added:** `punch-card.css` (tokens + punch/streak/cat-bar/topbar), `CategoryBars.tsx`, `PunchRow` in `ui.tsx`.
-- **Build:** `npm test` (172) + `npm run build` OK after category tile fix (no per-category color).
+## Session: revert half punch-card; restore Settle UI + DESIGN.md
+- **User feedback:** Punch-card branch was unusable — old `app.css` + thin `punch-card.css` + removed photos = incoherent half redesign.
+- **Root cause:** Unattended Impeccable concept roll (café punch card) + `frontend-design` “pick extreme” without `docs/DESIGN.md` pin; Operate UI swapped to `PunchRow` while Persuade imagery was deleted.
+- **Fix:** Restored consumer app from `main` (MediaPhoto, visual-assets, media JPEGs, weekly ring Home, category colors, welcome phone preview). Added `docs/DESIGN.md` as the visual contract tied to `docs/PRODUCT.md`.
+- **PR #15:** Branch `redesign/punch-card` should be updated with this revert or closed in favor of a future **full** redesign that replaces tokens end-to-end.
 
 ## Session: sheet backdrop dismiss vs text selection
 - **Bug:** Setup weekly pace (and other `Sheet` modals) closed when triple-click / drag-select in inputs because the full `app-sheet-wrap` had `data-backdrop` and a naive dialog `onClick` treated release outside the panel as dismiss.

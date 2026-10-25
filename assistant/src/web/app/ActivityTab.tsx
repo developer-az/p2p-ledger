@@ -29,7 +29,8 @@ export function ActivityTab({ data, onOpen }: { data: WalletData | null; onOpen:
     <div className="activity-page">
       <header className="patterns-head">
         <div>
-          <h1>Activity</h1>
+          <p className="eyebrow">Activity</p>
+          <h1>Every move, in one place.</h1>
           <p className="page-sub">Logged spends, income, and the ledger entries behind your balance.</p>
         </div>
         <div className="activity-summary">

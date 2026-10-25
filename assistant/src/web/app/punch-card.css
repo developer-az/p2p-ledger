@@ -3,8 +3,10 @@
    chrome / gothic marque. This file styles the punch mark and week card only.
    It must not rewrite the brand palette or type. */
 
-/* Buttons on the obsidian hero: paper fill, ink type — a garment-tag stamp. */
-.app .btn-on-stock {
+/* Buttons on the obsidian hero: paper fill, ink type — a garment-tag stamp.
+   Must beat `.hero-card .btn { color: cream }` so the label stays readable. */
+.app .btn-on-stock,
+.app .hero-card .btn-on-stock {
   background: #f2ede3;
   color: #0c0c0b;
   border: 0;
@@ -14,8 +16,10 @@
   font-size: 0.78rem;
   border-radius: 0;
 }
-.app .btn-on-stock:hover:not(:disabled) {
+.app .btn-on-stock:hover:not(:disabled),
+.app .hero-card .btn-on-stock:hover:not(:disabled) {
   background: #fffdf6;
+  color: #0c0c0b;
 }
 .app .btn-ghost-stock {
   background: transparent;
@@ -296,7 +300,19 @@
   border: 1px solid var(--line);
   background: var(--surface);
   border-radius: var(--radius);
-  padding: 4px 0;
+  padding: 4px 8px;
+}
+.app .welcome-visual .example-list .item {
+  padding: 12px 8px;
+}
+.app .welcome-visual .item-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.app .welcome-visual .item-title,
+.app .welcome-visual .item-sub {
+  display: block;
 }
 .app .welcome-stage {
   position: relative;

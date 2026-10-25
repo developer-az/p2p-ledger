@@ -21,9 +21,10 @@ export function AppPreloader({ visible }: { visible: boolean }) {
   return (
     <div className={`app-preloader${exiting ? ' is-out' : ''}`} role="status" aria-live="polite" aria-label="Loading Settle">
       <div className="app-preloader-inner">
+        <div className="app-preloader-mark" aria-hidden="true">S</div>
         <div className="app-preloader-punches" aria-hidden="true"><span /><span /><span /></div>
         <p className="app-preloader-copy">Opening your wallet…</p>
-        <p className="app-preloader-sub">Two taps to log. No bank login.</p>
+        <p className="app-preloader-sub">Two taps to stamp the day.</p>
       </div>
     </div>
   );

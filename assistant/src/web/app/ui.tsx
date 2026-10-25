@@ -324,7 +324,7 @@ export function PunchRow({ slots, label, size = 'md' }: { slots: PunchSlot[]; la
 }
 
 /** Punch-hole chads: the celebration after a log is the paper falling out of the card. */
-const CHAD_COLORS = ['var(--stock)', 'var(--paper)', 'var(--stock)', 'var(--ink)'];
+const CHAD_COLORS = ['var(--ink)', 'var(--metal)', '#f2ede3', 'var(--ink)'];
 
 /** A short, CSS-only celebration. Key it with a changing number to replay. */
 export function Confetti({ burst }: { burst: number }) {

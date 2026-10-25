@@ -1,160 +1,69 @@
-/* Punch-card redesign — café loyalty card stock for money. Loaded after app.css. */
+/* Punch-card layer — sits on THE AURA.
+   The loyalty card is the habit metaphor; the house stays porcelain / obsidian /
+   chrome / gothic marque. This file styles the punch mark and week card only.
+   It must not rewrite the brand palette or type. */
 
-.app {
-  --stock: #1f3fd1;
-  --stock-dark: #1a2a8f;
-  --paper: #ffffff;
-  --bg: #f3f4f6;
-  --bg-2: #e8eaef;
-  --surface: #ffffff;
-  --surface-2: #f8f9fb;
-  --surface-3: #e2e5ec;
-  --ink: #111318;
-  --ink-2: #2a2d35;
-  --muted: #5c616d;
-  --faint: #8b909c;
-  --line: #dfe2e9;
-  --line-strong: #c5cad4;
-  --accent: var(--stock);
-  --accent-hover: #1b36b8;
-  --accent-ink: #ffffff;
-  --accent-soft: #e8edfd;
-  --lime: var(--stock);
-  --lime-ink: #ffffff;
-  --good: #15803d;
-  --good-soft: #e3f3ea;
-  --bad: #c41e3a;
-  --bad-soft: #fce8ec;
-  --warn: #a16207;
-  --warn-soft: #f5ecd3;
-  --radius: 16px;
-  --radius-sm: 10px;
-  --font: "Bricolage Grotesque", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --display: var(--font);
-  --mono: var(--font);
-  --shadow: none;
-  --shadow-lg: 0 16px 40px rgb(17 19 24 / 12%);
-}
-
-@media (prefers-color-scheme: dark) {
-  .app {
-    --bg: #0e1016;
-    --bg-2: #141820;
-    --surface: #181b24;
-    --surface-2: #1e222c;
-    --surface-3: #2a3040;
-    --ink: #f4f5f7;
-    --ink-2: #d8dbe2;
-    --muted: #a4a9b5;
-    --faint: #727886;
-    --line: #2e3442;
-    --line-strong: #424958;
-    --stock: #3d5cff;
-    --accent-soft: #1a2240;
-  }
-}
-
-.app .topbar {
-  background: var(--stock);
-  border-bottom-color: color-mix(in srgb, var(--stock-dark) 40%, transparent);
-  backdrop-filter: none;
-}
-.app .topbar .brand,
-.app .topbar .tab,
-.app .topbar .top-ask,
-.app .topbar .wallet-chip,
-.app .topbar .demo-pill {
-  color: var(--paper);
-}
-.app .topbar .tab { color: rgb(255 255 255 / 72%); }
-.app .topbar .tab:hover { color: var(--paper); }
-.app .topbar .tab[aria-current="page"] {
-  color: var(--stock);
-  background: var(--bg);
-  border-bottom-color: transparent;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  margin-bottom: -1px;
-}
-.app .topbar .brand-mark {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 3px solid rgb(255 255 255 / 85%);
-  background: transparent;
-  box-shadow: inset 0 0 0 2px var(--stock);
-}
-.app .topbar .top-ask,
-.app .topbar .wallet-chip {
-  border-color: rgb(255 255 255 / 35%);
-  background: rgb(255 255 255 / 12%);
-}
-.app .topbar .sync-pill { border-color: rgb(255 255 255 / 30%); background: rgb(255 255 255 / 10%); }
-.app .topbar .sync-dot { background: var(--paper); }
-
-.app .num { font-variant-numeric: tabular-nums; font-weight: 800; font-stretch: 95%; }
-
-.app .hero-card {
-  background: var(--stock);
-  color: var(--paper);
-  box-shadow: var(--shadow-lg);
-  border-radius: var(--radius);
-}
-.app .hero-card::after { display: none; }
-.app .hero-label,
-.app .hero-sub,
-.app .hero-mini-label,
-.app .hero-mini-sub { color: rgb(255 255 255 / 78%); }
-.app .hero-amount { font-family: var(--font); font-weight: 800; font-stretch: 90%; color: var(--paper); }
-.app .hero-debt { color: #ffb4bc; }
-.app .hero-bottom { flex-wrap: wrap; align-items: stretch; }
-.app .hero-week { flex: 1; min-width: min(100%, 280px); flex-direction: column; align-items: stretch; gap: 10px; }
-.app .hero-week-title { color: var(--paper); font-weight: 700; }
-
+/* Buttons on the obsidian hero: paper fill, ink type — a garment-tag stamp. */
 .app .btn-on-stock {
-  background: var(--paper);
-  color: var(--stock);
+  background: #f2ede3;
+  color: #0c0c0b;
   border: 0;
   font-weight: 700;
-  border-radius: 999px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  border-radius: 0;
 }
-.app .btn-on-stock:hover:not(:disabled) { background: color-mix(in srgb, var(--paper) 92%, var(--stock)); }
-.app .btn-primary {
-  background: var(--stock);
-  border-color: var(--stock);
-  color: var(--paper);
-  border-radius: 999px;
+.app .btn-on-stock:hover:not(:disabled) {
+  background: #fffdf6;
 }
-.app .btn-primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+.app .btn-ghost-stock {
+  background: transparent;
+  color: #f2ede3;
+  border: 1px solid rgb(255 255 255 / 28%);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  border-radius: 0;
+}
+.app .btn-ghost-stock:hover:not(:disabled) {
+  border-color: rgb(255 255 255 / 55%);
+  background: rgb(255 255 255 / 6%);
+}
 
-.app .fab {
-  background: var(--stock);
-  color: var(--paper);
-  border-radius: 999px;
-  animation: none;
-  box-shadow: 0 10px 24px rgb(31 63 209 / 35%);
-}
-
+/* Streak: a mini punch hole instead of a flame emoji. */
 .app .streak-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 6px 12px 6px 8px;
-  border-radius: 999px;
+  border-radius: 0;
   border: 1px solid var(--line);
   background: var(--surface);
-  font-size: 0.82rem;
-  font-weight: 600;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--muted);
 }
+.app .streak-pill strong {
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  text-transform: none;
+  font-size: 0.95rem;
+}
 .app .streak-mark {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  border: 2px solid var(--stock);
-  background: var(--paper);
-  box-shadow: inset 0 0 0 1px var(--stock);
+  border: 1.5px solid var(--ink);
+  background: var(--ink);
+  box-shadow: inset 0 0 0 2px var(--surface);
   flex: none;
 }
+
+/* ---------- Punch row: the recurring house mark ---------- */
 
 .app .punch-row {
   display: flex;
@@ -168,48 +77,162 @@
   min-width: 0;
   display: grid;
   justify-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 .app .punch-hole {
   width: 100%;
   max-width: 44px;
   aspect-ratio: 1;
   border-radius: 50%;
-  border: 2px dashed rgb(255 255 255 / 45%);
-  background: rgb(0 0 0 / 12%);
+  border: 1.5px dashed rgb(242 237 227 / 38%);
+  background: rgb(0 0 0 / 28%);
   display: grid;
   place-items: center;
-  color: var(--paper);
-  transition: transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1), background 180ms ease, border-color 180ms ease;
+  color: #0c0c0b;
+  transition:
+    transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1),
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
-.app .punch.is-today .punch-hole { border-style: solid; border-color: rgb(255 255 255 / 70%); }
+.app .punch.is-today .punch-hole {
+  border-style: solid;
+  border-color: rgb(242 237 227 / 72%);
+  box-shadow: 0 0 0 3px rgb(242 237 227 / 12%);
+}
 .app .punch.is-stamped .punch-hole {
   border-style: solid;
-  border-color: var(--paper);
-  background: var(--paper);
-  color: var(--stock);
+  border-color: #f2ede3;
+  background: #f2ede3;
+  color: #0c0c0b;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 20%) inset;
 }
-.app .punch.is-fresh.is-stamped .punch-hole { animation: punch-stamp 220ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+.app .punch.is-fresh.is-stamped .punch-hole {
+  animation: punch-stamp 260ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
 @keyframes punch-stamp {
-  0% { transform: scale(1.18) rotate(-6deg); }
+  0% { transform: scale(1.22) rotate(-8deg); }
+  55% { transform: scale(0.94) rotate(2deg); }
   100% { transform: scale(1) rotate(0deg); }
 }
-.app .punch-label { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em; color: rgb(255 255 255 / 65%); text-transform: uppercase; }
-.app .punch-row.punch-sm .punch-hole { max-width: 28px; border-width: 1.5px; }
+.app .punch-label {
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  color: rgb(242 237 227 / 55%);
+  text-transform: uppercase;
+}
+.app .punch.is-stamped .punch-label { color: rgb(242 237 227 / 82%); }
+.app .punch.is-today .punch-label { color: #fffdf6; }
+
+.app .punch-row.punch-sm .punch-hole { max-width: 26px; border-width: 1.25px; }
 .app .punch-row.punch-lg .punch-hole { max-width: 52px; }
 
-.app .cat-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+/* Punch row on paper (demo guide, light surfaces): ink holes. */
+.app .demo-guide .punch-hole,
+.app .card .punch-hole,
+.app .welcome-features .punch-hole {
+  border-color: color-mix(in srgb, var(--ink) 28%, transparent);
+  background: color-mix(in srgb, var(--ink) 6%, var(--surface));
+  color: var(--bg);
+}
+.app .demo-guide .punch.is-today .punch-hole,
+.app .card .punch.is-today .punch-hole,
+.app .welcome-features .punch.is-today .punch-hole {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 10%, transparent);
+}
+.app .demo-guide .punch.is-stamped .punch-hole,
+.app .card .punch.is-stamped .punch-hole,
+.app .welcome-features .punch.is-stamped .punch-hole {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--bg);
+}
+.app .demo-guide .punch-label,
+.app .card .punch-label,
+.app .welcome-features .punch-label {
+  color: var(--faint);
+}
+.app .demo-guide .punch.is-stamped .punch-label,
+.app .card .punch.is-stamped .punch-label,
+.app .welcome-features .punch.is-stamped .punch-label,
+.app .demo-guide .punch.is-today .punch-label,
+.app .card .punch.is-today .punch-label,
+.app .welcome-features .punch.is-today .punch-label {
+  color: var(--ink);
+}
+
+/* Hero week layout: punch card as the bottom strip of the money piece. */
+.app .hero-bottom { flex-wrap: wrap; align-items: stretch; gap: 20px; }
+.app .hero-week {
+  flex: 1;
+  min-width: min(100%, 280px);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+.app .hero-week-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  color: #fffdf6;
+}
+.app .hero-week-title .num {
+  font-family: var(--mono);
+  letter-spacing: -0.02em;
+  text-transform: none;
+  font-size: 0.95rem;
+  color: rgb(242 237 227 / 72%);
+}
+.app .hero-mini-label {
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgb(242 237 227 / 50%);
+}
+.app .hero-mini { font-family: var(--mono); font-size: 1.15rem; color: #fffdf6; }
+.app .hero-mini-sub { color: rgb(242 237 227 / 52%); font-size: 0.8rem; }
+.app .hero-actions {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+.app .hero-setup .punch-row { margin-top: 22px; max-width: 420px; }
+
+/* Category bars: single-hue ink, top category full weight. */
+.app .cat-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
 .app .cat-bars li {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 2fr) auto auto;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 2fr) auto auto;
   gap: 10px;
   align-items: center;
   font-size: 0.88rem;
 }
-.app .cat-bar-name { display: inline-flex; align-items: center; gap: 8px; font-weight: 650; min-width: 0; }
+.app .cat-bar-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+  min-width: 0;
+}
 .app .cat-bar-track {
-  height: 10px;
-  border-radius: 999px;
+  height: 8px;
+  border-radius: 1px;
   background: var(--surface-3);
   overflow: hidden;
 }
@@ -217,42 +240,128 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--stock);
+  background: var(--ink);
+  opacity: 0.45;
 }
-.app .cat-bar-share { color: var(--muted); font-size: 0.82rem; }
-.app .cat-bar-amount { font-weight: 800; text-align: right; }
+.app .cat-bars li.is-top .cat-bar-track span { opacity: 1; background: var(--ink); }
+.app .cat-bar-share { color: var(--muted); font-size: 0.78rem; font-family: var(--mono); }
+.app .cat-bar-amount { font-weight: 700; text-align: right; font-family: var(--mono); font-size: 0.86rem; }
 
-.app .cat-tile[aria-pressed="true"] {
-  border-color: var(--stock);
-  background: color-mix(in srgb, var(--stock) 12%, var(--surface));
+.app .cat-tile[aria-pressed="true"],
+.app .cat-tile.is-picked {
+  border-color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
 }
 
-.app .app-preloader { background: var(--stock); }
-.app .app-preloader-punches {
+/* Preloader: marque + three punches filling in. */
+.app-preloader-punches {
   display: flex;
   gap: 10px;
   justify-content: center;
-  margin-bottom: 16px;
+  margin: 4px 0 2px;
 }
-.app .app-preloader-punches span {
-  width: 18px;
-  height: 18px;
+.app-preloader-punches span {
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  border: 2px solid rgb(255 255 255 / 55%);
-  animation: preloader-punch 900ms ease-in-out infinite;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  animation: preloader-punch 960ms ease-in-out infinite;
 }
-.app .app-preloader-punches span:nth-child(2) { animation-delay: 150ms; }
-.app .app-preloader-punches span:nth-child(3) { animation-delay: 300ms; }
+.app-preloader-punches span:nth-child(2) { animation-delay: 160ms; }
+.app-preloader-punches span:nth-child(3) { animation-delay: 320ms; }
 @keyframes preloader-punch {
-  0%, 100% { transform: scale(0.85); opacity: 0.5; background: transparent; }
-  50% { transform: scale(1); opacity: 1; background: var(--paper); border-color: var(--paper); }
+  0%, 100% { transform: scale(0.85); opacity: 0.45; background: transparent; }
+  50% { transform: scale(1); opacity: 1; background: var(--ink); border-color: var(--ink); }
 }
-.app .app-preloader-copy,
-.app .app-preloader-sub { color: var(--paper); }
 
-.app .confetti span { border-radius: 50%; width: 10px; height: 10px; }
+/* Chad confetti: paper discs punched out of the card. */
+.app .confetti span {
+  border-radius: 50%;
+  width: 9px;
+  height: 9px;
+}
+
+/* Welcome product stage: the card itself is the hero visual. */
+.app .welcome-visual {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+.app .welcome-visual .hero-card {
+  transform: rotate(-1.25deg);
+  transition: transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.app .welcome-visual:hover .hero-card { transform: rotate(0deg); }
+.app .welcome-visual .example-list {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 4px 0;
+}
+.app .welcome-stage {
+  position: relative;
+  padding: 28px 22px 22px;
+  background:
+    radial-gradient(900px 420px at 80% 0%, color-mix(in srgb, var(--metal) 18%, transparent), transparent 55%),
+    linear-gradient(165deg, #161614 0%, #0a0a0a 55%, #111110 100%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.app .welcome-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.35;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 4%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 4%) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: radial-gradient(100% 80% at 70% 0%, #000 0%, transparent 72%);
+}
+.app .welcome-stage-marque {
+  position: absolute;
+  right: 18px;
+  top: 4px;
+  font-family: var(--marque);
+  font-size: clamp(3.5rem, 10vw, 6.5rem);
+  line-height: 1;
+  color: rgb(255 255 255 / 7%);
+  pointer-events: none;
+  user-select: none;
+}
+.app .welcome-stage .hero-card {
+  position: relative;
+  box-shadow: 0 28px 60px rgb(0 0 0 / 45%);
+}
+.app .welcome-copy h1 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(2.8rem, 7vw, 4.4rem);
+  letter-spacing: -0.03em;
+  line-height: 1.02;
+  max-width: 11ch;
+}
+.app .welcome-copy h1 em {
+  font-style: italic;
+  color: var(--ink);
+}
+.app .welcome-brand-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.app .welcome-brand-line .marque {
+  font-size: 1.85rem;
+}
+.app .welcome-brand-line .eyebrow {
+  margin: 0;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .app .punch.is-fresh.is-stamped .punch-hole { animation: none; }
-  .app .app-preloader-punches span { animation: none; opacity: 0.85; background: var(--paper); }
+  .app-preloader-punches span { animation: none; opacity: 0.85; background: var(--ink); border-color: var(--ink); }
+  .app .welcome-visual .hero-card { transition: none; }
 }

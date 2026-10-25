@@ -3,7 +3,7 @@ import type { AccountRef, SpendCategory } from '../api.js';
 import { CategoryBars } from './CategoryBars.js';
 import { buildFeed, type FeedItem } from './feed.js';
 import { FeedList } from './FeedList.js';
-import { displayName, money } from './format.js';
+import { displayName, greeting, money } from './format.js';
 import { moneyPlan } from './money-plan.js';
 import { NeedsYouCard } from './SettleUp.js';
 import type { WalletData } from './data.js';
@@ -37,8 +37,6 @@ function weekSlots(days: { date: string; count: number }[], todayKey: string): P
   });
 }
 
-const today = () => new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-
 export function Home({ me, data, actions, guide }: { me: AccountRef; data: WalletData | null; actions: HomeActions; guide?: ReactNode }) {
   const feed = useMemo(() => (data ? buildFeed(data.view) : []), [data]);
   if (!data) return <HomeSkeleton />;
@@ -52,17 +50,18 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
     : 0;
 
   return (
-    <div className="home">
+    <div className="home stagger-in">
       <header className="hello">
         <div>
+          <p className="eyebrow">{greeting()} · {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
           <h1>Hi, {displayName(me.owner)}.</h1>
-          <p className="page-sub">{today()}</p>
+          <p className="page-sub">Stamp the day. Fill the week. Know your money.</p>
         </div>
         <div className="hello-badges">
           <span className="streak-pill" title="Consecutive days with a logged spend">
             <span className="streak-mark" aria-hidden="true" />
             <strong className="num">{plan.streakDays}</strong>
-            <span>day streak</span>
+            <span>{plan.streakDays === 1 ? 'day' : 'days'}</span>
           </span>
           <button type="button" className="icon-btn" onClick={actions.seeWallet} aria-label="Open wallet settings">
             <Icon name="settings" size={19} />
@@ -75,16 +74,20 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
       {plan.hasBaseline ? <MoneyHero plan={plan} slots={slots} actions={actions} /> : <SetupHero slots={slots} actions={actions} />}
 
       <section className="quick-row" aria-label="Log or plan">
+        <button type="button" className="quick quick-primary" onClick={() => actions.logSpend()}>
+          <span className="quick-icon"><Icon name="plus" size={18} /></span>
+          <span className="quick-copy"><strong>Log a spend</strong><small>Stamp today in two taps</small></span>
+        </button>
         <button type="button" className="quick" onClick={actions.logIncome}>
-          <Icon name="arrowDown" size={18} />
+          <span className="quick-icon"><Icon name="arrowDown" size={18} /></span>
           <span className="quick-copy"><strong>Money came in</strong><small>Paycheck, side gig, refund</small></span>
         </button>
         <button type="button" className="quick" onClick={actions.settleUp}>
-          <Icon name="split" size={18} />
+          <span className="quick-icon"><Icon name="split" size={18} /></span>
           <span className="quick-copy"><strong>Split with someone</strong><small>Who owes who</small></span>
         </button>
         <button type="button" className="quick" onClick={() => actions.setup(2)}>
-          <Icon name="target" size={18} />
+          <span className="quick-icon"><Icon name="target" size={18} /></span>
           <span className="quick-copy"><strong>Weekly pace</strong><small>{plan.budgetMinor === null ? 'Set a number' : `${money(plan.budgetMinor)} a week`}</small></span>
         </button>
       </section>
@@ -97,7 +100,10 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
 
           <section className="card" aria-labelledby="recent">
             <div className="card-head">
-              <h2 id="recent">Recent</h2>
+              <div>
+                <p className="eyebrow">The last few things</p>
+                <h2 id="recent">Recent</h2>
+              </div>
               {feed.length > 0 ? <button type="button" className="link-btn" onClick={actions.seeAll}>See all</button> : null}
             </div>
             {habitFeed.length === 0 ? (
@@ -118,12 +124,14 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
 
           <CardCard plan={plan} onInsights={actions.seeInsights} />
 
-          <section className="card ask-card" aria-labelledby="ask-home">
-            <h2 id="ask-home">Ask about your money</h2>
-            <p className="muted">The assistant reads your records. It can&apos;t move money.</p>
+          <section className="ask-card" aria-labelledby="ask-home">
+            <div className="ask-glow" aria-hidden="true" />
+            <p className="eyebrow">Ask, don&apos;t scroll</p>
+            <h2 id="ask-home">A question about your money?</h2>
+            <p className="ask-lede">The assistant reads your records. It can&apos;t move money.</p>
             <div className="chips">
-              <button type="button" className="chip" onClick={() => actions.ask('Where did most of my money go this month?')}>Where did it go?</button>
-              <button type="button" className="chip" onClick={() => actions.ask('Can I afford a $60 night out this week?')}>Can I afford $60 out?</button>
+              <button type="button" className="chip chip-on-dark" onClick={() => actions.ask('Where did most of my money go this month?')}>Where did it go?</button>
+              <button type="button" className="chip chip-on-dark" onClick={() => actions.ask('Can I afford a $60 night out this week?')}>Can I afford $60 out?</button>
             </div>
           </section>
         </div>
@@ -132,13 +140,15 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
   );
 }
 
-/** The one reversed panel on Today: the card stock itself, carrying net position and this week's punches. */
+/** The money piece: obsidian card stock with the gothic marque and this week's punches. */
 function MoneyHero({ plan, slots, actions }: { plan: ReturnType<typeof moneyPlan>; slots: PunchSlot[]; actions: HomeActions }) {
   const net = plan.netMinor ?? plan.ledgerMinor;
   const projected = plan.projectedCashMinor ?? plan.cashMinor;
   const stamped = slots.filter((s) => s.stamped).length;
   return (
     <section className="hero-card" aria-labelledby="net-label">
+      <div className="hero-grid" aria-hidden="true" />
+      <span className="hero-marque" aria-hidden="true">S</span>
       <div className="hero-top">
         <div>
           <p className="hero-label" id="net-label">Net position</p>
@@ -174,7 +184,10 @@ function MoneyHero({ plan, slots, actions }: { plan: ReturnType<typeof moneyPlan
 
       <div className="hero-bottom">
         <div className="hero-week">
-          <p className="hero-week-title">This week&apos;s card <span className="num">{stamped}/7</span></p>
+          <p className="hero-week-title">
+            <span>This week&apos;s card</span>
+            <span className="num">{stamped}/7</span>
+          </p>
           <PunchRow slots={slots} size="lg" label={`This week: ${stamped} of 7 days logged`} />
         </div>
         <button type="button" className="btn btn-on-stock btn-lg" onClick={() => actions.logSpend()}>
@@ -188,8 +201,11 @@ function MoneyHero({ plan, slots, actions }: { plan: ReturnType<typeof moneyPlan
 function SetupHero({ slots, actions }: { slots: PunchSlot[]; actions: HomeActions }) {
   return (
     <section className="hero-card hero-setup" aria-labelledby="setup-title">
+      <div className="hero-grid" aria-hidden="true" />
+      <span className="hero-marque" aria-hidden="true">S</span>
+      <p className="hero-label">Get set</p>
       <h2 id="setup-title">Three numbers, then the app does the math.</h2>
-      <p className="hero-sub">Cash, card balance and a weekly pace. No bank login and no spreadsheet.</p>
+      <p className="hero-setup-lede">Cash, card balance and a weekly pace. No bank login and no spreadsheet.</p>
       <div className="setup-preview">
         <div><Icon name="cash" size={18} /><strong>Cash</strong><small>what you can spend</small></div>
         <div><Icon name="card" size={18} /><strong>Cards</strong><small>what you owe</small></div>
@@ -219,7 +235,10 @@ function WeekCard({
   return (
     <section className={`card week-card${over ? ' is-over' : ''}`} aria-labelledby="week-title">
       <div className="card-head">
-        <h2 id="week-title">Weekly pace</h2>
+        <div>
+          <p className="eyebrow">Pace</p>
+          <h2 id="week-title">Weekly pace</h2>
+        </div>
         <button type="button" className="link-btn" onClick={onInsights}>Patterns</button>
       </div>
       {plan.budgetMinor === null ? (
@@ -248,14 +267,19 @@ function WeekCard({
   );
 }
 
-/** Where the money went, as one-hue bars: the top category in full stock, the rest stepped back. */
+/** Where the money went, as one-hue bars: the top category in full ink, the rest stepped back. */
 function PatternPeek({ plan, onInsights, onLog }: { plan: ReturnType<typeof moneyPlan>; onInsights: () => void; onLog: () => void }) {
   const categories = plan.patterns?.categories ?? [];
   const top = categories[0];
   if (!top) {
     return (
       <section className="card pattern-peek" aria-labelledby="pattern-title">
-        <div className="card-head"><h2 id="pattern-title">Where it went</h2></div>
+        <div className="card-head">
+          <div>
+            <p className="eyebrow">Patterns</p>
+            <h2 id="pattern-title">Where it went</h2>
+          </div>
+        </div>
         <p className="muted">One log is enough to start seeing it. No bank connection.</p>
         <button type="button" className="btn btn-primary btn-sm" onClick={onLog}>Log a spend</button>
       </section>
@@ -266,6 +290,7 @@ function PatternPeek({ plan, onInsights, onLog }: { plan: ReturnType<typeof mone
     <section className="card pattern-peek" aria-labelledby="pattern-title">
       <div className="card-head">
         <div>
+          <p className="eyebrow">Patterns</p>
           <h2 id="pattern-title">Where it went</h2>
           <p className="card-sub">Last 30 days{plan.patterns ? ` · ${plan.patterns.totals.activeDays30d} active days` : ''}</p>
         </div>
@@ -281,7 +306,10 @@ function CardCard({ plan, onInsights }: { plan: ReturnType<typeof moneyPlan>; on
     return (
       <section className="card" aria-labelledby="card-title">
         <div className="card-head">
-          <h2 id="card-title">Cards</h2>
+          <div>
+            <p className="eyebrow">Credit</p>
+            <h2 id="card-title">Cards</h2>
+          </div>
           <span className="pill pill-good">$0 owed</span>
         </div>
         <p className="muted">No card balance tracked. If that changes, add it in Wallet and Settle builds a payoff path.</p>
@@ -292,7 +320,10 @@ function CardCard({ plan, onInsights }: { plan: ReturnType<typeof moneyPlan>; on
   return (
     <section className="card" aria-labelledby="card-title">
       <div className="card-head">
-        <h2 id="card-title">Cards</h2>
+        <div>
+          <p className="eyebrow">Credit</p>
+          <h2 id="card-title">Cards</h2>
+        </div>
         <span className="amount num">{money(plan.creditMinor)}</span>
       </div>
       <div className={`credit-track${ratio >= 1 ? ' is-over' : ''}`} aria-hidden="true"><span style={{ width: `${ratio * 100}%` }} /></div>

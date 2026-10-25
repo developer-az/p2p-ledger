@@ -90,47 +90,61 @@ export function Welcome({
     <div className="welcome">
       <section className="welcome-hero">
         <div className="welcome-copy">
-          <h1>Know your money. Keep the habit.</h1>
+          <div className="welcome-brand-line">
+            <span className="marque" aria-hidden="true">S</span>
+            <p className="eyebrow">Settle · money with intention</p>
+          </div>
+          <h1>Know your money.<br /><em>Keep</em> the habit.</h1>
           <p className="welcome-lede">
-            A money app that works like a punch card. Log what you spend in two taps, get today stamped,
-            and watch the week fill in. No bank login.
+            A private money house that works like a punch card. Log what you spend in two taps,
+            stamp the day, and watch the week fill in. No bank login.
           </p>
           <div className="row-wrap welcome-actions">
             <button type="button" className="btn btn-primary btn-lg" onClick={() => void tryDemo()} disabled={!boot || busy !== null}>
-              {busy === 'demo' ? 'Setting up…' : 'Start the guided demo'}
+              {busy === 'demo' ? 'Setting up…' : 'Try the 5-step tour'}
+              {busy !== 'demo' ? <Icon name="sparkle" size={18} /> : null}
             </button>
-            <a className="btn btn-lg" href="#own-wallet">Start my own wallet</a>
+            <a className="btn btn-lg" href="#how">See how it works</a>
           </div>
-          <p className="welcome-demo-note">The demo has a sample history, five steps to try and a real double-entry ledger underneath. Pretend dollars only.</p>
-          {error ? <p className="error-text" role="alert">{error}</p> : null}
-          {bootError ? <div className="notice notice-warn">{bootError}</div> : null}
+          <p className="welcome-demo-note">Sample history, five habits to try, and a real ledger underneath. No setup required.</p>
+          <p className="legal">Demo only. Pretend dollars between demo wallets. No bank login, no real money.</p>
+          <a className="welcome-own-link" href="#own-wallet">Or start with your own clean wallet →</a>
+          {error ? <p className="error-text" role="alert" style={{ marginTop: 10 }}>{error}</p> : null}
+          {bootError ? <div className="notice notice-warn" style={{ marginTop: 12 }}>{bootError}</div> : null}
           {boot && !live ? (
-            <div className="notice notice-warn">
+            <div className="notice notice-warn" style={{ marginTop: 12 }}>
               The live ledger is asleep, so this is practice mode. Everything works, but it resets when the server restarts.
             </div>
           ) : null}
         </div>
 
         <figure className="welcome-visual" aria-label="Example of the Settle Today screen">
-          <div className="hero-card" data-ui>
-            <div className="hero-top">
-              <div>
-                <p className="hero-label">Net position</p>
-                <p className="hero-amount num">{money(284_750)}</p>
-                <p className="hero-sub">$3,120.00 cash · <span className="hero-debt">$272.50 on cards</span></p>
+          <div className="welcome-stage">
+            <span className="welcome-stage-marque" aria-hidden="true">S</span>
+            <div className="hero-card" data-ui>
+              <div className="hero-grid" aria-hidden="true" />
+              <div className="hero-top">
+                <div>
+                  <p className="hero-label">Net position</p>
+                  <p className="hero-amount num">{money(284_750)}</p>
+                  <p className="hero-sub">$3,120.00 cash · <span className="hero-debt">$272.50 on cards</span></p>
+                </div>
+                <div className="hero-side">
+                  <span className="hero-mini-label">Left this week</span>
+                  <strong className="hero-mini num">$38.00</strong>
+                  <span className="hero-mini-sub">of $250.00</span>
+                </div>
               </div>
-              <div className="hero-side">
-                <span className="hero-mini-label">Left this week</span>
-                <strong className="hero-mini num">$38.00</strong>
-                <span className="hero-mini-sub">of $250.00</span>
+              <div className="hero-bottom">
+                <div className="hero-week">
+                  <p className="hero-week-title">
+                    <span>This week&apos;s card</span>
+                    <span className="num">5/7</span>
+                  </p>
+                  <PunchRow slots={EXAMPLE_WEEK} size="lg" label="Example week: 5 of 7 days logged" />
+                </div>
+                <span className="btn btn-on-stock btn-lg" aria-hidden="true"><Icon name="plus" size={18} /> Log a spend</span>
               </div>
-            </div>
-            <div className="hero-bottom">
-              <div className="hero-week">
-                <p className="hero-week-title">This week&apos;s card <span className="num">5/7</span></p>
-                <PunchRow slots={EXAMPLE_WEEK} size="lg" label="Example week: 5 of 7 days logged" />
-              </div>
-              <span className="btn btn-on-stock btn-lg" aria-hidden="true"><Icon name="plus" size={18} /> Log a spend</span>
             </div>
           </div>
           <ul className="list example-list" data-ui>
@@ -190,8 +204,8 @@ export function Welcome({
               ))}
             </div>
           </div>
-          <h3>Two taps to log</h3>
-          <p>Amount, category, done. Each log stamps the day, and your recent spends come back as one-tap repeats.</p>
+          <h3>Two taps to stamp the day</h3>
+          <p>Amount, category, done. Each log punches the card, and your recent spends come back as one-tap repeats.</p>
         </article>
         <article className="feature">
           <div className="feature-ui" data-ui>

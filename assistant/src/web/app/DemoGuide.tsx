@@ -66,7 +66,7 @@ export function DemoGuide({ progress, onStep, onDismiss, onExit, onPatterns }: D
   return (
     <section className="demo-guide" aria-labelledby="demo-title">
       <div className="demo-guide-top">
-        <p className="demo-count">Guided demo · {count} of {STEPS.length} stamped</p>
+        <p className="demo-count">Your quest · {count} of {STEPS.length} stamped</p>
         <button type="button" className="demo-hide" onClick={onDismiss} aria-label="Hide demo guide">
           <Icon name="x" size={16} />
         </button>

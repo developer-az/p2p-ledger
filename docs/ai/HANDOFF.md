@@ -1,10 +1,17 @@
 # Engineering Handoff (latest)
 
+## Session: Stussy punch-card — finish the redesign (branch `cursor/stussy-punch-card-1265`)
+- **Verdict on PR #15:** The punch-card metaphor was right; the cobalt / Bricolage override erased THE AURA (Stussy) house identity and left the redesign half-done.
+- **Direction:** Keep porcelain / obsidian / chrome / gothic marque. Punch holes are the recurring habit mark on that system — not a café-blue rebrand.
+- **Done:** Restored Instrument Sans/Serif + DM Mono + UnifrakturMaguntia; gothic `S` marque on brand, hero, preloader, welcome; float dock (no topbar tabs); obsidian hero with grid + marque watermark + `PunchRow`; single-hue ink `CategoryBars`; `punch-card.css` no longer rewrites tokens; welcome stage uses the product card as the visual; favicon is Aura + punches.
+- **Verify:** `cd assistant && npm test && npm run build` (172 tests, clean build).
+
 ## Session: punch-card consumer redesign (PR branch `redesign/punch-card`)
 - **Concept:** Café loyalty punch card — cobalt card stock (`#1f3fd1`), Bricolage Grotesque, week as `PunchRow`, single-hue `CategoryBars`, stamp animation on fresh logs, chad confetti.
 - **Removed:** Stock photo marketing (`public/media/*`), Lottie, `MediaPhoto` / `visual-assets`.
 - **Added:** `punch-card.css` (tokens + punch/streak/cat-bar/topbar), `CategoryBars.tsx`, `PunchRow` in `ui.tsx`.
 - **Build:** `npm test` (172) + `npm run build` OK after category tile fix (no per-category color).
+- **Superseded by:** Stussy punch-card finish above — cobalt token override and empty brand mark were the incomplete parts.
 
 ## Session: sheet backdrop dismiss vs text selection
 - **Bug:** Setup weekly pace (and other `Sheet` modals) closed when triple-click / drag-select in inputs because the full `app-sheet-wrap` had `data-backdrop` and a naive dialog `onClick` treated release outside the panel as dismiss.

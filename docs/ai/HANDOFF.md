@@ -1,5 +1,9 @@
 # Engineering Handoff (latest)
 
+## Session: Impeccable roll + bullet-journal full theme
+- Ran `impeccable context` + `concept-seed --scope direction --mode operate` (seed `98d70fceba27c1ae`). Roll assigned transit pass; **pinned** bullet-journal (#1 grounded) per PRODUCT + owner — Operate-safe, keeps ring/photos/sheets.
+- Replaced monochrome tokens end-to-end in `app.css` (paper dot grid, sage pen, Sora/Spectral). Signature: habit dots on Today hero + week card. `.impeccable/config.json` → `buildPath: code`. Surface brief v2 + `docs/DESIGN.md` updated.
+
 ## Session: revert half punch-card; restore Settle UI + DESIGN.md
 - **User feedback:** Punch-card branch was unusable — old `app.css` + thin `punch-card.css` + removed photos = incoherent half redesign.
 - **Root cause:** Unattended Impeccable concept roll (café punch card) + `frontend-design` “pick extreme” without `docs/DESIGN.md` pin; Operate UI swapped to `PunchRow` while Persuade imagery was deleted.

@@ -67,7 +67,7 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
 
       {guide}
 
-      {plan.hasBaseline ? <MoneyHero plan={plan} actions={actions} /> : <SetupHero actions={actions} />}
+      {plan.hasBaseline ? <MoneyHero plan={plan} dots={dots} actions={actions} /> : <SetupHero actions={actions} />}
 
       <section className="quick-row play-tiles" aria-label="What do you want to do?">
         <button type="button" className="quick quick-primary quick-play" onClick={() => actions.logSpend()}>
@@ -136,14 +136,35 @@ export function Home({ me, data, actions, guide }: { me: AccountRef; data: Walle
   );
 }
 
-function MoneyHero({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; actions: HomeActions }) {
+function HabitDots({ dots, label }: { dots: { key: string; label: string; logged: boolean; today: boolean }[]; label: string }) {
+  if (!dots.length) return null;
+  return (
+    <ol className="week-dots hero-habit-row" aria-label={label}>
+      {dots.map((d) => (
+        <li key={d.key} className={`week-dot${d.logged ? ' is-on' : ''}${d.today ? ' is-today' : ''}`}>
+          <span className="week-dot-fill" aria-hidden="true" />
+          <span className="week-dot-label">{d.label}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function MoneyHero({
+  plan,
+  dots,
+  actions,
+}: {
+  plan: ReturnType<typeof moneyPlan>;
+  dots: { key: string; label: string; logged: boolean; today: boolean }[];
+  actions: HomeActions;
+}) {
   const net = plan.netMinor ?? plan.ledgerMinor;
   const left = plan.weekLeftMinor;
   const projected = plan.projectedCashMinor ?? plan.cashMinor;
   return (
     <section className="hero-card" aria-labelledby="net-label">
       <div className="hero-grid" aria-hidden="true" />
-      <span className="hero-marque" aria-hidden="true">S</span>
       <div className="hero-top">
         <div>
           <p className="hero-label" id="net-label">Net position</p>
@@ -175,7 +196,7 @@ function MoneyHero({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; acti
           <button type="button" className="hero-ring-tap" onClick={() => actions.logSpend()} aria-label="Log a spend">
           <ProgressRing
             value={plan.budgetMinor === null ? 0 : plan.weekProgress}
-            tone="onDark"
+            tone="accent"
             size={96}
             stroke={8}
             label={plan.budgetMinor === null ? 'No weekly plan yet' : `${Math.round(plan.weekProgress * 100)} percent of weekly plan used`}
@@ -204,6 +225,7 @@ function MoneyHero({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; acti
           <button type="button" className="hero-link" onClick={actions.seeInsights}>See your patterns →</button>
         </div>
       </div>
+      <HabitDots dots={dots} label="Habit dots for each day this week" />
     </section>
   );
 }
@@ -213,7 +235,6 @@ function SetupHero({ actions }: { actions: HomeActions }) {
     <section className="hero-card hero-setup" aria-labelledby="setup-title">
       <MediaPhoto className="hero-setup-photo" src={PHOTO.setupHero} alt="" />
       <div className="hero-grid" aria-hidden="true" />
-      <span className="hero-marque" aria-hidden="true">S</span>
       <p className="hero-label">Your starting point</p>
       <h2 id="setup-title">Three numbers. Then the app does the math.</h2>
       <p className="hero-setup-lede">Cash, card balance, and a weekly pace. No bank login, no spreadsheet, no guilt.</p>

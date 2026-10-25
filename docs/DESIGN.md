@@ -1,30 +1,33 @@
-# Settle consumer UI — design contract
+# Settle consumer UI — design system
 
-This document anchors visual work to **product truth** (`docs/PRODUCT.md`). Do not replace the whole look via random metaphor rolls or a thin CSS overlay on an unrelated system.
+Anchored to [PRODUCT.md](./PRODUCT.md). **Operate** surfaces use standard app chrome; the visual world only changes type, palette, density, and one signature move (Impeccable `mode-operate`).
 
-## What Settle is (preserve in every visual pass)
+## Visual world: bullet-journal habit tracker
 
-- **Job:** Calm money snapshot, two-tap spend logging, weekly pace, patterns from **your** logs — no bank feed.
-- **Tone:** Calm, legible, habit-forming — streak, weekly ring, small milestones. Not a slot machine; not a café loyalty gimmick unless the team explicitly chooses that in PRODUCT + this file.
-- **Modes (Impeccable):** Welcome = **Persuade** (imagery, story, demo CTA). Signed-in shell = **Operate** (scanability, familiar patterns, one next action).
+| Token / element | Rule |
+|-----------------|------|
+| Ground | Warm paper `#f4f0e6` with faint dot grid |
+| Surfaces | Page cards `#fffdf8`, dashed rules, left **pen** bar on hero |
+| Pen (accent) | Sage `#2d6a4f` — primary actions, ring, habit dots, tab active |
+| Type | **Sora** (UI), **Spectral** (money headlines) |
+| Signature | **Habit dots** — 7 circles per week; filled when that day has a log |
+| Imagery | Bundled `public/media/*` via `MediaPhoto`; Welcome keeps scene + feature photos |
 
-## Incumbent visual world (main / shipped)
+## Product invariants (never swap for metaphor)
 
-- **Palette:** High-contrast monochrome house identity in `assistant/src/web/app/app.css` — porcelain/obsidian, chrome accent, editorial serif + grotesque sans (`Instrument Sans` / `Instrument Serif`), hairline rules.
-- **Hero:** Dark `hero-card` with net position, **weekly progress ring** (not punch holes), optional grid/sheen.
-- **Imagery:** Bundled photos under `assistant/public/media/` via `MediaPhoto` + `visual-assets.ts` — feature cards, welcome scene, demo step photos. Always use fallback on 404.
-- **Charts:** Distinct per-category hues (`categories.ts`, Okabe–Ito style) for donuts/bars; do not collapse to one stock color unless DESIGN.md says so.
-- **Motion:** Preloader, stagger on Today, stamp/confetti only where already defined — respect `prefers-reduced-motion`.
+- Weekly **progress ring** + pace copy on Today hero
+- Two-tap log sheet, category colors (Okabe–Ito), streak pill
+- Patterns heatmap, demo guide photos, sheet dismiss (pointer down/up outside panel)
 
-## What went wrong (punch-card branch)
+## Process (how rolls should run here)
 
-1. **Unattended concept roll** (Impeccable surface brief) picked “café loyalty punch card” without replacing `app.css`.
-2. **`punch-card.css`** re-tokenized a few variables and added punch components while **~1,200 lines of monochrome rules** stayed — cobalt topbar on cream/chrome components, missing styles for new class names, photos removed.
-3. **frontend-design** skill encourages “pick an extreme aesthetic”; without PRODUCT/DESIGN pinning, that reads as **template shopping**, not Settle.
+1. `impeccable context` + `concept-seed --scope direction --mode operate`
+2. **Pin** direction in `.impeccable/surfaces/…` + owner approval when roll conflicts with PRODUCT
+3. **Replace** tokens in `app.css` (no overlay file); update all surfaces
+4. `buildPath: code` in `.impeccable/config.json` for this app
+5. Verify desktop + mobile in running app; update this file from what shipped
 
-## Rules for the next redesign
+## What failed before
 
-1. **Redesign replaces, not layers.** If direction changes, rewrite tokens and components in `app.css` (or a single new theme file that **replaces** the old token block), update every surface, restore or replace imagery deliberately.
-2. **Pin direction here and in PRODUCT.md** before large UI commits; no unattended metaphor rolls.
-3. **Operate surfaces** keep weekly ring, feed columns, sheet flows; **Persuade surfaces** keep photo + phone preview pattern unless copy changes.
-4. Verify at desktop + mobile in the running app before PR.
+- Unattended roll → café punch card + `punch-card.css` on monochrome `app.css` + removed photos = half redesign.
+- `frontend-design` “pick extreme” without a pinned contract = template shopping.

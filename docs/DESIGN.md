@@ -2,22 +2,26 @@
 
 Anchored to [PRODUCT.md](./PRODUCT.md). **Operate** surfaces use standard app chrome; the visual world only changes type, palette, density, and one signature move (Impeccable `mode-operate`).
 
-## Visual world: bullet-journal habit tracker
+## Visual world: "Pocket" (ink, paper, one volt accent)
 
 | Token / element | Rule |
 |-----------------|------|
-| Ground | Warm paper `#f4f0e6` with faint dot grid |
-| Surfaces | Page cards `#fffdf8`, dashed rules, left **pen** bar on hero |
-| Pen (accent) | Sage `#2d6a4f` — primary actions, ring, habit dots, tab active |
-| Type | **Sora** (UI), **Spectral** (money headlines) |
-| Signature | **Habit dots** — 7 circles per week; filled when that day has a log |
-| Imagery | Bundled `public/media/*` via `MediaPhoto`; Welcome keeps scene + feature photos |
+| Ground | Paper `#f4f3ee` (light) / `#0b0b0c` (dark). No textures on app screens. |
+| Surfaces | White cards, 1px hairline, no drop shadow (Notion calm). Radius 20px. |
+| Ink | `#0e0e10`. Primary buttons are ink (Apple Pay black). |
+| Volt (the only accent) | Lime `#c8f53b`, used as a **fill** with ink text (dock active tab, Log spend, habit dots, ring, Pip). Never lime text on paper. |
+| Type | **Bricolage Grotesque** (display, condensed via `font-stretch`), **Geist** (UI), **Geist Mono** (labels, eyebrows, sub-amounts). |
+| Hero object | The **Settle card**: dark Apple Wallet-style card (`.s-card`) that tilts toward the pointer (`TiltCard`) with a moving sheen and grain. Used on Welcome and as the Today hero. |
+| Character | **Pip** (`Pip.tsx`): a lime bean whose eyes follow the cursor and who blinks. Mood comes from real numbers (`pipMood`): happy on a 3+ day streak, sleepy when nothing is logged today, worried when over pace, party after a log. One Pip per screen. |
+| Motion | `motion` (Framer Motion) for the hero: word-by-word blur reveal, card count-up, scroll reveals, springs on tilt and eyes. Ease `cubic-bezier(0.23,1,0.32,1)`. Buttons scale to 0.97 on press. `prefers-reduced-motion` turns off the tilt, reveals, breathing and the tape. |
+| Welcome | Dark full-bleed hero, condensed headline with "mess." crossed out, tilting card + Pip, a lime tape marquee, then a bento "how it works" built from real UI fragments (no stock photos), then a lime "own wallet" block. |
 
 ## Product invariants (never swap for metaphor)
 
-- Weekly **progress ring** + pace copy on Today hero
+- Weekly **progress ring**, habit dots and pace copy on the Today card
 - Two-tap log sheet, category colors (Okabe–Ito), streak pill
-- Patterns heatmap, demo guide photos, sheet dismiss (pointer down/up outside panel)
+- Patterns heatmap, demo guide, sheet dismiss (pointer down/up outside panel)
+- Ask is read-only; the Today ask bar only routes the question to the Ask tab
 
 ## Process (how rolls should run here)
 
@@ -31,3 +35,4 @@ Anchored to [PRODUCT.md](./PRODUCT.md). **Operate** surfaces use standard app ch
 
 - Unattended roll → café punch card + `punch-card.css` on monochrome `app.css` + removed photos = half redesign.
 - `frontend-design` “pick extreme” without a pinned contract = template shopping.
+- Bullet-journal and AURA layers were stacked as override sheets on top of each other. Pocket replaced the token block and the whole override tail in one pass; keep one layer.

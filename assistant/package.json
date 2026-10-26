@@ -23,6 +23,7 @@
     "@google/genai": "^2.28.0",
     "@hono/node-server": "^2.1.4",
     "hono": "^4.13.13",
+    "motion": "^14.6.0",
     "pg": "^8.23.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

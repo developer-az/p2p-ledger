@@ -5,6 +5,8 @@ import { moneyPlan } from './money-plan.js';
 import { TrustTab } from './TrustTab.js';
 import type { WalletData } from './data.js';
 import { Icon, Skeleton } from './ui.js';
+import { CountUp, TiltCard } from './motion-kit.js';
+import { Pip } from './Pip.js';
 
 export interface WalletActions {
   setup: () => void;
@@ -52,22 +54,26 @@ export function WalletTab({
             </div>
             {plan.hasBaseline ? (
               <>
-                <div className="snapshot-net">
-                  <span>Net position</span>
-                  <strong className="num">{money(plan.netMinor ?? plan.ledgerMinor)}</strong>
-                  <span className="muted">Projected cash minus card balance</span>
-                </div>
-                <div className="snapshot-rows">
-                  <div><span>💵 Cash baseline</span><strong className="num">{money(plan.cashMinor ?? 0)}</strong></div>
+                <TiltCard className="s-card snapshot-card-hero" max={4}>
+                  <div className="s-card-top">
+                    <span className="s-card-brand">settle</span>
+                    <span className="s-card-private"><Icon name="lock" size={12} /> Private</span>
+                  </div>
+                  <p className="s-card-label">Net position</p>
+                  <p className="s-card-amount num"><CountUp minor={plan.netMinor ?? plan.ledgerMinor} /></p>
+                  <p className="s-card-sub">Projected cash minus card balance</p>
+                </TiltCard>
+                <dl className="snapshot-rows">
+                  <div><dt>Cash baseline</dt><dd className="num">{money(plan.cashMinor ?? 0)}</dd></div>
                   {periodIncomeMinor > 0 ? (
-                    <div><span>📥 Logged income (period)</span><strong className="num">{money(periodIncomeMinor)}</strong></div>
+                    <div><dt>Logged income (period)</dt><dd className="num">{money(periodIncomeMinor)}</dd></div>
                   ) : null}
                   {incomeLiftMinor !== 0 ? (
-                    <div><span>📊 Projected cash</span><strong className="num">{money(projectedMinor ?? 0)}</strong></div>
+                    <div><dt>Projected cash</dt><dd className="num">{money(projectedMinor ?? 0)}</dd></div>
                   ) : null}
-                  <div><span>💳 Cards owed</span><strong className="num">{money(plan.creditMinor)}</strong></div>
-                  <div><span>🎯 Weekly pace</span><strong className="num">{plan.budgetMinor === null ? 'Not set' : money(plan.budgetMinor)}</strong></div>
-                </div>
+                  <div><dt>Cards owed</dt><dd className="num">{money(plan.creditMinor)}</dd></div>
+                  <div><dt>Weekly pace</dt><dd className="num">{plan.budgetMinor === null ? 'Not set' : money(plan.budgetMinor)}</dd></div>
+                </dl>
               </>
             ) : (
               <div className="snapshot-empty">
@@ -105,7 +111,7 @@ export function WalletTab({
 
         <div className="stack">
           <section className="ask-card" aria-labelledby="wallet-ask">
-            <div className="ask-glow" aria-hidden="true" />
+            <Pip size={56} mood="calm" className="ask-card-pip" />
             <p className="eyebrow">A second pair of eyes</p>
             <h2 id="wallet-ask">Ask about your money</h2>
             <p className="ask-lede">Read-only answers from your records. It cannot move a cent.</p>

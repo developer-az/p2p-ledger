@@ -1,5 +1,17 @@
 # Engineering Handoff (latest)
 
+## Session: LazyMotion + inner tab pass (Activity, Wallet, Ask)
+- **LazyMotion:** all `motion.*` became `m.*`; `ConsumerApp` wraps in `<LazyMotion features={loadMotion} strict>`; `motion-features.ts` re-exports `domAnimation` as its own chunk. Index JS went from 87.2 to 67.7 kB gzip; features chunk 5.8 kB loads after.
+- **Activity:** removed the right-aligned summary; added `.stat-strip` (ink tile for money out, `CountUp`). Filter pill is ink-filled. List is keyed by filter so rows rise in (CSS `row-in`, first 5 staggered).
+- **Wallet:** the net position is a `TiltCard` Settle card. Snapshot rows are a `<dl>` hairline list with mono amounts and no emoji. Pip replaces the dead `ask-glow` div on the Ask card.
+- **Ask:** Pip in the header (`cheer` bumps when an answer arrives). The lime chat avatar replaces the violet one. Removed the `ask-orb`. Chat turns rise in.
+- **Bug fixed during the pass:** the inner page grids had no explicit column, so the new stat strip pushed Activity to 487px at 390px width. Fix: `grid-template-columns: minmax(0, 1fr)` on `.patterns/.wallet-page/.activity-page/.ask-page`.
+- **Verify:** 172 tests pass, build OK, checked desktop 1280 and mobile 390 with playwright-cli (scrollWidth = 390).
+
+## Session: motion stack rules made permanent
+- **Global:** `~/.agents/SKILLS-ROUTING.md` gained a "Motion and visual stack" table (Motion default; GSAP/Lenis/R3F for landing pages only; Rive for interactive mascots; Aceternity/Magic UI/React Bits as restyled references) plus rules (reduced motion, transform/opacity only, lazy-load heavy libs, `emil-design-eng` + `aura-farming` after). Claude and Gemini already import it; added `~/.codex/AGENTS.md` pointing Codex at it.
+- **Repo:** `docs/DESIGN.md` gained "Motion stack budget": `motion` stays the only animation dependency; Rive is a Pip candidate; GSAP/Lenis allowed on Welcome only; no R3F. No code or dependency changes.
+
 ## Session: "Pocket" redesign (Welcome hero, Settle card, Pip mascot, motion)
 - **Why:** Owner feedback: the UI felt AI-made and mediocre. Brief asked for an expensive hero with Framer-style motion, Stussy/Perplexity energy for a younger technical audience, Apple Pay minimalism, Notion decluttering, and a lovable mascot (Meta Muse).
 - **Tokens:** replaced the bullet-journal tokens in `app.css` (ink/paper/volt lime; Bricolage Grotesque + Geist + Geist Mono). Removed the stacked "THE AURA" override tail and dead rules (old hero, phone mock, play tiles, week card) using a brace-aware filter; one new "POCKET" layer at the bottom of `app.css`.

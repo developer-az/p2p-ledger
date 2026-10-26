@@ -19,6 +19,7 @@ import { Avatar, Confetti, ErrorNotice, Icon, ToastProvider, type IconName } fro
 import { FloatingDock, useSwipeNav } from './dock.js';
 import { AppPreloader } from './Preloader.js';
 import { Welcome } from './Welcome.js';
+import { Pip } from './Pip.js';
 
 type Tab = 'today' | 'activity' | 'patterns' | 'ask' | 'wallet';
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
@@ -82,8 +83,7 @@ export function ConsumerApp() {
           <Signed boot={boot} session={session} onSwitch={start} onSignOut={signOut} />
         ) : (
           <>
-            <header className="topbar"><div className="topbar-inner"><Brand /></div></header>
-            <main id="main" className="main">
+            <main id="main" className="main main-welcome">
               <Welcome boot={boot} bootError={bootError} onStart={start} />
             </main>
           </>
@@ -101,8 +101,8 @@ export function ConsumerApp() {
 function Brand() {
   return (
     <a className="brand" href="/" aria-label="Settle home">
-      <span className="brand-mark" aria-hidden="true">S</span>
-      <span className="brand-word">Settle</span>
+      <Pip size={30} track={false} mood="happy" />
+      <span className="brand-word">settle</span>
     </a>
   );
 }
@@ -306,6 +306,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
               me={me}
               data={data}
               guide={demoGuide}
+              cheer={burst}
               actions={{
                 addMoney: () => setSheet('add'),
                 logSpend: openLog,

@@ -1,11 +1,11 @@
 import { useState } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 import { api, type AccountRef, type BootstrapResponse } from '../api.js';
 import { loadSavedWallets, rememberWallet } from '../wallet-store.js';
 import { displayName, money } from './format.js';
 import type { Session } from './session.js';
-import { MediaPhoto } from './MediaPhoto.js';
-import { LottieMark } from './LottieMark.js';
-import { PHOTO } from './visual-assets.js';
+import { CountUp, EASE_OUT, InView, RevealWords, TiltCard } from './motion-kit.js';
+import { Pip } from './Pip.js';
 import { Avatar, Icon, useToast } from './ui.js';
 
 /** Letters and digits only, so the owner id is safe to put in a URL. */
@@ -14,6 +14,11 @@ function ownerIdFor(name: string): string {
   const tag = Array.from(crypto.getRandomValues(new Uint8Array(2)), (b) => b.toString(16).padStart(2, '0')).join('');
   return `${slug || 'me'}-${tag}`;
 }
+
+const TAPE = ['Two taps to log', 'No bank login', 'Patterns from your own history', 'Ask in plain English', 'Real double-entry ledger', 'Pip is watching'];
+
+/** Deterministic 8×7 heat pattern for the illustration, so it never flickers between renders. */
+const HEAT = Array.from({ length: 56 }, (_, i) => ((i * 37 + (i % 7) * 11) % 9) % 5);
 
 export function Welcome({
   boot,
@@ -28,6 +33,7 @@ export function Welcome({
   const [busy, setBusy] = useState<'demo' | 'create' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const toast = useToast();
+  const reduce = useReducedMotion();
   const saved = loadSavedWallets().filter((w) => boot?.live ? w.live : !w.live);
   const live = boot?.live ?? false;
 
@@ -88,91 +94,123 @@ export function Welcome({
     }
   }
 
+  const rise = (delay: number) => ({
+    initial: reduce ? false : { opacity: 0, transform: 'translateY(16px)' },
+    animate: { opacity: 1, transform: 'translateY(0px)' },
+    transition: { duration: 0.7, ease: EASE_OUT, delay },
+  } as const);
+
   return (
     <div className="welcome">
-      <section className="welcome-hero">
-        <div className="welcome-copy">
-          <p className="eyebrow">Settle · money with intention</p>
-          <h1>Know your money.<br /><em>Keep</em> the habit.</h1>
-          <p className="welcome-lede">
-            One calm place for your cash, your cards, and what you actually spend.
-            Log in two taps and watch the week take shape.
-          </p>
-          <div className="row-wrap welcome-actions">
-            <button type="button" className="btn btn-primary btn-lg" onClick={() => void tryDemo()} disabled={!boot || busy !== null}>
-              {busy === 'demo' ? 'Setting up…' : 'Try the 5-step tour'}
-              {busy !== 'demo' ? <Icon name="sparkle" size={18} /> : null}
-            </button>
-            <a className="btn btn-lg" href="#how">See how it works</a>
+      <section className="w-hero" aria-labelledby="w-title">
+        <div className="w-hero-grain" aria-hidden="true" />
+        <nav className="w-nav" aria-label="Settle">
+          <a className="w-logo" href="/" aria-label="Settle home">
+            <Pip size={30} track={false} mood="happy" />
+            <span>settle</span>
+          </a>
+          <span className="w-nav-links">
+            <a href="#how">How it works</a>
+            <a href="/ops">Console</a>
+            <a href="https://github.com/developer-az/p2p-ledger" target="_blank" rel="noreferrer">GitHub ↗</a>
+          </span>
+          <button type="button" className="w-nav-cta" onClick={() => void tryDemo()} disabled={!boot || busy !== null}>
+            {busy === 'demo' ? 'Loading…' : 'Try demo'}
+          </button>
+        </nav>
+
+        <div className="w-hero-body">
+          <div className="w-copy">
+            <motion.p className="w-status" {...rise(0.05)}>
+              <span className={`w-status-dot${live ? ' is-live' : ''}`} aria-hidden="true" />
+              {boot ? (live ? 'Live ledger online' : 'Practice mode · resets on restart') : 'Connecting…'}
+              <span className="w-status-extra"><span className="w-status-sep">/</span> no bank login</span>
+            </motion.p>
+            <h1 id="w-title" className="w-title">
+              <RevealWords text="Your money," delay={0.1} />
+              <br />
+              <RevealWords text="minus the" delay={0.22} />{' '}
+              <span className="w-scribble">
+                <RevealWords text="mess." delay={0.34} />
+                <svg viewBox="0 0 220 60" preserveAspectRatio="none" aria-hidden="true">
+                  <motion.path
+                    d="M6 38 C40 18 70 46 104 30 S170 14 214 34"
+                    initial={reduce ? false : { pathLength: 0 }}
+                    animate={{ pathLength: 1 }}
+                    transition={{ duration: 0.7, ease: EASE_OUT, delay: 0.95 }}
+                  />
+                </svg>
+              </span>
+            </h1>
+            <motion.p className="w-lede" {...rise(0.5)}>
+              Log a spend in two taps. See your week in one glance. A tiny bean named Pip keeps the streak honest.
+            </motion.p>
+            <motion.div className="w-actions" {...rise(0.62)}>
+              <button type="button" className="w-btn w-btn-volt" onClick={() => void tryDemo()} disabled={!boot || busy !== null}>
+                {busy === 'demo' ? 'Setting up…' : 'Try the 60-second demo'}
+                <span className="w-btn-arrow" aria-hidden="true">→</span>
+              </button>
+              <a className="w-btn w-btn-ghost" href="#own-wallet">Start my own</a>
+            </motion.div>
+            <motion.p className="w-fine" {...rise(0.72)}>Pretend dollars. Real double-entry ledger underneath.</motion.p>
+            {error ? <p className="w-error" role="alert">{error}</p> : null}
+            {bootError ? <p className="w-error" role="alert">{bootError}</p> : null}
           </div>
-          <p className="welcome-demo-note">Sample history, five habits to try, and a real ledger underneath. No setup required.</p>
-          <p className="legal">Demo only. Pretend dollars between demo wallets. No bank login, no real money.</p>
-          <a className="welcome-own-link" href="#own-wallet">Or start with your own clean wallet →</a>
-          {error ? <p className="error-text" role="alert" style={{ marginTop: 10 }}>{error}</p> : null}
-          {bootError ? <div className="notice notice-warn" style={{ marginTop: 12 }}>{bootError}</div> : null}
-          {boot && !live ? (
-            <div className="notice notice-warn" style={{ marginTop: 12 }}>
-              The live ledger is asleep, so this is practice mode. Everything works, but it resets when the server restarts.
-            </div>
-          ) : null}
+
+          <motion.div
+            className="w-stage"
+            aria-label="A preview of the Settle card"
+            initial={reduce ? false : { opacity: 0, transform: 'translateY(40px) scale(0.96)' }}
+            animate={{ opacity: 1, transform: 'translateY(0px) scale(1)' }}
+            transition={{ duration: 1, ease: EASE_OUT, delay: 0.25 }}
+          >
+            <div className="w-pip-perch"><Pip size={92} mood="happy" /></div>
+            <TiltCard className="s-card s-card-lg">
+              <div className="s-card-top">
+                <span className="s-card-brand">settle</span>
+                <span className="s-card-chip" aria-hidden="true" />
+              </div>
+              <p className="s-card-label">Net position</p>
+              <p className="s-card-amount"><CountUp minor={284_750} /></p>
+              <div className="s-card-foot">
+                <div>
+                  <p className="s-card-label">Left this week</p>
+                  <p className="s-card-mid">{money(12_850)} <span>of {money(45_000)}</span></p>
+                </div>
+                <MiniRing value={0.72} />
+              </div>
+              <ol className="s-card-dots" aria-hidden="true">
+                {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <li key={i} className={i < 6 ? 'is-on' : ''}>{d}</li>)}
+              </ol>
+            </TiltCard>
+            <motion.div className="w-float w-float-a" {...rise(1.1)}>
+              <span aria-hidden="true">☕</span><strong>Coffee</strong><em>−$4.50</em>
+            </motion.div>
+            <motion.div className="w-float w-float-b" {...rise(1.25)}>
+              <span aria-hidden="true">🔥</span><strong>13-day streak</strong>
+            </motion.div>
+          </motion.div>
         </div>
 
-        <div className="welcome-visual" aria-label="A preview of the Settle app">
-          <MediaPhoto className="welcome-scene-photo" src={PHOTO.welcomeScene} alt="" />
-          <div className="welcome-lottie-wrap" aria-hidden="true">
-            <LottieMark className="welcome-lottie" label="Savings animation" />
-          </div>
-          <div className="phone">
-            <div className="phone-top">
-              <span className="phone-dot" /><span className="phone-dot" /><span className="phone-dot" />
-              <span className="phone-title">Settle</span>
-            </div>
-            <div className="phone-card">
-              <p>Net position</p>
-              <strong>{money(284_750)}</strong>
-              <span>$3,120 cash · $272 on cards</span>
-              <div className="phone-ring">
-                <span>72%</span>
-                <small>of weekly pace</small>
-              </div>
-            </div>
-            <div className="phone-row">
-              <span className="phone-icon">☕</span>
-              <span><strong>Coffee</strong><small>Logged · Dining</small></span>
-              <strong>−$4.50</strong>
-            </div>
-            <div className="phone-row">
-              <span className="phone-icon is-in">↙</span>
-              <span><strong>Salary</strong><small>Logged · Income</small></span>
-              <strong className="is-in">+$2,100</strong>
-            </div>
-            <div className="phone-row">
-              <span className="phone-icon">🛒</span>
-              <span><strong>Groceries</strong><small>Logged · Groceries</small></span>
-              <strong>−$42.10</strong>
-            </div>
-            <div className="phone-fab">+ Log spend</div>
-          </div>
-          <div className="float-card float-one">
-            <span>🔥</span><strong>6-day streak</strong><small>One tap keeps it alive</small>
-          </div>
-          <div className="float-card float-two">
-            <span>🎯</span><strong>$38 left this week</strong><small>You&apos;re on pace</small>
+        <div className="w-tape" aria-hidden="true">
+          <div className="w-tape-track">
+            {[0, 1].map((n) => (
+              <span key={n}>{TAPE.map((t) => <span key={t}>{t}<i>✺</i></span>)}</span>
+            ))}
           </div>
         </div>
       </section>
 
       {saved.length > 0 ? (
-        <section className="card saved-card" aria-labelledby="back">
-          <div className="card-head">
-            <div><p className="eyebrow">This device</p><h2 id="back">Welcome back</h2></div>
-          </div>
-          <ul className="list">
+        <section className="w-section w-back" aria-labelledby="back">
+          <p className="w-kicker">This device</p>
+          <h2 id="back">Welcome back.</h2>
+          <ul className="w-back-list">
             {saved.slice(0, 4).map((w) => (
               <li key={w.id}>
-                <button type="button" className="item" onClick={() => onStart({ account: { id: w.id, owner: w.owner }, household: [] })}>
+                <button type="button" onClick={() => onStart({ account: { id: w.id, owner: w.owner }, household: [] })}>
                   <Avatar owner={w.owner} />
-                  <span className="item-body"><span className="item-title" style={{ display: 'block' }}>{displayName(w.owner)}</span><span className="item-sub" style={{ display: 'block' }}>Open this wallet</span></span>
+                  <span>{displayName(w.owner)}</span>
                   <Icon name="chevron" />
                 </button>
               </li>
@@ -181,43 +219,95 @@ export function Welcome({
         </section>
       ) : null}
 
-      <section className="welcome-features" id="how" aria-label="How it works">
-        <article className="feature feature-media">
-          <MediaPhoto className="feature-photo" src={PHOTO.featureBaseline} alt="" />
-          <h2>Three numbers, once</h2>
-          <p>Cash, card balance, a weekly pace. Thirty seconds — no bank connection, no spreadsheet.</p>
-        </article>
-        <article className="feature feature-media">
-          <MediaPhoto className="feature-photo" src={PHOTO.featureLog} alt="" />
-          <h2>Two taps to log</h2>
-          <p>Amount, category, done. The app turns small logs into a week you can actually see.</p>
-        </article>
-        <article className="feature feature-media">
-          <MediaPhoto className="feature-photo" src={PHOTO.featurePatterns} alt="" />
-          <h2>Patterns, not guesswork</h2>
-          <p>A calendar heatmap, category shifts and a weekly pace that shows where the month is heading.</p>
-        </article>
+      <section className="w-section" id="how" aria-labelledby="how-title">
+        <InView>
+          <p className="w-kicker">How it works</p>
+          <h2 id="how-title" className="w-h2">Less app. More awareness.</h2>
+        </InView>
+        <div className="w-bento">
+          <InView as="article" className="w-tile" delay={0}>
+            <span className="w-tile-n">01</span>
+            <h3>Three numbers, once.</h3>
+            <p>Cash, card balance, a weekly pace. Thirty seconds, no bank connection.</p>
+            <div className="w-mini w-mini-setup" aria-hidden="true">
+              <span><small>Cash</small>$3,200</span>
+              <span><small>Cards</small>$450</span>
+              <span className="is-pace"><small>Pace</small>$450/wk</span>
+            </div>
+          </InView>
+          <InView as="article" className="w-tile" delay={0.08}>
+            <span className="w-tile-n">02</span>
+            <h3>Two taps to log.</h3>
+            <p>Amount, category, done. Pip hops when you keep the streak alive.</p>
+            <div className="w-mini w-mini-log" aria-hidden="true">
+              <strong>$4.50</strong>
+              <span className="chips-row"><i className="is-on">☕ Dining</i><i>🛒 Groceries</i><i>🚌 Transit</i></span>
+            </div>
+          </InView>
+          <InView as="article" className="w-tile" delay={0.16}>
+            <span className="w-tile-n">03</span>
+            <h3>Patterns, not guesswork.</h3>
+            <p>Eight weeks of your own logs as a heatmap. Spot the Friday problem.</p>
+            <div className="w-mini w-mini-heat" aria-hidden="true">
+              {HEAT.map((h, i) => <i key={i} className={`h${h}`} />)}
+            </div>
+          </InView>
+          <InView as="article" className="w-tile w-tile-wide w-tile-dark" delay={0.24}>
+            <span className="w-tile-n">04</span>
+            <h3>Ask in plain English.</h3>
+            <p>Read-only answers grounded in your records. It can look, it can’t move money.</p>
+            <div className="w-ask" aria-hidden="true">
+              <div className="w-ask-q"><Icon name="sparkle" size={15} />Can I afford a $60 night out this week?</div>
+              <div className="w-ask-a">
+                Yes. You have <b>$128.50</b> left of your weekly pace and you usually spend <b>$22</b> on Saturdays.
+                <span className="w-cite">1</span><span className="w-cite">2</span>
+              </div>
+            </div>
+          </InView>
+        </div>
       </section>
 
-      <section className="welcome-bottom" id="own-wallet">
-        <div>
-          <p className="eyebrow">Your own wallet</p>
-          <h2>Start clean. Keep it yours.</h2>
-          <p className="muted">Your cash, cards and logs live on your wallet id — the demo household never touches them. You start with a $500 simulated deposit and a funded ledger balance, so the wallet is never empty.</p>
-        </div>
-        <form className="welcome-create" onSubmit={(e) => { e.preventDefault(); void create(); }}>
-          <label className="sr-only" htmlFor="wallet-name">Your first name</label>
-          <input id="wallet-name" className="input" maxLength={40} placeholder="Your first name" value={name} onChange={(e) => setName(e.target.value)} />
-          <button className="btn btn-primary" type="submit" disabled={!name.trim() || busy !== null}>
-            {busy === 'create' ? 'Creating…' : 'Create my wallet'}
-          </button>
-          <p className="hint">
-            {live
-              ? 'Persists in PostgreSQL. No password yet — this is a demo identity, not a bank login.'
-              : 'Practice mode: this wallet lives in memory and resets when the server restarts.'}
-          </p>
-        </form>
+      <section className="w-section w-own" id="own-wallet" aria-labelledby="own-title">
+        <InView className="w-own-card">
+          <div className="w-own-copy">
+            <p className="w-kicker">Your own wallet</p>
+            <h2 id="own-title" className="w-h2">Start clean.<br />Keep it yours.</h2>
+            <p>Your logs live on your wallet id. The demo household never touches them. You start with a $500 simulated deposit so it’s never empty.</p>
+          </div>
+          <form className="w-own-form" onSubmit={(e) => { e.preventDefault(); void create(); }}>
+            <label htmlFor="wallet-name">First name</label>
+            <div className="w-own-row">
+              <input id="wallet-name" maxLength={40} placeholder="e.g. Sam" autoComplete="given-name" value={name} onChange={(e) => setName(e.target.value)} />
+              <button className="w-btn w-btn-volt" type="submit" disabled={!name.trim() || busy !== null}>
+                {busy === 'create' ? 'Creating…' : 'Create wallet'}
+              </button>
+            </div>
+            <p className="w-fine">
+              {live
+                ? 'Persists in PostgreSQL. No password yet: this is a demo identity, not a bank login.'
+                : 'Practice mode: this wallet lives in memory and resets when the server restarts.'}
+            </p>
+          </form>
+        </InView>
       </section>
     </div>
+  );
+}
+
+function MiniRing({ value }: { value: number }) {
+  const r = 22;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg className="s-ring" viewBox="0 0 56 56" width="56" height="56" aria-hidden="true">
+      <circle cx="28" cy="28" r={r} className="s-ring-track" />
+      <motion.circle
+        cx="28" cy="28" r={r} className="s-ring-value"
+        strokeDasharray={c}
+        initial={{ strokeDashoffset: c }}
+        animate={{ strokeDashoffset: c * (1 - Math.min(1, value)) }}
+        transition={{ duration: 1.2, ease: EASE_OUT, delay: 0.6 }}
+      />
+      <text x="28" y="32" textAnchor="middle">{Math.round(value * 100)}%</text>
+    </svg>
   );
 }

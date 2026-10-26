@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { LazyMotion } from 'motion/react';
 import './app.css';
 import { api, type BootstrapResponse, type SpendCategory } from '../api.js';
 import { ActivitySheet } from './ActivitySheet.js';
@@ -20,6 +21,9 @@ import { FloatingDock, useSwipeNav } from './dock.js';
 import { AppPreloader } from './Preloader.js';
 import { Welcome } from './Welcome.js';
 import { Pip } from './Pip.js';
+
+/** Animation features load in their own chunk; `strict` rejects a stray full `motion.*` import. */
+const loadMotion = () => import('./motion-features.js').then((mod) => mod.default);
 
 type Tab = 'today' | 'activity' | 'patterns' | 'ask' | 'wallet';
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
@@ -75,26 +79,28 @@ export function ConsumerApp() {
   }, []);
 
   return (
-    <ToastProvider>
-      <AppPreloader visible={!bootReady} />
-      <div className={`app${bootReady ? ' app-ready' : ''}`}>
-        <a className="skip" href="#main">Skip to content</a>
-        {session && boot ? (
-          <Signed boot={boot} session={session} onSwitch={start} onSignOut={signOut} />
-        ) : (
-          <>
-            <main id="main" className="main main-welcome">
-              <Welcome boot={boot} bootError={bootError} onStart={start} />
-            </main>
-          </>
-        )}
-        <footer className="footer">
-          <span>Settle is a demo. No real money moves.</span>
-          <a href="/ops">Engineering console</a>
-          <a href="https://github.com/developer-az/p2p-ledger" target="_blank" rel="noreferrer">GitHub</a>
-        </footer>
-      </div>
-    </ToastProvider>
+    <LazyMotion features={loadMotion} strict>
+      <ToastProvider>
+        <AppPreloader visible={!bootReady} />
+        <div className={`app${bootReady ? ' app-ready' : ''}`}>
+          <a className="skip" href="#main">Skip to content</a>
+          {session && boot ? (
+            <Signed boot={boot} session={session} onSwitch={start} onSignOut={signOut} />
+          ) : (
+            <>
+              <main id="main" className="main main-welcome">
+                <Welcome boot={boot} bootError={bootError} onStart={start} />
+              </main>
+            </>
+          )}
+          <footer className="footer">
+            <span>Settle is a demo. No real money moves.</span>
+            <a href="/ops">Engineering console</a>
+            <a href="https://github.com/developer-az/p2p-ledger" target="_blank" rel="noreferrer">GitHub</a>
+          </footer>
+        </div>
+      </ToastProvider>
+    </LazyMotion>
   );
 }
 

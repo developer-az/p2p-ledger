@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, type BootstrapResponse, type ToolCall, type Turn } from '../api.js';
 import { useDebouncedCallback, useOnceGuard } from './debounce.js';
 import { Icon } from './ui.js';
+import { Pip } from './Pip.js';
 
 const TOOL_WORDS: Record<string, string> = {
   get_account_overview: 'your balance',
@@ -43,6 +44,8 @@ export function AskTab({
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Bumped when an answer lands so Pip hops once. */
+  const [answered, setAnswered] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
 
   /**
@@ -96,6 +99,7 @@ export function AskTab({
                 : undefined,
         },
       ]);
+      setAnswered((n) => n + 1);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -107,7 +111,8 @@ export function AskTab({
 
   return (
     <div className="ask-page">
-      <header className="patterns-head">
+      <header className="patterns-head ask-head">
+        <Pip size={64} mood="calm" cheer={answered} className="ask-pip" />
         <div>
           <p className="eyebrow">Ask</p>
           <h1>A conversation with your records.</h1>
@@ -125,7 +130,6 @@ export function AskTab({
         <div className="chat" aria-live="polite">
           {messages.length === 0 ? (
             <div className="ask-empty">
-              <div className="ask-orb" aria-hidden="true">✦</div>
               <h2>What do you want to know?</h2>
               <p className="muted">Start with a question, or pick one of these.</p>
               <div className="suggestion-grid">

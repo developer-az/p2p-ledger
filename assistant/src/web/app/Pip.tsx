@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion, useReducedMotion, useSpring } from 'motion/react';
+import { m, useReducedMotion, useSpring } from 'motion/react';
 
 /**
  * Pip — Settle's mascot. A squishy lime bean that watches your cursor, blinks,
@@ -98,7 +98,7 @@ export function Pip({
   }[shown];
 
   const body = (
-    <motion.svg
+    <m.svg
       ref={ref}
       viewBox="0 0 100 100"
       width={size}
@@ -133,7 +133,7 @@ export function Pip({
             <path d="M67 37 L58 40" />
           </g>
         ) : null}
-        <motion.g style={{ x: eyeX, y: eyeY }}>
+        <m.g style={{ x: eyeX, y: eyeY }}>
           {eyesClosed ? (
             <g className="pip-lid">
               <path d={shown === 'sleepy' ? 'M33 50 Q38 53 43 50' : 'M33 49 L43 49'} />
@@ -155,10 +155,10 @@ export function Pip({
           <ellipse cx="29" cy="60" rx="5" ry="3" className="pip-blush" />
           <ellipse cx="71" cy="60" rx="5" ry="3" className="pip-blush" />
           <path d={MOUTH[shown]} className={`pip-mouth${shown === 'party' ? ' is-open' : ''}`} />
-        </motion.g>
+        </m.g>
         {shown === 'sleepy' ? <text x="78" y="22" className="pip-z">z</text> : null}
       </g>
-    </motion.svg>
+    </m.svg>
   );
 
   if (!onTap) return body;

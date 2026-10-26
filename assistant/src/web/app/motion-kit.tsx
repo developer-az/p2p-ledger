@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { animate, motion, useMotionTemplate, useMotionValue, useReducedMotion, useSpring, useTransform } from 'motion/react';
+import { animate, m, useMotionTemplate, useMotionValue, useReducedMotion, useSpring, useTransform } from 'motion/react';
 import { money } from './format.js';
 
 /** Strong ease-out used for every entrance in the app. */
@@ -21,7 +21,7 @@ export function TiltCard({ children, className, max = 10 }: { children: ReactNod
   const sheen = useMotionTemplate`radial-gradient(420px circle at ${gx} ${gy}, rgb(255 255 255 / 0.16), transparent 55%)`;
 
   return (
-    <motion.div
+    <m.div
       className={`tilt${className ? ` ${className}` : ''}`}
       style={reduce ? undefined : { rotateX: rx, rotateY: ry, transformPerspective: 1100 }}
       onPointerMove={(e) => {
@@ -33,8 +33,8 @@ export function TiltCard({ children, className, max = 10 }: { children: ReactNod
       onPointerLeave={() => { px.set(0.5); py.set(0.5); }}
     >
       {children}
-      {reduce ? null : <motion.span className="tilt-sheen" aria-hidden="true" style={{ background: sheen }} />}
-    </motion.div>
+      {reduce ? null : <m.span className="tilt-sheen" aria-hidden="true" style={{ background: sheen }} />}
+    </m.div>
   );
 }
 
@@ -72,14 +72,14 @@ export function RevealWords({ text, className, delay = 0 }: { text: string; clas
     <span className={className} aria-label={text}>
       {words.map((w, i) => (
         <span key={`${w}-${i}`} className="reveal-word" aria-hidden="true">
-          <motion.span
+          <m.span
             style={{ display: 'inline-block' }}
             initial={reduce ? false : { transform: 'translateY(105%)', opacity: 0, filter: 'blur(8px)' }}
             animate={{ transform: 'translateY(0%)', opacity: 1, filter: 'blur(0px)' }}
             transition={{ duration: 0.8, ease: EASE_OUT, delay: delay + i * 0.06 }}
           >
             {w}
-          </motion.span>
+          </m.span>
           {i < words.length - 1 ? ' ' : null}
         </span>
       ))}
@@ -90,7 +90,7 @@ export function RevealWords({ text, className, delay = 0 }: { text: string; clas
 /** Fades a block up when it scrolls into view. */
 export function InView({ children, className, delay = 0, as = 'div' }: { children: ReactNode; className?: string; delay?: number; as?: 'div' | 'section' | 'article' | 'li' }) {
   const reduce = useReducedMotion();
-  const Tag = motion[as];
+  const Tag = m[as];
   return (
     <Tag
       className={className}

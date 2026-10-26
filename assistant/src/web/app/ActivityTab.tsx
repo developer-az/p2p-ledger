@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { buildFeed, filterFeed, type FeedFilter, type FeedItem } from './feed.js';
 import { FeedList } from './FeedList.js';
-import { money } from './format.js';
+import { CountUp } from './motion-kit.js';
 import { EmptyState, Icon, Skeleton } from './ui.js';
 import type { WalletData } from './data.js';
 
@@ -33,12 +33,22 @@ export function ActivityTab({ data, onOpen }: { data: WalletData | null; onOpen:
           <h1>Every move, in one place.</h1>
           <p className="page-sub">Logged spends, income, and the ledger entries behind your balance.</p>
         </div>
-        <div className="activity-summary">
-          <div><span className="stat-label">Logged out this month</span><strong className="num">{money(out)}</strong></div>
-          <div><span className="stat-label">Logged in this month</span><strong className="num">{money(inn)}</strong></div>
-          <div><span className="stat-label">Active days</span><strong className="num">{patterns?.totals.activeDays30d ?? 0}</strong></div>
-        </div>
       </header>
+
+      <div className="stat-strip" aria-label="This month">
+        <div className="stat-tile stat-tile-ink">
+          <span className="stat-label">Out this month</span>
+          <strong className="num"><CountUp minor={out} /></strong>
+        </div>
+        <div className="stat-tile">
+          <span className="stat-label">In this month</span>
+          <strong className="num"><CountUp minor={inn} /></strong>
+        </div>
+        <div className="stat-tile">
+          <span className="stat-label">Active days, 30d</span>
+          <strong className="num">{patterns?.totals.activeDays30d ?? 0}</strong>
+        </div>
+      </div>
 
       <section className="card activity-card">
         <div className="activity-tools">
@@ -68,7 +78,7 @@ export function ActivityTab({ data, onOpen }: { data: WalletData | null; onOpen:
         ) : (
           <>
             <p className="hint activity-count">{shown.length} {shown.length === 1 ? 'entry' : 'entries'}</p>
-            <FeedList items={shown} onOpen={onOpen} dayTotals />
+            <div key={filter} className="feed-in"><FeedList items={shown} onOpen={onOpen} dayTotals /></div>
           </>
         )}
       </section>

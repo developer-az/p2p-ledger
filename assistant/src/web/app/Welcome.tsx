@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { m, useReducedMotion } from 'motion/react';
 import { api, type AccountRef, type BootstrapResponse } from '../api.js';
 import { loadSavedWallets, rememberWallet } from '../wallet-store.js';
 import { displayName, money } from './format.js';
@@ -121,11 +121,11 @@ export function Welcome({
 
         <div className="w-hero-body">
           <div className="w-copy">
-            <motion.p className="w-status" {...rise(0.05)}>
+            <m.p className="w-status" {...rise(0.05)}>
               <span className={`w-status-dot${live ? ' is-live' : ''}`} aria-hidden="true" />
               {boot ? (live ? 'Live ledger online' : 'Practice mode · resets on restart') : 'Connecting…'}
               <span className="w-status-extra"><span className="w-status-sep">/</span> no bank login</span>
-            </motion.p>
+            </m.p>
             <h1 id="w-title" className="w-title">
               <RevealWords text="Your money," delay={0.1} />
               <br />
@@ -133,7 +133,7 @@ export function Welcome({
               <span className="w-scribble">
                 <RevealWords text="mess." delay={0.34} />
                 <svg viewBox="0 0 220 60" preserveAspectRatio="none" aria-hidden="true">
-                  <motion.path
+                  <m.path
                     d="M6 38 C40 18 70 46 104 30 S170 14 214 34"
                     initial={reduce ? false : { pathLength: 0 }}
                     animate={{ pathLength: 1 }}
@@ -142,22 +142,22 @@ export function Welcome({
                 </svg>
               </span>
             </h1>
-            <motion.p className="w-lede" {...rise(0.5)}>
+            <m.p className="w-lede" {...rise(0.5)}>
               Log a spend in two taps. See your week in one glance. A tiny bean named Pip keeps the streak honest.
-            </motion.p>
-            <motion.div className="w-actions" {...rise(0.62)}>
+            </m.p>
+            <m.div className="w-actions" {...rise(0.62)}>
               <button type="button" className="w-btn w-btn-volt" onClick={() => void tryDemo()} disabled={!boot || busy !== null}>
                 {busy === 'demo' ? 'Setting up…' : 'Try the 60-second demo'}
                 <span className="w-btn-arrow" aria-hidden="true">→</span>
               </button>
               <a className="w-btn w-btn-ghost" href="#own-wallet">Start my own</a>
-            </motion.div>
-            <motion.p className="w-fine" {...rise(0.72)}>Pretend dollars. Real double-entry ledger underneath.</motion.p>
+            </m.div>
+            <m.p className="w-fine" {...rise(0.72)}>Pretend dollars. Real double-entry ledger underneath.</m.p>
             {error ? <p className="w-error" role="alert">{error}</p> : null}
             {bootError ? <p className="w-error" role="alert">{bootError}</p> : null}
           </div>
 
-          <motion.div
+          <m.div
             className="w-stage"
             aria-label="A preview of the Settle card"
             initial={reduce ? false : { opacity: 0, transform: 'translateY(40px) scale(0.96)' }}
@@ -183,13 +183,13 @@ export function Welcome({
                 {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <li key={i} className={i < 6 ? 'is-on' : ''}>{d}</li>)}
               </ol>
             </TiltCard>
-            <motion.div className="w-float w-float-a" {...rise(1.1)}>
+            <m.div className="w-float w-float-a" {...rise(1.1)}>
               <span aria-hidden="true">☕</span><strong>Coffee</strong><em>−$4.50</em>
-            </motion.div>
-            <motion.div className="w-float w-float-b" {...rise(1.25)}>
+            </m.div>
+            <m.div className="w-float w-float-b" {...rise(1.25)}>
               <span aria-hidden="true">🔥</span><strong>13-day streak</strong>
-            </motion.div>
-          </motion.div>
+            </m.div>
+          </m.div>
         </div>
 
         <div className="w-tape" aria-hidden="true">
@@ -300,7 +300,7 @@ function MiniRing({ value }: { value: number }) {
   return (
     <svg className="s-ring" viewBox="0 0 56 56" width="56" height="56" aria-hidden="true">
       <circle cx="28" cy="28" r={r} className="s-ring-track" />
-      <motion.circle
+      <m.circle
         cx="28" cy="28" r={r} className="s-ring-value"
         strokeDasharray={c}
         initial={{ strokeDashoffset: c }}

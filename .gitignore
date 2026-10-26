@@ -21,3 +21,4 @@ evals/results/
 assistant/evals/results/
 *.log
 .cursor/
+.verify/

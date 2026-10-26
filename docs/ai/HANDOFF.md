@@ -1,5 +1,12 @@
 # Engineering Handoff (latest)
 
+## Session: verify-settle verification skill
+- **Added** `.claude/skills/verify-settle/`: `SKILL.md` (launch, doctor, drive, evidence, cleanup), helper `verify.sh` (`up | doctor | pw <playwright-cli args> | evidence | down`), and `features/` map (demo, log-spend, activity, ask, create-wallet).
+- **How it isolates:** Vite on `127.0.0.1:5199` (`VERIFY_PORT`), forced practice mode (`LEDGER_URL` to a dead port), LLM keys unset so Ask uses the fallback. Never touches the user's 5173 server. Kills only the listener PID it recorded.
+- **Evidence:** `.verify/evidence/<run-id>/` (gitignored, survives `down`).
+- **Proven:** up → doctor → demo → log a $7.25 Transport spend → `/api/.../habits` shows it → down; evidence kept. Activity, Ask, create-wallet recipes were mapped from live snapshots; activity filter/receipt steps not yet executed.
+- **Not covered:** live-ledger paths (Postgres, bank corridors against Render, F3 audit), `/ops` terminal.
+
 ## Session: LazyMotion + inner tab pass (Activity, Wallet, Ask)
 - **LazyMotion:** all `motion.*` became `m.*`; `ConsumerApp` wraps in `<LazyMotion features={loadMotion} strict>`; `motion-features.ts` re-exports `domAnimation` as its own chunk. Index JS went from 87.2 to 67.7 kB gzip; features chunk 5.8 kB loads after.
 - **Activity:** removed the right-aligned summary; added `.stat-strip` (ink tile for money out, `CountUp`). Filter pill is ink-filled. List is keyed by filter so rows rise in (CSS `row-in`, first 5 staggered).

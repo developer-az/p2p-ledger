@@ -15,11 +15,11 @@ Anchored to [PRODUCT.md](./PRODUCT.md). **Operate** surfaces use standard app ch
 | Character | **Pip** (`Pip.tsx`): a lime bean whose eyes follow the cursor and who blinks. Mood comes from real numbers (`pipMood`): happy on a 3+ day streak, sleepy when nothing is logged today, worried when over pace, party after a log. One Pip per screen. |
 | Motion | `motion` (Framer Motion) for the hero: word-by-word blur reveal, card count-up, scroll reveals, springs on tilt and eyes. Ease `cubic-bezier(0.23,1,0.32,1)`. Buttons scale to 0.97 on press. `prefers-reduced-motion` turns off the tilt, reveals, breathing and the tape. |
 | Inner tabs | Activity: ink + paper stat strip (`CountUp`), ink-filled filter pill, rows rise in when the filter changes. Wallet: the Settle card shows the net position, with a hairline list of the numbers behind it underneath. Pip sits on the Ask card. Ask: Pip in the header hops once when an answer lands; chat turns rise in. |
-| Welcome | Dark full-bleed hero, condensed headline with "mess." crossed out, tilting card + Pip, a lime tape marquee, then a bento "how it works" built from real UI fragments (no stock photos), then a lime "own wallet" block. |
+| Welcome | Dark full-bleed hero, condensed headline with "mess." crossed out, tilting card + Pip, a lime tape marquee, then a bento "how it works" built from real UI fragments (no stock photos), then a lime account card: Sign in / Create account, email and password. |
 
 ## Motion stack budget (this repo)
 
-Global picks live in `~/.agents/SKILLS-ROUTING.md` ("Motion and visual stack"). Here:
+Global picks live in `~/.agents/SKILLS-ROUTING.md` ("Motion and visual stack"). The staged plan for the libraries below (each optional unit has a drop rule) is [docs/ai/PREMIUM-VISUALS-PROMPT.md](./ai/PREMIUM-VISUALS-PROMPT.md). Here:
 
 | Library | Status | Where |
 |---------|--------|-------|

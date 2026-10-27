@@ -108,7 +108,7 @@ export function SetupSheet({
     <Sheet
       open={open}
       title={mode === 'onboarding' ? 'Set your starting point' : 'Edit your snapshot'}
-      subtitle={mode === 'onboarding' ? 'Three numbers. Thirty seconds. No bank login.' : 'Change one number without changing anything else.'}
+      subtitle={mode === 'onboarding' ? 'Three numbers. Thirty seconds.' : 'Change one number without changing anything else.'}
       onClose={onClose}
     >
       <div className="setup">
@@ -142,7 +142,7 @@ export function SetupSheet({
                 </button>
               ))}
             </div>
-            <p className="hint">You can update this any time. It stays on this demo wallet.</p>
+            <p className="hint">You can update this any time. It stays on this account.</p>
           </div>
         ) : null}
 

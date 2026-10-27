@@ -18,7 +18,7 @@
 
 | | Guided demo | Personal wallet |
 |---|---|---|
-| Entry | **Start the guided demo** | **Create my wallet** |
+| Entry | **Preview a sample household** | **Create account** (email and password) |
 | Data | Seeded household + personal history for Alex, Sam, Jordan | New ledger account, no spend logs, no demo household |
 | First money | Existing demo balances/transfers | **$500 simulated deposit + one inbound corridor** so the ledger is never empty |
 | Guidance | Five-step card: baseline → log spend → log income → Patterns → weekly pace; **Demo** pill reopens it | Normal first-run setup; cash prefilled from the funded Settle wallet |
@@ -33,7 +33,7 @@ What actually runs, with no pretence:
 - A payment request is a row in `payment_requests`. Paying it is one ledger transfer with key `request-<id>-<declinedAttempts>`, so a double click moves money once and a retry after a decline uses a fresh key.
 - Splitting a bill creates one request per friend; shares always sum to the total.
 - The consumer app no longer exposes send/split; those ledger capabilities remain available to `/ops` and API clients, while Settle stays focused on spending habits.
-- Demo only: no authentication (a wallet id acts as the key), no real money, hosted event sink is `log`.
+- Dollars are still simulated. Sign-in is real: email, a scrypt password hash, and an httpOnly session cookie bound to one wallet. The sample household is not an account.
 
 # Product direction — habits + ledger-first P2P
 
@@ -80,14 +80,14 @@ SQL migration: [`assistant/sql/V1__spend_logs.sql`](../assistant/sql/V1__spend_l
 
 ## Welcome (pre-sign-in)
 
-- A single editorial hero with a live product mock, a **Try the demo** action and a **See how it works** anchor.
-- No story gate, no WASD, no extra clicks. Saved wallets on this device appear as **Welcome back**.
+- A single editorial hero with a product mock. Primary actions are **Create account** and **Sign in**. The sample household is a text link, not the front door.
+- Nav is How it works, Sign in, and Create account.
 - The mock is illustrative only; real numbers come from the account view after sign-in.
 
 ## Live demo (today)
 
 1. **Seed live household** on sign-in → alex-/sam-/jordan-* wallets with history and personal demo logs.
-2. **Create wallet** → opens a fresh ledger account, funds a **$500 welcome deposit + inbound corridor**, pre-fills the cash step, and keeps demo data out.
+2. **Create account** → email, password, and name. Opens a ledger wallet, funds a **$500 opening deposit + inbound corridor**, and keeps sample data out. Sign in returns the same wallet.
 3. **Practice mode** → full ledger without Java; created wallets live in memory until restart.
 4. **Log habits** → the two-tap sheet on Today, or `log 12 dining coffee` in the ops console.
 
@@ -97,7 +97,7 @@ SQL migration: [`assistant/sql/V1__spend_logs.sql`](../assistant/sql/V1__spend_l
 2. **Transfer detail** — `GET /api/transfers/:id` in BFF + deep links from activity.
 3. **Statement pagination** — `before` cursor on entries (API already supports it).
 4. **Multi-currency** — funding accounts per currency in schema; UI currency picker.
-5. **Auth + session-bound wallets** — OAuth; rate limits already per IP on writes.
+5. **OAuth** — email and password sessions are in place; a provider login is still later. Rate limits already apply per IP on writes.
 6. **Observability** — surface actuator health/metrics in an ops pane; outbox lag.
 7. **Habit spaces** — shared trips/roommates with optional ledger settle-up button.
 

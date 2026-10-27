@@ -32,7 +32,11 @@ This is the **integration API** for the React client: P2P actions, account views
 | Method | Path | Role |
 |--------|------|------|
 | GET | `/api/health` | Assistant up |
-| GET | `/api/bootstrap` | Live ledger reachable + practice fixture metadata |
+| GET | `/api/bootstrap` | Live ledger reachable + practice fixture metadata. `identity.persistent` is true when sign-in is stored in Postgres |
+| POST | `/api/auth/register` | `{ email, password, displayName }` → wallet + httpOnly `settle_session` cookie |
+| POST | `/api/auth/login` | `{ email, password }` → same cookie, same wallet |
+| GET | `/api/auth/session` | Current account, or `{ user: null }` |
+| POST | `/api/auth/logout` | Clears the session cookie |
 | GET | `/api/accounts?id=` | Account view (balance, 30d cashflow, activity) |
 | GET | `/api/accounts?owner=` | Resolve accounts by handle |
 | POST | `/api/accounts` | Create wallet |

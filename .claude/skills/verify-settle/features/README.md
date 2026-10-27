@@ -6,7 +6,7 @@ Maintained source for verifying user-facing behavior of the Settle app. Read thi
 
 - `verify.sh up` started a practice-mode instance at `http://127.0.0.1:5199` and `verify.sh doctor` exits 0.
 - `V=.claude/skills/verify-settle/verify.sh` in the shell; browser opened with `$V pw open http://127.0.0.1:5199/`.
-- Fresh browser session (no `settle:session` in localStorage) shows the Welcome page with `Try the 60-second demo`.
+- Fresh browser session (no `settle:session` in localStorage) shows the Welcome page with `Create account` and `Preview a sample household`.
 - Never drive an instance this run did not start (the user's 5173 server included).
 
 ## Driving conventions

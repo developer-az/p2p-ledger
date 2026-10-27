@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
 import { runAssistant, type AssistantReply } from './agent.js';
 import { booksCheck, paymentTrail, racePayment, replayPayment, tamperWithPayment } from './console.js';
@@ -43,10 +44,34 @@ import { MAX_MINOR_UI } from './money.js';
 import { LlmGuard, trimHistory } from './llm-guard.js';
 import { rateLimiter, retryAfterSeconds } from './rate-limit.js';
 import { SETTLE_RAILS, type SettleRail } from './payment-requests.js';
+import {
+  EmailTakenError,
+  InMemoryAuthStore,
+  SESSION_COOKIE,
+  SESSION_MAX_AGE_SEC,
+  dummyPasswordHash,
+  hashPassword,
+  hashSessionToken,
+  newSessionToken,
+  ownerIdFor,
+  verifyPassword,
+  type AuthStore,
+} from './auth.js';
 
 const openAccountBody = z.object({
   ownerId: z.string().min(1).max(64),
   currency: z.string().length(3).default('USD'),
+});
+
+const displayNameField = z.string().trim().min(1).max(40).regex(/^[\p{L}][\p{L}\s'.-]{0,39}$/u, 'Use your name, not a handle.');
+const registerBody = z.object({
+  email: z.string().trim().email().max(254),
+  password: z.string().min(8, 'Use at least 8 characters.').max(72),
+  displayName: displayNameField,
+});
+const loginBody = z.object({
+  email: z.string().trim().email().max(254),
+  password: z.string().min(1).max(72),
 });
 
 const depositBody = z.object({ amountMinor: z.number().int().positive().max(MAX_MINOR_UI) });
@@ -119,6 +144,8 @@ export function createApp(deps: {
   paymentRequests?: PaymentRequestStore;
   liveLedger?: LedgerWriter & LedgerAuditor;
   isLiveLedgerUp?: () => Promise<boolean>;
+  /** Tests and practice mode use memory. Production passes Postgres when a database URL is set. */
+  auth?: AuthStore;
   /** Tests inject a fake model; production loads Gemini/Claude on first chat only. */
   provider?: () => LlmProvider;
   /** Tests inject a guard with a frozen clock; production builds one per app instance. */
@@ -129,6 +156,7 @@ export function createApp(deps: {
   const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
   const paymentRequests = deps.paymentRequests ?? new InMemoryPaymentRequestStore();
   const llmGuard = deps.llmGuard ?? new LlmGuard();
+  const auth = deps.auth ?? new InMemoryAuthStore();
   const app = new Hono().basePath('/api');
   const allowChat = rateLimiter(20, 60_000);
   const allowSeed = rateLimiter(3, 60_000);
@@ -175,12 +203,111 @@ export function createApp(deps: {
         persistence: live
           ? `Accounts and transfers persist in PostgreSQL (Render).${
             databaseUrlFromEnv() ? ' Habit logs persist in spend_logs on the same database.' : ''
-          } Bookmark ?id= or use saved wallets below.`
-          : 'Practice mode is in-memory per server instance — use live seed or create wallet while ledger is online.',
+          }`
+          : 'The ledger on this server is in memory until it restarts.',
         auditCapabilities,
       },
       chat,
+      identity: { persistent: auth.persistent },
     });
+  });
+
+  const issueSession = async (c: Parameters<typeof setCookie>[0], userId: string) => {
+    const token = newSessionToken();
+    const expires = new Date(now().getTime() + SESSION_MAX_AGE_SEC * 1000);
+    await auth.saveSession(hashSessionToken(token), userId, expires);
+    const secure = (c.req.header('x-forwarded-proto') ?? new URL(c.req.url).protocol.replace(':', ''))
+      .split(',')[0]?.trim() === 'https';
+    setCookie(c, SESSION_COOKIE, token, {
+      httpOnly: true,
+      sameSite: 'Lax',
+      path: '/',
+      maxAge: SESSION_MAX_AGE_SEC,
+      secure,
+    });
+  };
+
+  app.post('/auth/register', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
+    const parsed = registerBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const field = issue?.path[0];
+      if (field === 'email') return c.json({ error: 'Enter a valid email.' }, 400);
+      if (field === 'password') return c.json({ error: 'Use at least 8 characters.' }, 400);
+      if (field === 'displayName') return c.json({ error: issue?.message ?? 'Use your name, not a handle.' }, 400);
+      return c.json({ error: 'Check the email, name, and password.' }, 400);
+    }
+    const email = parsed.data.email.toLowerCase();
+    const displayName = parsed.data.displayName.replace(/\s+/g, ' ');
+    if (await auth.findByEmail(email)) return c.json({ error: 'An account with that email already exists. Sign in instead.' }, 409);
+    const ownerId = ownerIdFor(displayName);
+    let account: { id: string; ownerId: string };
+    try {
+      account = await deps.ledger.openAccount(ownerId, 'USD');
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+    let funded = false;
+    try {
+      await welcomeBankPackage(deps.ledger, account.id, 500_00);
+      funded = true;
+    } catch {
+      /* The account still exists. The person can add money from the wallet. */
+    }
+    const userId = randomUUID();
+    try {
+      await auth.insert({
+        id: userId,
+        email,
+        passwordHash: await hashPassword(parsed.data.password),
+        displayName,
+        accountId: account.id,
+        ownerId: account.ownerId,
+      });
+    } catch (e) {
+      if (e instanceof EmailTakenError) return c.json({ error: e.message }, 409);
+      throw e;
+    }
+    await issueSession(c, userId);
+    return c.json({
+      user: { email, displayName },
+      account: { id: account.id, owner: account.ownerId },
+      funded,
+    }, 201);
+  });
+
+  app.post('/auth/login', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
+    const parsed = loginBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Enter the email and password for your account.' }, 400);
+    const email = parsed.data.email.toLowerCase();
+    const user = await auth.findByEmail(email);
+    const ok = await verifyPassword(parsed.data.password, user?.passwordHash ?? await dummyPasswordHash());
+    if (!user || !ok) return c.json({ error: 'Email or password is incorrect.' }, 401);
+    await issueSession(c, user.id);
+    return c.json({
+      user: { email: user.email, displayName: user.displayName },
+      account: { id: user.accountId, owner: user.ownerId },
+    });
+  });
+
+  app.get('/auth/session', async (c) => {
+    const token = getCookie(c, SESSION_COOKIE);
+    if (!token) return c.json({ user: null });
+    const user = await auth.userForToken(hashSessionToken(token), now());
+    if (!user) return c.json({ user: null });
+    return c.json({
+      user: { email: user.email, displayName: user.displayName },
+      account: { id: user.accountId, owner: user.ownerId },
+    });
+  });
+
+  app.post('/auth/logout', async (c) => {
+    const token = getCookie(c, SESSION_COOKIE);
+    if (token) await auth.deleteSession(hashSessionToken(token));
+    deleteCookie(c, SESSION_COOKIE, { path: '/' });
+    return c.json({ ok: true });
   });
 
   app.get('/accounts', async (c) => {

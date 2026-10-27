@@ -6,6 +6,8 @@
 - **Still simulated:** the opening balance is $500 of ledger money, not a bank. Without a database URL, the account lasts until that server process restarts, same as the in-memory ledger.
 - **Verify:** `assistant/test/auth.test.ts` covers register, the session cookie, a wrong password, a duplicate email, logout, and signing back into the same wallet.
 - **Trust copy:** the Trust tab describes the practice backend as an in-memory ledger that will not survive a server restart; this is a runtime/configuration state, not a Git commit state.
+- **Production gate:** Vercel project `p2p-ledger` has `LEDGER_URL` configured and the Render ledger is healthy, but Vercel has no `LEDGER_DATABASE_URL` or `DATABASE_URL`; add a Postgres connection before relying on persistent sign-in. The production bootstrap currently reports `live: true`.
+- **CI:** fixed the week-spend test's calendar drift by freezing its clock to the fixture's week; full assistant suite passes.
 
 ## Session: premium visuals prompt
 - Added `docs/ai/PREMIUM-VISUALS-PROMPT.md`: where the current visuals come from (routing, DESIGN.md, skills, motion-kit) and a staged `/pstack:poteto-mode` prompt that brings in View Transitions, `layoutId`/AnimatePresence, a Patterns pass, Rive Pip, a GSAP + Lenis scroll story on Welcome, and an R3F hero. Each optional unit has a bundle or LCP drop rule. Linked from `docs/DESIGN.md`. Not run yet.

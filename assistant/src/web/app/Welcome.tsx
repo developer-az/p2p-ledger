@@ -47,26 +47,27 @@ export function Welcome({
     setBusy('demo');
     setDemoError(null);
     try {
-      if (live) {
-        const seeded = await api.seedDemo();
-        const account = seeded.accounts.find((a) => a.id === seeded.focusAccountId) ?? seeded.accounts[0];
-        if (!account) throw new Error('The demo did not create any wallets.');
-        onStart({ account, household: seeded.accounts, demo: true });
-      } else {
-        let accounts: AccountRef[];
-        let focusId: string;
-        try {
-          const seeded = await api.seedPracticeDemo();
-          accounts = seeded.accounts;
-          focusId = seeded.focusAccountId;
-        } catch {
-          accounts = boot.practice.accounts.map(({ id, owner }) => ({ id, owner }));
-          focusId = boot.practice.focusAccountId;
-        }
-        const account = accounts.find((a) => a.id === focusId) ?? accounts[0];
-        if (!account) throw new Error('No practice wallets are available.');
-        onStart({ account, household: accounts, demo: true });
+      // The sample household is always the practice household, even when the
+      // live ledger is up. Seeding it through POST /api/demo used to create
+      // real accounts in PostgreSQL, and since wallet routes started requiring
+      // the owning sign-in session (commit 9709d6e), those unsigned demo
+      // accounts were then rejected with 401 on every wallet read — the demo
+      // opened, then immediately failed to load. Practice accounts are
+      // explicitly exempt from that check, and they never touch the real
+      // ledger. POST /api/demo stays for the /ops console only.
+      let accounts: AccountRef[];
+      let focusId: string;
+      try {
+        const seeded = await api.seedPracticeDemo();
+        accounts = seeded.accounts;
+        focusId = seeded.focusAccountId;
+      } catch {
+        accounts = boot.practice.accounts.map(({ id, owner }) => ({ id, owner }));
+        focusId = boot.practice.focusAccountId;
       }
+      const account = accounts.find((a) => a.id === focusId) ?? accounts[0];
+      if (!account) throw new Error('No practice wallets are available.');
+      onStart({ account, household: accounts, demo: true });
     } catch (e) {
       setDemoError((e as Error).message);
     } finally {

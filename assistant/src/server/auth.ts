@@ -27,6 +27,7 @@ export interface AuthStore {
   /** True when accounts survive a process restart (Postgres). */
   readonly persistent: boolean;
   findByEmail(email: string): Promise<AuthRecord | null>;
+  findByAccountId(accountId: string): Promise<AuthRecord | null>;
   insert(user: AuthRecord): Promise<void>;
   saveSession(tokenHash: string, userId: string, expiresAt: Date): Promise<void>;
   userForToken(tokenHash: string, now: Date): Promise<AuthRecord | null>;
@@ -86,6 +87,13 @@ export class InMemoryAuthStore implements AuthStore {
     return this.byEmail.get(email) ?? null;
   }
 
+  async findByAccountId(accountId: string): Promise<AuthRecord | null> {
+    for (const user of this.byId.values()) {
+      if (user.accountId === accountId) return user;
+    }
+    return null;
+  }
+
   async insert(user: AuthRecord): Promise<void> {
     if (this.byEmail.has(user.email)) throw new EmailTakenError();
     this.byEmail.set(user.email, user);
@@ -122,6 +130,7 @@ create table if not exists app_users (
     created_at    timestamptz not null default now()
 );
 create unique index if not exists app_users_email_idx on app_users (email);
+create index if not exists app_users_account_id_idx on app_users (account_id);
 create table if not exists app_sessions (
     token_hash text primary key,
     user_id    uuid        not null references app_users (id) on delete cascade,
@@ -167,6 +176,20 @@ export class PostgresAuthStore implements AuthStore {
       const res = await c.query(
         `select id, email, password_hash, display_name, account_id, owner_id from app_users where email = $1`,
         [email],
+      );
+      return res.rows[0] ? this.row(res.rows[0] as Record<string, unknown>) : null;
+    } finally {
+      await c.end();
+    }
+  }
+
+  async findByAccountId(accountId: string): Promise<AuthRecord | null> {
+    const c = await this.client();
+    try {
+      await this.ensureSchema(c);
+      const res = await c.query(
+        `select id, email, password_hash, display_name, account_id, owner_id from app_users where account_id = $1`,
+        [accountId],
       );
       return res.rows[0] ? this.row(res.rows[0] as Record<string, unknown>) : null;
     } finally {

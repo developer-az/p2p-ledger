@@ -5,7 +5,7 @@ import { CompositeLedger, PracticeLedger } from '../src/server/practice-ledger.j
 import { InMemorySpendLogStore } from '../src/server/spend-log.js';
 import { LedgerError, type LedgerAuditor, type LedgerReader, type LedgerWriter } from '../src/server/ledger.js';
 
-function app() {
+function app(liveUp = false, enforceWalletAuth = false) {
   const practice = new PracticeLedger();
   const reject = () => Promise.reject(new LedgerError(503, 'live ledger is down'));
   const live: LedgerReader & LedgerWriter & LedgerAuditor = {
@@ -28,7 +28,8 @@ function app() {
     practice,
     spendLogs: new InMemorySpendLogStore(),
     auth: new InMemoryAuthStore(),
-    isLiveLedgerUp: async () => false,
+    enforceWalletAuth,
+    isLiveLedgerUp: async () => liveUp,
   });
 }
 
@@ -89,6 +90,71 @@ describe('account sign-in', () => {
     expect(back.status).toBe(200);
     const signedIn = await back.json() as { account: { id: string } };
     expect(signedIn.account.id).toBe(body.account.id);
+  });
+
+  it('requires the owning session to access a registered wallet', async () => {
+    const api = app();
+    const register = async (email: string, displayName: string) => api.request('/api/auth/register', {
+      method: 'POST',
+      headers: json,
+      body: JSON.stringify({ email, password: 'correct-horse', displayName }),
+    });
+    const first = await register('one@example.com', 'One Person');
+    const firstBody = await first.json() as { account: { id: string } };
+    const firstCookie = cookieFrom(first);
+
+    const anonymous = await api.request(`/api/accounts/${firstBody.account.id}`);
+    expect(anonymous.status).toBe(401);
+
+    const queryRead = await api.request(`/api/accounts?id=${firstBody.account.id}`);
+    expect(queryRead.status).toBe(401);
+
+    const unauthenticatedRequests = await api.request(`/api/requests?accountId=${firstBody.account.id}`);
+    expect(unauthenticatedRequests.status).toBe(401);
+
+    const unauthenticatedBankAction = await api.request('/api/bank/inbound', {
+      method: 'POST',
+      headers: json,
+      body: JSON.stringify({ accountId: firstBody.account.id }),
+    });
+    expect(unauthenticatedBankAction.status).toBe(401);
+
+    const unauthenticatedTransfer = await api.request('/api/transfers', {
+      method: 'POST',
+      headers: json,
+      body: JSON.stringify({
+        sourceAccountId: firstBody.account.id,
+        destinationAccountId: '01111111-1111-7111-8111-111111111101',
+        amountMinor: 100,
+        currency: 'USD',
+      }),
+    });
+    expect(unauthenticatedTransfer.status).toBe(401);
+
+    const own = await api.request(`/api/accounts/${firstBody.account.id}`, { headers: { cookie: firstCookie } });
+    expect(own.status).toBe(200);
+    const ownQuery = await api.request(`/api/accounts?id=${firstBody.account.id}`, { headers: { cookie: firstCookie } });
+    expect(ownQuery.status).toBe(200);
+
+    const second = await register('two@example.com', 'Two Person');
+    const secondBody = await second.json() as { account: { id: string } };
+    const foreign = await api.request(`/api/accounts/${secondBody.account.id}`, { headers: { cookie: firstCookie } });
+    expect(foreign.status).toBe(403);
+    const foreignQuery = await api.request(`/api/accounts?id=${secondBody.account.id}`, { headers: { cookie: firstCookie } });
+    expect(foreignQuery.status).toBe(403);
+
+    const sample = await api.request('/api/accounts/01111111-1111-7111-8111-111111111101');
+    expect(sample.status).toBe(200);
+  });
+
+  it('does not open an unowned wallet against the live ledger', async () => {
+    const api = app(true);
+    const response = await api.request('/api/accounts', {
+      method: 'POST',
+      headers: json,
+      body: JSON.stringify({ ownerId: 'unowned', currency: 'USD' }),
+    });
+    expect(response.status).toBe(403);
   });
 
   it('refuses a short password and a missing email the same way', async () => {

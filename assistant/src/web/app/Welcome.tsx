@@ -1,21 +1,15 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { m, useReducedMotion } from 'motion/react';
 import { api, type AccountRef, type BootstrapResponse } from '../api.js';
-import { loadSavedWallets, rememberWallet } from '../wallet-store.js';
-import { displayName, money } from './format.js';
+import { money } from './format.js';
 import type { Session } from './session.js';
 import { CountUp, EASE_OUT, InView, RevealWords, TiltCard } from './motion-kit.js';
 import { Pip } from './Pip.js';
-import { Avatar, Icon, useToast } from './ui.js';
+import { Icon, useToast } from './ui.js';
 
-/** Letters and digits only, so the owner id is safe to put in a URL. */
-function ownerIdFor(name: string): string {
-  const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24);
-  const tag = Array.from(crypto.getRandomValues(new Uint8Array(2)), (b) => b.toString(16).padStart(2, '0')).join('');
-  return `${slug || 'me'}-${tag}`;
-}
+type AuthMode = 'signin' | 'create';
 
-const TAPE = ['Two taps to log', 'No bank login', 'Patterns from your own history', 'Ask in plain English', 'Real double-entry ledger', 'Pip is watching'];
+const TAPE = ['Two taps to log', 'Sign in and it stays', 'Patterns from your own history', 'Ask in plain English', 'Real double-entry ledger', 'Pip is watching'];
 
 /** Deterministic 8×7 heat pattern for the illustration, so it never flickers between renders. */
 const HEAT = Array.from({ length: 56 }, (_, i) => ((i * 37 + (i % 7) * 11) % 9) % 5);
@@ -29,18 +23,29 @@ export function Welcome({
   bootError: string | null;
   onStart: (session: Session) => void;
 }) {
+  const [mode, setMode] = useState<AuthMode>('create');
   const [name, setName] = useState('');
-  const [busy, setBusy] = useState<'demo' | 'create' | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState<'demo' | 'auth' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [demoError, setDemoError] = useState<string | null>(null);
+  const accountRef = useRef<HTMLElement>(null);
   const toast = useToast();
   const reduce = useReducedMotion();
-  const saved = loadSavedWallets().filter((w) => boot?.live ? w.live : !w.live);
   const live = boot?.live ?? false;
+  const persistent = boot?.identity?.persistent === true;
+
+  function focusAuth(next: AuthMode) {
+    setMode(next);
+    setError(null);
+    accountRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  }
 
   async function tryDemo() {
     if (!boot) return;
     setBusy('demo');
-    setError(null);
+    setDemoError(null);
     try {
       if (live) {
         const seeded = await api.seedDemo();
@@ -63,30 +68,43 @@ export function Welcome({
         onStart({ account, household: accounts, demo: true });
       }
     } catch (e) {
-      setError((e as Error).message);
+      setDemoError((e as Error).message);
     } finally {
       setBusy(null);
     }
   }
 
-  async function create() {
-    if (!name.trim() || !boot) return;
-    setBusy('create');
+  async function submitAccount() {
+    if (!boot || busy) return;
+    const trimmedEmail = email.trim();
+    const trimmedName = name.trim();
+    if (mode === 'create' && !trimmedName) {
+      setError('Enter the name you want on the account.');
+      return;
+    }
+    if (!trimmedEmail.includes('@')) {
+      setError('Enter a valid email.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Use at least 8 characters.');
+      return;
+    }
+    setBusy('auth');
     setError(null);
     try {
-      const account = await api.openAccount(ownerIdFor(name));
-      let funded = false;
-      try {
-        await api.bankWelcome(account.id);
-        funded = true;
-      } catch {
-        /* The wallet still works; the person can add money manually. */
-      }
-      rememberWallet({ id: account.id, owner: account.owner, live, savedAt: new Date().toISOString() });
-      onStart({ account, household: [], demo: false });
-      toast(funded
-        ? 'Your wallet is ready, with a $500 demo deposit and a first friend.'
-        : 'Your wallet is ready. Add money whenever you like.', { tone: 'good' });
+      const result = mode === 'create'
+        ? await api.register({ email: trimmedEmail, password, displayName: trimmedName })
+        : await api.login({ email: trimmedEmail, password });
+      onStart({ account: result.account, household: [], demo: false, user: result.user });
+      toast(
+        mode === 'create'
+          ? (result.funded
+            ? 'Your account is ready, with a $500 opening balance.'
+            : 'Your account is ready. Add money whenever you like.')
+          : `Welcome back, ${result.user.displayName}.`,
+        { tone: 'good' },
+      );
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -111,11 +129,10 @@ export function Welcome({
           </a>
           <span className="w-nav-links">
             <a href="#how">How it works</a>
-            <a href="/ops">Console</a>
-            <a href="https://github.com/developer-az/p2p-ledger" target="_blank" rel="noreferrer">GitHub ↗</a>
+            <button type="button" onClick={() => focusAuth('signin')}>Sign in</button>
           </span>
-          <button type="button" className="w-nav-cta" onClick={() => void tryDemo()} disabled={!boot || busy !== null}>
-            {busy === 'demo' ? 'Loading…' : 'Try demo'}
+          <button type="button" className="w-nav-cta w-nav-cta-volt" onClick={() => focusAuth('create')} disabled={!boot || busy !== null}>
+            Create account
           </button>
         </nav>
 
@@ -123,8 +140,8 @@ export function Welcome({
           <div className="w-copy">
             <m.p className="w-status" {...rise(0.05)}>
               <span className={`w-status-dot${live ? ' is-live' : ''}`} aria-hidden="true" />
-              {boot ? (live ? 'Live ledger online' : 'Practice mode · resets on restart') : 'Connecting…'}
-              <span className="w-status-extra"><span className="w-status-sep">/</span> no bank login</span>
+              {boot ? (live ? 'Ledger online' : 'Ready') : 'Connecting…'}
+              <span className="w-status-extra"><span className="w-status-sep">/</span> your own account</span>
             </m.p>
             <h1 id="w-title" className="w-title">
               <RevealWords text="Your money," delay={0.1} />
@@ -146,14 +163,18 @@ export function Welcome({
               Log a spend in two taps. See your week in one glance. A tiny bean named Pip keeps the streak honest.
             </m.p>
             <m.div className="w-actions" {...rise(0.62)}>
-              <button type="button" className="w-btn w-btn-volt" onClick={() => void tryDemo()} disabled={!boot || busy !== null}>
-                {busy === 'demo' ? 'Setting up…' : 'Try the 60-second demo'}
+              <button type="button" className="w-btn w-btn-volt" onClick={() => focusAuth('create')} disabled={!boot || busy !== null}>
+                Create account
                 <span className="w-btn-arrow" aria-hidden="true">→</span>
               </button>
-              <a className="w-btn w-btn-ghost" href="#own-wallet">Start my own</a>
+              <button type="button" className="w-btn w-btn-ghost" onClick={() => focusAuth('signin')}>Sign in</button>
             </m.div>
-            <m.p className="w-fine" {...rise(0.72)}>Pretend dollars. Real double-entry ledger underneath.</m.p>
-            {error ? <p className="w-error" role="alert">{error}</p> : null}
+            <m.p className="w-fine" {...rise(0.72)}>
+              <button type="button" className="w-text-btn" onClick={() => void tryDemo()} disabled={!boot || busy !== null}>
+                {busy === 'demo' ? 'Opening the sample…' : 'Preview a sample household'}
+              </button>
+            </m.p>
+            {demoError ? <p className="w-error" role="alert">{demoError}</p> : null}
             {bootError ? <p className="w-error" role="alert">{bootError}</p> : null}
           </div>
 
@@ -200,24 +221,6 @@ export function Welcome({
           </div>
         </div>
       </section>
-
-      {saved.length > 0 ? (
-        <section className="w-section w-back" aria-labelledby="back">
-          <p className="w-kicker">This device</p>
-          <h2 id="back">Welcome back.</h2>
-          <ul className="w-back-list">
-            {saved.slice(0, 4).map((w) => (
-              <li key={w.id}>
-                <button type="button" onClick={() => onStart({ account: { id: w.id, owner: w.owner }, household: [] })}>
-                  <Avatar owner={w.owner} />
-                  <span>{displayName(w.owner)}</span>
-                  <Icon name="chevron" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
 
       <section className="w-section" id="how" aria-labelledby="how-title">
         <InView>
@@ -267,25 +270,44 @@ export function Welcome({
         </div>
       </section>
 
-      <section className="w-section w-own" id="own-wallet" aria-labelledby="own-title">
+      <section className="w-section w-own" id="own-wallet" ref={accountRef} aria-labelledby="own-title">
         <InView className="w-own-card">
           <div className="w-own-copy">
-            <p className="w-kicker">Your own wallet</p>
-            <h2 id="own-title" className="w-h2">Start clean.<br />Keep it yours.</h2>
-            <p>Your logs live on your wallet id. The demo household never touches them. You start with a $500 simulated deposit so it’s never empty.</p>
+            <p className="w-kicker">Your account</p>
+            <h2 id="own-title" className="w-h2">{mode === 'create' ? <>Start clean.<br />Keep it yours.</> : <>Welcome back.<br />Pick up where you left off.</>}</h2>
+            <p>One email, one wallet. The sample household never mixes with yours. You start with a $500 opening balance so it isn’t empty.</p>
           </div>
-          <form className="w-own-form" onSubmit={(e) => { e.preventDefault(); void create(); }}>
-            <label htmlFor="wallet-name">First name</label>
-            <div className="w-own-row">
-              <input id="wallet-name" maxLength={40} placeholder="e.g. Sam" autoComplete="given-name" value={name} onChange={(e) => setName(e.target.value)} />
-              <button className="w-btn w-btn-volt" type="submit" disabled={!name.trim() || busy !== null}>
-                {busy === 'create' ? 'Creating…' : 'Create wallet'}
-              </button>
+          <form className="w-own-form" onSubmit={(e) => { e.preventDefault(); void submitAccount(); }}>
+            <div className="w-auth-switch" role="tablist" aria-label="Account">
+              <button type="button" role="tab" aria-selected={mode === 'signin'} onClick={() => { setMode('signin'); setError(null); }}>Sign in</button>
+              <button type="button" role="tab" aria-selected={mode === 'create'} onClick={() => { setMode('create'); setError(null); }}>Create account</button>
             </div>
+            {mode === 'create' ? (
+              <label className="w-field" htmlFor="account-name">Name
+                <input id="account-name" maxLength={40} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+              </label>
+            ) : null}
+            <label className="w-field" htmlFor="account-email">Email
+              <input id="account-email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </label>
+            <label className="w-field" htmlFor="account-password">Password
+              <input
+                id="account-password"
+                type="password"
+                autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
+                minLength={8}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </label>
+            <button className="w-btn w-btn-ink" type="submit" disabled={!boot || busy !== null}>
+              {busy === 'auth' ? 'Working…' : mode === 'create' ? 'Create account' : 'Sign in'}
+            </button>
+            {error ? <p className="w-error" role="alert">{error}</p> : null}
             <p className="w-fine">
-              {live
-                ? 'Persists in PostgreSQL. No password yet: this is a demo identity, not a bank login.'
-                : 'Practice mode: this wallet lives in memory and resets when the server restarts.'}
+              {persistent
+                ? 'Saved with the ledger. Sign in with this email next time.'
+                : 'On this server the account lasts until the process restarts. A connected database keeps it.'}
             </p>
           </form>
         </InView>

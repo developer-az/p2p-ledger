@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { AccountView } from '../src/web/api.js';
 import { recordIncomeMutation, recordSpendMutation } from '../src/web/app/ledger-mutations.js';
 
@@ -61,10 +61,16 @@ describe('ledger-mutations', () => {
   });
 
   it('updates week spend and projected cash when spend is logged', () => {
-    const mutation = recordSpendMutation('acct-1', 2500, 'dining');
-    const next = mutation.apply(baseView());
-    expect(next?.patterns?.week.spentMinor).toBe(12_640);
-    expect(next?.finance?.projectedCash).toBe('$2,623.60'); // cash + income − period spend
-    expect(next?.spendEntries?.[0]?.amountMinor).toBe(2500);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-21T12:00:00.000Z'));
+    try {
+      const mutation = recordSpendMutation('acct-1', 2500, 'dining');
+      const next = mutation.apply(baseView());
+      expect(next?.patterns?.week.spentMinor).toBe(12_640);
+      expect(next?.finance?.projectedCash).toBe('$2,623.60'); // cash + income − period spend
+      expect(next?.spendEntries?.[0]?.amountMinor).toBe(2500);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

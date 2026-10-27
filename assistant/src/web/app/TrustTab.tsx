@@ -72,7 +72,7 @@ export function TrustTab({ me, data, embedded = false }: { me: AccountRef; data:
             <p style={{ marginTop: 6 }} className="muted">
               {integrity.entryCount.toLocaleString()} ledger lines across {integrity.transferCount.toLocaleString()} payments sum to {integrity.entriesSum}.
               {' '}{integrity.unbalancedTransfers} unbalanced, {integrity.accountsDrifted} wallets out of step. Checked {dateTimeLabel(integrity.checkedAt)}.
-              {integrity.source === 'practice' ? ' This is the in-memory practice ledger.' : ''}
+              {integrity.source === 'practice' ? ' This ledger is in memory on this server and will not survive a restart.' : ''}
             </p>
           </div>
         )}
@@ -97,10 +97,10 @@ export function TrustTab({ me, data, embedded = false }: { me: AccountRef; data:
       </section>
 
       <section className="card stack-sm">
-        <h2>What this demo is not</h2>
+        <h2>What Settle is not</h2>
         <ul style={{ margin: 0, paddingLeft: 18 }} className="muted">
           <li>Not a bank. No real money moves and nothing here is regulated.</li>
-          <li>No passwords or sign-in yet. A wallet is identified by its id, so anyone with the id could act as that wallet.</li>
+          <li>Sign-in is email and password. The ledger still addresses a wallet by its id.</li>
           <li>The hosted version publishes events to a log, not to a message broker.</li>
         </ul>
         <div className="row-wrap">

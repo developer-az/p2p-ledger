@@ -1,5 +1,19 @@
 # Engineering Handoff (latest)
 
+## Session: email sign-in, account-first welcome
+- **Auth:** `POST /api/auth/register|login|logout` and `GET /api/auth/session`. Passwords are scrypt hashes. The session is an httpOnly `settle_session` cookie (30 days), stored in memory or in Postgres `app_users` / `app_sessions` when `DATABASE_URL` or `LEDGER_DATABASE_URL` is set (`identity.persistent` on bootstrap).
+- **Welcome:** Create account and Sign in are the nav and the hero. The sample household is a text link. The name-only create-wallet form is gone. Signed-in chrome says Sign out and shows the email. The footer no longer calls the product a demo.
+- **Still simulated:** the opening balance is $500 of ledger money, not a bank. Without a database URL, the account lasts until that server process restarts, same as the in-memory ledger.
+- **Verify:** `assistant/test/auth.test.ts` covers register, the session cookie, a wrong password, a duplicate email, logout, and signing back into the same wallet.
+- **Trust copy:** the Trust tab describes the practice backend as an in-memory ledger that will not survive a server restart; this is a runtime/configuration state, not a Git commit state.
+- **Production gate:** Vercel project `p2p-ledger` has `LEDGER_URL` configured and the Render ledger is healthy, but Vercel has no `LEDGER_DATABASE_URL` or `DATABASE_URL`; add a Postgres connection before relying on persistent sign-in. The production bootstrap currently reports `live: true`.
+- **CI:** fixed the week-spend test's calendar drift by freezing its clock to the fixture's week; full assistant suite passes.
+- **Wallet auth (uncommitted on `feat/email-sign-in`):** `createApp` now enforces the session on wallet routes via `walletAccessError` / `ownerAccessError` / `protectWalletPath` in `app.ts`. A registered wallet needs its owner's cookie (401 signed out, 403 for another user's wallet). Practice fixture accounts stay public. Enforcement is on when the auth store is persistent or `NODE_ENV=production` (`enforceWalletAuth` overrides). `POST /api/accounts` returns 403 while the live ledger is up, so wallets are created only through registration. `AuthStore.findByAccountId` and an `app_users.account_id` index support the lookup. Tests in `auth.test.ts`; `tsc` clean, 176 tests pass.
+- **Still blocking launch:** add a Postgres URL (`LEDGER_DATABASE_URL`/`DATABASE_URL`) to Vercel, then merge PR #20 and redeploy the frontend. Not yet checked in a browser that the UI handles 401s from these routes.
+
+## Session: premium visuals prompt
+- Added `docs/ai/PREMIUM-VISUALS-PROMPT.md`: where the current visuals come from (routing, DESIGN.md, skills, motion-kit) and a staged `/pstack:poteto-mode` prompt that brings in View Transitions, `layoutId`/AnimatePresence, a Patterns pass, Rive Pip, a GSAP + Lenis scroll story on Welcome, and an R3F hero. Each optional unit has a bundle or LCP drop rule. Linked from `docs/DESIGN.md`. Not run yet.
+
 ## Session: verify-settle verification skill
 - **Added** `.claude/skills/verify-settle/`: `SKILL.md` (launch, doctor, drive, evidence, cleanup), helper `verify.sh` (`up | doctor | pw <playwright-cli args> | evidence | down`), and `features/` map (demo, log-spend, activity, ask, create-wallet).
 - **How it isolates:** Vite on `127.0.0.1:5199` (`VERIFY_PORT`), forced practice mode (`LEDGER_URL` to a dead port), LLM keys unset so Ask uses the fallback. Never touches the user's 5173 server. Kills only the listener PID it recorded.

@@ -709,6 +709,7 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .menu button:hover, .app .menu a:hover { background: var(--surface-2); }
 .app .menu hr { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
 .app .menu-label { padding: 6px 12px; font-size: 0.7rem; color: var(--faint); font-weight: 750; text-transform: uppercase; letter-spacing: 0.08em; }
+.app .menu-email { padding: 4px 12px 8px; color: var(--muted); font-size: 0.78rem; }
 
 .app .footer {
   max-width: 1180px; margin: 0 auto; padding: 26px 24px 46px;
@@ -1041,15 +1042,15 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 }
 .app .w-nav { display: flex; align-items: center; gap: 24px; padding: 20px clamp(20px, 4vw, 56px); max-width: 1440px; width: 100%; margin: 0 auto; }
 .app .w-logo { display: inline-flex; align-items: center; gap: 9px; color: #f4f3ee; text-decoration: none; font-family: var(--display); font-weight: 750; font-size: 1.5rem; letter-spacing: -0.055em; font-stretch: 85%; }
-.app .w-nav-links { display: flex; gap: 26px; margin-left: auto; font-size: 0.9rem; }
-.app .w-nav-links a { color: rgb(244 243 238 / 62%); text-decoration: none; transition: color 160ms ease; }
-.app .w-nav-links a:hover { color: #f4f3ee; }
+.app .w-nav-links { display: flex; align-items: center; gap: 26px; margin-left: auto; font-size: 0.9rem; }
+.app .w-nav-links a, .app .w-nav-links button { color: rgb(244 243 238 / 62%); text-decoration: none; background: none; border: 0; padding: 0; font-size: 0.9rem; transition: color 160ms ease; }
+.app .w-nav-links a:hover, .app .w-nav-links button:hover { color: #f4f3ee; }
 .app .w-nav-cta {
-  border: 1px solid rgb(255 255 255 / 18%); background: rgb(255 255 255 / 6%); color: #f4f3ee;
-  border-radius: 999px; padding: 9px 16px; font-weight: 600; font-size: 0.88rem;
+  border: 1px solid transparent; background: var(--lime); color: #0e0e10;
+  border-radius: 999px; padding: 9px 16px; font-weight: 650; font-size: 0.88rem;
   transition: background-color 160ms ease, transform 160ms var(--ease-out);
 }
-.app .w-nav-cta:hover:not(:disabled) { background: rgb(255 255 255 / 12%); }
+.app .w-nav-cta:hover:not(:disabled) { background: #d6ff4d; }
 .app .w-nav-cta:active:not(:disabled), .app .w-btn:active:not(:disabled) { transform: scale(0.97); }
 .app .w-nav-cta:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -1080,7 +1081,7 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .w-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
 .app .w-btn {
   display: inline-flex; align-items: center; gap: 10px; min-height: 54px; padding: 0 24px;
-  border-radius: 999px; font-weight: 600; font-size: 1rem; text-decoration: none; border: 1px solid transparent;
+  border-radius: 999px; font-weight: 600; font-size: 1rem; text-decoration: none; border: 1px solid transparent; background: transparent;
   transition: transform 160ms var(--ease-out), background-color 160ms ease, box-shadow 220ms ease;
 }
 .app .w-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -1088,9 +1089,12 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .w-btn-volt:hover:not(:disabled) { box-shadow: 0 12px 40px -10px rgb(200 245 59 / 60%); }
 .app .w-btn-arrow { transition: transform 220ms var(--ease-out); }
 .app .w-btn-volt:hover .w-btn-arrow { transform: translateX(4px); }
-.app .w-btn-ghost { color: #f4f3ee; border-color: rgb(255 255 255 / 18%); }
+.app .w-btn-ghost { background: transparent; color: #f4f3ee; border-color: rgb(255 255 255 / 18%); }
 .app .w-btn-ghost:hover { background: rgb(255 255 255 / 7%); }
 .app .w-fine { margin-top: 16px; font: 400 0.78rem var(--mono); color: rgb(244 243 238 / 45%); }
+.app .w-text-btn { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.app .w-text-btn:hover { color: #f4f3ee; }
+.app .w-text-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .app .w-error { margin-top: 14px; color: #ff9b8f; font-size: 0.9rem; }
 
 .app .w-stage { position: relative; justify-self: center; width: min(100%, 470px); }
@@ -1184,18 +1188,25 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 
 .app .w-own { padding-bottom: clamp(64px, 9vw, 120px); }
 .app .w-own-card {
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: end;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 420px); gap: 40px; align-items: center;
   padding: clamp(28px, 5vw, 56px); border-radius: 32px; background: var(--lime); color: #0e0e10;
 }
 .app .w-own-card .w-kicker { color: rgb(14 14 16 / 60%); }
 .app .w-own-copy > p:last-child { margin-top: 16px; max-width: 44ch; color: rgb(14 14 16 / 72%); }
-.app .w-own-form { display: grid; gap: 10px; }
-.app .w-own-form label { font: 500 0.74rem var(--mono); text-transform: uppercase; letter-spacing: 0.06em; }
-.app .w-own-row { display: flex; gap: 8px; padding: 6px; border-radius: 999px; background: #0e0e10; }
-.app .w-own-row:focus-within { box-shadow: 0 0 0 3px rgb(14 14 16 / 25%); }
-.app .w-own-row input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: #f4f3ee; padding: 0 16px; font-size: 1.05rem; }
-.app .w-own-row input::placeholder { color: rgb(244 243 238 / 40%); }
-.app .w-own .w-fine { color: rgb(14 14 16 / 60%); margin-top: 4px; }
+.app .w-own-form { display: grid; gap: 12px; }
+.app .w-auth-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 999px; background: rgb(14 14 16 / 10%); }
+.app .w-auth-switch button { min-height: 36px; border: 0; border-radius: 999px; background: transparent; font-weight: 650; color: rgb(14 14 16 / 68%); }
+.app .w-auth-switch button[aria-selected="true"] { background: #0e0e10; color: #f4f3ee; }
+.app .w-field { display: grid; gap: 6px; font: 500 0.74rem var(--mono); text-transform: uppercase; letter-spacing: 0.06em; }
+.app .w-field input {
+  min-height: 48px; border: 0; border-radius: 14px; background: #0e0e10; color: #f4f3ee;
+  padding: 0 16px; font: 400 1rem var(--font); letter-spacing: 0; text-transform: none;
+}
+.app .w-field input:focus { outline: 3px solid rgb(14 14 16 / 22%); outline-offset: 1px; }
+.app .w-btn-ink { background: #0e0e10; color: #f4f3ee; width: 100%; justify-content: center; }
+.app .w-btn-ink:hover:not(:disabled) { background: #242428; }
+.app .w-own .w-fine { color: rgb(14 14 16 / 62%); margin-top: 0; }
+.app .w-own .w-error { color: #7a1c14; margin-top: 0; }
 
 /* ---------- Preloader ---------- */
 

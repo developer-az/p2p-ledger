@@ -356,6 +356,18 @@ export interface BootstrapResponse {
     auditCapabilities?: boolean;
   };
   chat?: { provider: string; configured: boolean; model?: string; configHint?: string };
+  identity?: { persistent: boolean };
+}
+
+export interface AuthUser {
+  email: string;
+  displayName: string;
+}
+
+export interface AuthResult {
+  user: AuthUser;
+  account: AccountRef;
+  funded?: boolean;
 }
 
 export interface ToolCall { tool: string; args: unknown; result: unknown; ms: number }
@@ -422,6 +434,12 @@ export interface StoppedPayment {
 
 export const api = {
   bootstrap: () => call<BootstrapResponse>('/api/bootstrap'),
+  authSession: () => call<{ user: AuthUser | null; account?: AccountRef }>('/api/auth/session'),
+  register: (body: { email: string; password: string; displayName: string }) =>
+    call<AuthResult>('/api/auth/register', { method: 'POST', body: JSON.stringify(body) }),
+  login: (body: { email: string; password: string }) =>
+    call<AuthResult>('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
+  logout: () => call<{ ok: boolean }>('/api/auth/logout', { method: 'POST', body: '{}' }),
   seedDemo: () => call<{ accounts: AccountRef[]; focusAccountId: string; stopped: StoppedPayment }>('/api/demo', { method: 'POST' }),
   seedPracticeDemo: () => call<{ accounts: AccountRef[]; focusAccountId: string; seeded: boolean }>('/api/demo/practice', { method: 'POST' }),
   findAccounts: (owner: string) => call<AccountRef[]>(`/api/accounts?owner=${encodeURIComponent(owner)}`),

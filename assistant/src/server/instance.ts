@@ -4,6 +4,7 @@ import { CompositeLedger, isLiveLedgerReachable, PracticeLedger } from './practi
 import { createSpendLogStore } from './spend-log.js';
 import { createPersonalFinanceStore } from './personal-finance.js';
 import { createPaymentRequestStore } from './payment-requests.js';
+import { createAuthStore } from './auth.js';
 
 let spendLogs = createSpendLogStore();
 let personalFinance = createPersonalFinanceStore();
@@ -28,5 +29,6 @@ export function createAssistantApi() {
     spendLogs,
     personalFinance,
     paymentRequests,
+    auth: createAuthStore(),
   });
 }

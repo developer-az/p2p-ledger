@@ -20,10 +20,12 @@ export function WalletTab({
   me,
   data,
   actions,
+  viewer = { demo: false },
 }: {
   me: AccountRef;
   data: WalletData | null;
   actions: WalletActions;
+  viewer?: { email?: string; demo: boolean };
 }) {
   const [showTrust, setShowTrust] = useState(false);
   if (!data) return <Skeleton height={420} />;
@@ -101,7 +103,7 @@ export function WalletTab({
               <div><p className="eyebrow">The records</p><h2 id="ledger-title">Ledger balance</h2></div>
               <span className="pill">{money(plan.ledgerMinor)}</span>
             </div>
-            <p className="muted">The exact demo ledger balance behind deposits and statements. It is separate from the cash snapshot you track yourself.</p>
+            <p className="muted">The ledger balance behind deposits and statements. It is separate from the cash snapshot you track yourself.</p>
             <div className="row-wrap" style={{ marginTop: 14 }}>
               <button type="button" className="btn btn-primary btn-sm" onClick={actions.addMoney}><Icon name="bank" size={16} /> Add money</button>
               <a className="btn btn-sm" href={`/api/accounts/${encodeURIComponent(me.id)}/statement.txt`}><Icon name="download" size={16} /> Statement</a>
@@ -131,12 +133,19 @@ export function WalletTab({
 
           {showTrust ? <TrustTab me={me} data={data} embedded /> : null}
 
-          <section className="card demo-note">
-            <p className="eyebrow">Demo, honestly</p>
-            <p className="muted">No real money moves. No passwords yet. A wallet is identified by its id on this device, so treat this as a showcase.</p>
+          <section className="card">
+            <p className="eyebrow">{viewer.demo ? 'Sample household' : 'Your account'}</p>
+            <p className="muted">
+              {viewer.demo
+                ? 'This is the sample household. Create an account when you want a wallet that is only yours.'
+                : viewer.email
+                  ? `Signed in as ${viewer.email}. Your logs stay on this account.`
+                  : 'This wallet is open on this browser.'}
+            </p>
             <div className="row-wrap" style={{ marginTop: 12 }}>
-              <a className="btn btn-sm" href="/ops">Engineering console</a>
-              <button type="button" className="btn btn-sm btn-danger" onClick={actions.signOut}><Icon name="logout" size={16} /> Leave wallet</button>
+              <button type="button" className="btn btn-sm btn-danger" onClick={actions.signOut}>
+                <Icon name="logout" size={16} /> {viewer.demo ? 'Exit sample' : 'Sign out'}
+              </button>
             </div>
           </section>
         </div>

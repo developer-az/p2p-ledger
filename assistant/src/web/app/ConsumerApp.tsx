@@ -74,9 +74,18 @@ export function ConsumerApp() {
     setSession(next);
   }, []);
   const signOut = useCallback(() => {
+    void api.logout().catch(() => undefined);
     clearSession();
     setSession(null);
   }, []);
+
+  useEffect(() => {
+    if (loadSession()) return;
+    void api.authSession().then((body) => {
+      if (!body.user || !body.account) return;
+      start({ account: body.account, household: [], demo: false, user: body.user });
+    }).catch(() => undefined);
+  }, [start]);
 
   return (
     <LazyMotion features={loadMotion} strict>
@@ -94,9 +103,14 @@ export function ConsumerApp() {
             </>
           )}
           <footer className="footer">
-            <span>Settle is a demo. No real money moves.</span>
-            <a href="/ops">Engineering console</a>
-            <a href="https://github.com/developer-az/p2p-ledger" target="_blank" rel="noreferrer">GitHub</a>
+            <span>
+              {session?.demo
+                ? 'Sample household. This is not your account.'
+                : session?.user
+                  ? `Signed in as ${session.user.email}`
+                  : 'Create an account to keep a wallet of your own.'}
+            </span>
+            <a href="/ops">Console</a>
           </footer>
         </div>
       </ToastProvider>
@@ -121,6 +135,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
 }) {
   const me = session.account;
   const demo = session.demo === true;
+  const who = session.user?.displayName ?? displayName(me.owner);
   const demoKey = `settle:demo-progress:${me.id}`;
   const { data, error, refreshing, reload, run: walletRun } = useWallet(me.id);
   const [tab, setTab] = useState<Tab>('today');
@@ -269,10 +284,11 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
             </button>
             <div className="menu-wrap" ref={menuRef}>
               <button type="button" className="wallet-chip" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
-                <Avatar owner={me.owner} small />{displayName(me.owner)}
+                <Avatar owner={me.owner} small />{who}
               </button>
               {menu ? (
                 <div className="menu" role="menu">
+                  {session.user ? <p className="menu-email">{session.user.email}</p> : null}
                   {session.household.length > 1 ? (
                     <>
                       <p className="menu-label">View as</p>
@@ -290,7 +306,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
                   <a role="menuitem" href={`/api/accounts/${encodeURIComponent(me.id)}/statement.txt`}><Icon name="download" size={18} />Download statement</a>
                   <button type="button" role="menuitem" onClick={() => { setMenu(false); go('wallet'); }}><Icon name="wallet" size={18} />Wallet & trust</button>
                   <hr />
-                  <button type="button" role="menuitem" onClick={onSignOut}><Icon name="logout" size={18} />Leave this wallet</button>
+                  <button type="button" role="menuitem" onClick={onSignOut}><Icon name="logout" size={18} />{demo ? 'Exit sample' : 'Sign out'}</button>
                 </div>
               ) : null}
             </div>
@@ -310,6 +326,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
           {tab === 'today' ? (
             <Home
               me={me}
+              name={session.user?.displayName}
               data={data}
               guide={demoGuide}
               cheer={burst}
@@ -347,6 +364,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
             <WalletTab
               me={me}
               data={data}
+              viewer={{ email: session.user?.email, demo }}
               actions={{
                 setup: () => { setSetupMode(data?.view.moneyProfile?.walletCashMinor == null ? 'onboarding' : 'edit'); setSetupStep(0); setSheet('setup'); },
                 logIncome: () => setSheet('income'),

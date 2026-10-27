@@ -33,7 +33,7 @@ function weekDots(days: { date: string; count: number }[], todayKey: string) {
   }));
 }
 
-export function Home({ me, data, actions, guide, cheer = 0 }: { me: AccountRef; data: WalletData | null; actions: HomeActions; guide?: ReactNode; cheer?: number }) {
+export function Home({ me, name, data, actions, guide, cheer = 0 }: { me: AccountRef; name?: string; data: WalletData | null; actions: HomeActions; guide?: ReactNode; cheer?: number }) {
   const feed = useMemo(() => (data ? buildFeed(data.view) : []), [data]);
   if (!data) return <HomeSkeleton />;
 
@@ -53,7 +53,7 @@ export function Home({ me, data, actions, guide, cheer = 0 }: { me: AccountRef; 
         <Pip mood={mood} cheer={cheer} size={76} onTap={() => actions.logSpend()} />
         <div className="hello-copy">
           <p className="eyebrow">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</p>
-          <h1>Hi, {displayName(me.owner)}.</h1>
+          <h1>Hi, {name ?? displayName(me.owner)}.</h1>
           <p className="pip-says" aria-live="polite">{pipLine(mood, plan)}</p>
         </div>
         <div className="hello-badges">

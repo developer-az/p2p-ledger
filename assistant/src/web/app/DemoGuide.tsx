@@ -102,7 +102,7 @@ export function DemoGuide({ progress, onStep, onDismiss, onExit, onPatterns }: D
             <button type="button" className="btn btn-primary btn-sm" onClick={() => next && onStep(next.id)}>
               {next?.action}
             </button>
-            <button type="button" className="btn btn-sm" onClick={onExit}>Start my own wallet</button>
+            <button type="button" className="btn btn-sm" onClick={onExit}>Create an account</button>
           </>
         )}
       </div>

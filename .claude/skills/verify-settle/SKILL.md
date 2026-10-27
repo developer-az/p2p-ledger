@@ -36,7 +36,7 @@ Read-only. Checks: our process is alive, the port is owned by our PID (not the u
 ```bash
 V=.claude/skills/verify-settle/verify.sh
 $V pw open http://127.0.0.1:5199/
-$V pw click "getByRole('button', { name: 'Try the 60-second demo' }).first()"
+$V pw click "getByRole('button', { name: 'Preview a sample household' })"
 $V pw --raw snapshot | grep 'heading "Hi, Alex."'
 $V pw click "getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Activity' })"
 ```

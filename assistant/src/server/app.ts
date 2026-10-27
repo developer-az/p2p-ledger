@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
 import { runAssistant, type AssistantReply } from './agent.js';
 import { booksCheck, paymentTrail, racePayment, replayPayment, tamperWithPayment } from './console.js';
@@ -43,10 +44,34 @@ import { MAX_MINOR_UI } from './money.js';
 import { LlmGuard, trimHistory } from './llm-guard.js';
 import { rateLimiter, retryAfterSeconds } from './rate-limit.js';
 import { SETTLE_RAILS, type SettleRail } from './payment-requests.js';
+import {
+  EmailTakenError,
+  InMemoryAuthStore,
+  SESSION_COOKIE,
+  SESSION_MAX_AGE_SEC,
+  dummyPasswordHash,
+  hashPassword,
+  hashSessionToken,
+  newSessionToken,
+  ownerIdFor,
+  verifyPassword,
+  type AuthStore,
+} from './auth.js';
 
 const openAccountBody = z.object({
   ownerId: z.string().min(1).max(64),
   currency: z.string().length(3).default('USD'),
+});
+
+const displayNameField = z.string().trim().min(1).max(40).regex(/^[\p{L}][\p{L}\s'.-]{0,39}$/u, 'Use your name, not a handle.');
+const registerBody = z.object({
+  email: z.string().trim().email().max(254),
+  password: z.string().min(8, 'Use at least 8 characters.').max(72),
+  displayName: displayNameField,
+});
+const loginBody = z.object({
+  email: z.string().trim().email().max(254),
+  password: z.string().min(1).max(72),
 });
 
 const depositBody = z.object({ amountMinor: z.number().int().positive().max(MAX_MINOR_UI) });
@@ -119,6 +144,10 @@ export function createApp(deps: {
   paymentRequests?: PaymentRequestStore;
   liveLedger?: LedgerWriter & LedgerAuditor;
   isLiveLedgerUp?: () => Promise<boolean>;
+  /** Tests and practice mode use memory. Production passes Postgres when a database URL is set. */
+  auth?: AuthStore;
+  /** Practice fixtures stay public; production requires registered identities for all other wallets. */
+  enforceWalletAuth?: boolean;
   /** Tests inject a fake model; production loads Gemini/Claude on first chat only. */
   provider?: () => LlmProvider;
   /** Tests inject a guard with a frozen clock; production builds one per app instance. */
@@ -129,6 +158,8 @@ export function createApp(deps: {
   const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
   const paymentRequests = deps.paymentRequests ?? new InMemoryPaymentRequestStore();
   const llmGuard = deps.llmGuard ?? new LlmGuard();
+  const auth = deps.auth ?? new InMemoryAuthStore();
+  const enforceWalletAuth = deps.enforceWalletAuth ?? (auth.persistent || process.env.NODE_ENV === 'production');
   const app = new Hono().basePath('/api');
   const allowChat = rateLimiter(20, 60_000);
   const allowSeed = rateLimiter(3, 60_000);
@@ -136,6 +167,49 @@ export function createApp(deps: {
   const allowProof = rateLimiter(12, 60_000);
   const clientIp = (c: { req: { header(name: string): string | undefined } }) =>
     c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
+  const sessionUser = async (c: Context) => {
+    const token = getCookie(c, SESSION_COOKIE);
+    return token ? auth.userForToken(hashSessionToken(token), now()) : null;
+  };
+  const walletAccessError = async (c: Context, accountId: string): Promise<Response | null> => {
+    const owner = await auth.findByAccountId(accountId);
+    if (!owner) {
+      if (deps.practice.isPracticeAccount(accountId) || !enforceWalletAuth) return null;
+      return c.json({ error: 'Sign in to access this wallet.' }, 401);
+    }
+    const user = await sessionUser(c);
+    if (!user) return c.json({ error: 'Sign in to access this wallet.' }, 401);
+    if (user.id !== owner.id || user.accountId !== accountId) {
+      return c.json({ error: 'This wallet belongs to another account.' }, 403);
+    }
+    return null;
+  };
+  const walletsAccessError = async (c: Context, ...accountIds: string[]): Promise<Response | null> => {
+    for (const accountId of accountIds) {
+      const denied = await walletAccessError(c, accountId);
+      if (denied) return denied;
+    }
+    return null;
+  };
+  const ownerAccessError = async (c: Context, ownerId: string): Promise<Response | null> => {
+    if ((await deps.practice.accountsByOwner(ownerId)).length > 0) return null;
+    const user = await sessionUser(c);
+    if (!user) return c.json({ error: 'Sign in to access this wallet.' }, 401);
+    if (user.ownerId !== ownerId) return c.json({ error: 'This wallet belongs to another account.' }, 403);
+    return null;
+  };
+  const protectWalletPath = async (c: Context, next: () => Promise<void>) => {
+    const accountId = c.req.param('id');
+    if (!accountId) {
+      await next();
+      return;
+    }
+    const denied = await walletAccessError(c, accountId);
+    if (denied) return denied;
+    await next();
+  };
+  app.use('/accounts/:id', protectWalletPath);
+  app.use('/accounts/:id/*', protectWalletPath);
 
   app.get('/health', (c) => c.json({ status: 'ok' }));
 
@@ -175,26 +249,134 @@ export function createApp(deps: {
         persistence: live
           ? `Accounts and transfers persist in PostgreSQL (Render).${
             databaseUrlFromEnv() ? ' Habit logs persist in spend_logs on the same database.' : ''
-          } Bookmark ?id= or use saved wallets below.`
-          : 'Practice mode is in-memory per server instance — use live seed or create wallet while ledger is online.',
+          }`
+          : 'The ledger on this server is in memory until it restarts.',
         auditCapabilities,
       },
       chat,
+      identity: { persistent: auth.persistent },
     });
+  });
+
+  const issueSession = async (c: Parameters<typeof setCookie>[0], userId: string) => {
+    const token = newSessionToken();
+    const expires = new Date(now().getTime() + SESSION_MAX_AGE_SEC * 1000);
+    await auth.saveSession(hashSessionToken(token), userId, expires);
+    const secure = (c.req.header('x-forwarded-proto') ?? new URL(c.req.url).protocol.replace(':', ''))
+      .split(',')[0]?.trim() === 'https';
+    setCookie(c, SESSION_COOKIE, token, {
+      httpOnly: true,
+      sameSite: 'Lax',
+      path: '/',
+      maxAge: SESSION_MAX_AGE_SEC,
+      secure,
+    });
+  };
+
+  app.post('/auth/register', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
+    const parsed = registerBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      const field = issue?.path[0];
+      if (field === 'email') return c.json({ error: 'Enter a valid email.' }, 400);
+      if (field === 'password') return c.json({ error: 'Use at least 8 characters.' }, 400);
+      if (field === 'displayName') return c.json({ error: issue?.message ?? 'Use your name, not a handle.' }, 400);
+      return c.json({ error: 'Check the email, name, and password.' }, 400);
+    }
+    const email = parsed.data.email.toLowerCase();
+    const displayName = parsed.data.displayName.replace(/\s+/g, ' ');
+    if (await auth.findByEmail(email)) return c.json({ error: 'An account with that email already exists. Sign in instead.' }, 409);
+    const ownerId = ownerIdFor(displayName);
+    let account: { id: string; ownerId: string };
+    try {
+      account = await deps.ledger.openAccount(ownerId, 'USD');
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400);
+    }
+    let funded = false;
+    try {
+      await welcomeBankPackage(deps.ledger, account.id, 500_00);
+      funded = true;
+    } catch {
+      /* The account still exists. The person can add money from the wallet. */
+    }
+    const userId = randomUUID();
+    try {
+      await auth.insert({
+        id: userId,
+        email,
+        passwordHash: await hashPassword(parsed.data.password),
+        displayName,
+        accountId: account.id,
+        ownerId: account.ownerId,
+      });
+    } catch (e) {
+      if (e instanceof EmailTakenError) return c.json({ error: e.message }, 409);
+      throw e;
+    }
+    await issueSession(c, userId);
+    return c.json({
+      user: { email, displayName },
+      account: { id: account.id, owner: account.ownerId },
+      funded,
+    }, 201);
+  });
+
+  app.post('/auth/login', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
+    const parsed = loginBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Enter the email and password for your account.' }, 400);
+    const email = parsed.data.email.toLowerCase();
+    const user = await auth.findByEmail(email);
+    const ok = await verifyPassword(parsed.data.password, user?.passwordHash ?? await dummyPasswordHash());
+    if (!user || !ok) return c.json({ error: 'Email or password is incorrect.' }, 401);
+    await issueSession(c, user.id);
+    return c.json({
+      user: { email: user.email, displayName: user.displayName },
+      account: { id: user.accountId, owner: user.ownerId },
+    });
+  });
+
+  app.get('/auth/session', async (c) => {
+    const token = getCookie(c, SESSION_COOKIE);
+    if (!token) return c.json({ user: null });
+    const user = await auth.userForToken(hashSessionToken(token), now());
+    if (!user) return c.json({ user: null });
+    return c.json({
+      user: { email: user.email, displayName: user.displayName },
+      account: { id: user.accountId, owner: user.ownerId },
+    });
+  });
+
+  app.post('/auth/logout', async (c) => {
+    const token = getCookie(c, SESSION_COOKIE);
+    if (token) await auth.deleteSession(hashSessionToken(token));
+    deleteCookie(c, SESSION_COOKIE, { path: '/' });
+    return c.json({ ok: true });
   });
 
   app.get('/accounts', async (c) => {
     const id = c.req.query('id');
     const limit = Number(c.req.query('limit') ?? '30');
-    if (id) return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, id, Math.min(limit, 100), now, tzOffsetFrom(c)));
+    if (id) {
+      const denied = await walletAccessError(c, id);
+      if (denied) return denied;
+      return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, id, Math.min(limit, 100), now, tzOffsetFrom(c)));
+    }
     const owner = c.req.query('owner');
     if (!owner) return c.json({ error: 'owner is required' }, 400);
+    const denied = await ownerAccessError(c, owner);
+    if (denied) return denied;
     const accounts = await deps.ledger.accountsByOwner(owner);
     return c.json(accounts.map((a) => ({ id: a.id, owner: a.ownerId })));
   });
 
   app.post('/accounts', async (c) => {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (deps.isLiveLedgerUp && await deps.isLiveLedgerUp()) {
+      return c.json({ error: 'Create a wallet through account registration.' }, 403);
+    }
     const parsed = openAccountBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
     const account = await deps.ledger.openAccount(parsed.data.ownerId, parsed.data.currency);
@@ -206,6 +388,8 @@ export function createApp(deps: {
     if (!accountId || !z.string().uuid().safeParse(accountId).success) {
       return c.json({ error: 'accountId is required' }, 400);
     }
+    const denied = await walletAccessError(c, accountId);
+    if (denied) return denied;
     const peers = await listPeers(deps.ledger, accountId);
     return c.json(peers);
   });
@@ -216,6 +400,8 @@ export function createApp(deps: {
     if (!accountId || !peerId || !z.string().uuid().safeParse(accountId).success || !z.string().uuid().safeParse(peerId).success) {
       return c.json({ error: 'accountId and peerId are required' }, 400);
     }
+    const denied = await walletAccessError(c, accountId);
+    if (denied) return denied;
     const days = Math.min(Number(c.req.query('days') ?? '30'), 365);
     const view = await peerLedgerView(deps.ledger, accountId, peerId, days, 40);
     return view ? c.json(view) : c.json({ error: 'Peer not found' }, 404);
@@ -239,6 +425,8 @@ export function createApp(deps: {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = transferBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+    const denied = await walletAccessError(c, parsed.data.sourceAccountId);
+    if (denied) return denied;
     const key = c.req.header('Idempotency-Key') ?? randomUUID();
     try {
       const transfer = await deps.ledger.transfer(parsed.data, key);
@@ -268,6 +456,8 @@ export function createApp(deps: {
     const parsed = requestBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
     const { requesterAccountId, payers, memo } = parsed.data;
+    const denied = await walletAccessError(c, requesterAccountId);
+    if (denied) return denied;
     const requester = await deps.ledger.getAccount(requesterAccountId);
     if (!requester || requester.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
     const ids = payers.map((p) => p.accountId);
@@ -310,6 +500,8 @@ export function createApp(deps: {
     if (!accountId || !z.string().uuid().safeParse(accountId).success) {
       return c.json({ error: 'accountId is required' }, 400);
     }
+    const denied = await walletAccessError(c, accountId);
+    if (denied) return denied;
     if (deps.ledger.isPracticeAccount(accountId)) await seedPracticeRequests();
     const rows = await paymentRequests.listFor(accountId, 60);
     const views = await Promise.all(rows.map(requestView));
@@ -329,6 +521,8 @@ export function createApp(deps: {
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
     const request = await paymentRequests.get(c.req.param('id'));
     if (!request) return c.json({ error: 'Request not found' }, 404);
+    const denied = await walletAccessError(c, parsed.data.accountId);
+    if (denied) return denied;
     if (request.payerAccountId !== parsed.data.accountId) return c.json({ error: 'Only the person asked can pay this' }, 403);
     if (request.status !== 'PENDING' && request.status !== 'PAID') {
       return c.json({ error: `This request was ${request.status.toLowerCase()}`, request: await requestView(request) }, 409);
@@ -365,6 +559,8 @@ export function createApp(deps: {
       if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
       const request = await paymentRequests.get(c.req.param('id'));
       if (!request) return c.json({ error: 'Request not found' }, 404);
+      const denied = await walletAccessError(c, parsed.data.accountId);
+      if (denied) return denied;
       if (request[who] !== parsed.data.accountId) {
         return c.json({ error: action === 'decline' ? 'Only the person asked can decline' : 'Only the person who asked can cancel' }, 403);
       }
@@ -385,6 +581,8 @@ export function createApp(deps: {
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
     const request = await paymentRequests.get(c.req.param('id'));
     if (!request) return c.json({ error: 'Request not found' }, 404);
+    const denied = await walletAccessError(c, parsed.data.accountId);
+    if (denied) return denied;
     if (request.requesterAccountId !== parsed.data.accountId) {
       return c.json({ error: 'Only the person who asked can record an outside settlement' }, 403);
     }
@@ -566,6 +764,8 @@ export function createApp(deps: {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = bankBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    const denied = await walletAccessError(c, parsed.data.accountId);
+    if (denied) return denied;
     const account = await deps.ledger.getAccount(parsed.data.accountId);
     if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
     try {
@@ -579,6 +779,8 @@ export function createApp(deps: {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = bankBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    const denied = await walletAccessError(c, parsed.data.accountId);
+    if (denied) return denied;
     const account = await deps.ledger.getAccount(parsed.data.accountId);
     if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
     try {
@@ -592,6 +794,8 @@ export function createApp(deps: {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = bankBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    const denied = await walletAccessError(c, parsed.data.accountId);
+    if (denied) return denied;
     const account = await deps.ledger.getAccount(parsed.data.accountId);
     if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
     try {
@@ -604,6 +808,8 @@ export function createApp(deps: {
   app.get('/trail', async (c) => {
     const parsed = paymentBody.safeParse({ accountId: c.req.query('account'), transferId: c.req.query('transfer') });
     if (!parsed.success) return c.json({ error: 'Payment not found' }, 404);
+    const denied = await walletAccessError(c, parsed.data.accountId);
+    if (denied) return denied;
     const trail = await paymentTrail(deps.ledger, parsed.data.accountId, parsed.data.transferId);
     return trail ? c.json(trail) : c.json({ error: 'Payment not found' }, 404);
   });
@@ -623,6 +829,8 @@ export function createApp(deps: {
     if (!allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = paymentBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    const denied = await walletAccessError(c, parsed.data.accountId);
+    if (denied) return denied;
     const result = await replayPayment(deps.ledger, parsed.data.accountId, parsed.data.transferId);
     return result ? c.json(result) : c.json({ error: 'Payment not found' }, 404);
   });
@@ -631,6 +839,8 @@ export function createApp(deps: {
     if (!allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = raceBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    const denied = await walletAccessError(c, parsed.data.fromAccountId);
+    if (denied) return denied;
     const result = await racePayment(deps.ledger, parsed.data.accountId, parsed.data.fromAccountId);
     if (!result) return c.json({ error: 'Account not found' }, 404);
     return 'error' in result ? c.json(result, 400) : c.json(result);
@@ -640,6 +850,8 @@ export function createApp(deps: {
     if (!allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = paymentBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    const denied = await walletAccessError(c, parsed.data.accountId);
+    if (denied) return denied;
     const result = await tamperWithPayment(deps.ledger, parsed.data.accountId, parsed.data.transferId);
     if (!result) return c.json({ error: 'Payment not found' }, 404);
     return 'error' in result ? c.json(result, 400) : c.json(result);
@@ -667,6 +879,8 @@ export function createApp(deps: {
     const parsed = chatBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid request', issues: parsed.error.issues }, 400);
     const { accountId, messages: rawMessages } = parsed.data;
+    const denied = await walletAccessError(c, accountId);
+    if (denied) return denied;
     const account = await deps.ledger.getAccount(accountId);
     if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
 

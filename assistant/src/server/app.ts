@@ -717,6 +717,13 @@ export function createApp(deps: {
     });
   });
 
+  /**
+   * Live-ledger seed for the /ops console only. Do NOT use this for the
+   * consumer "Preview a sample household" button: it creates real accounts
+   * in PostgreSQL, and those unsigned accounts are rejected (401) by the
+   * wallet-ownership check on every later read. The consumer preview uses
+   * POST /demo/practice instead (see Welcome.tsx).
+   */
   app.post('/demo', async (c) => {
     if (!allowSeed(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const live = deps.isLiveLedgerUp ? await deps.isLiveLedgerUp() : false;

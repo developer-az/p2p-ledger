@@ -34,4 +34,6 @@ jobs:
         if: vars.ASSISTANT_URL != ''
         env:
           ASSISTANT_URL: ${{ vars.ASSISTANT_URL }}
+          SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
         run: npm run smoke:api

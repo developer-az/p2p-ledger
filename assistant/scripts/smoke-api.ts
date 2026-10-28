@@ -17,7 +17,8 @@ if (!base) {
 
 type Check = {
   name: string;
-  run: () => Promise<void>;
+  /** Resolves to a string to report the check as skipped. */
+  run: () => Promise<void | string>;
 };
 
 function assertNotVercelEdge404(res: Response, bodyText: string): void {
@@ -102,18 +103,39 @@ const checks: Check[] = [
     },
   },
   {
-    name: 'GET /api/peers for live wallet (no practice bleed)',
+    name: 'POST /api/accounts is closed to anonymous callers on the live ledger',
     run: async () => {
-      const created = await fetchJson('/api/accounts', {
+      // Live wallets are created only through registration; an anonymous open must be refused.
+      // A practice-only deployment (no live ledger) still answers 201.
+      const { res } = await fetchJson('/api/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ownerId: `smoke-peer-${Date.now()}`, currency: 'USD' }),
+        body: JSON.stringify({ ownerId: `smoke-anon-${Date.now()}`, currency: 'USD' }),
       });
-      if (created.res.status !== 201) {
-        throw new Error(`open account ${created.res.status}`);
-      }
-      const id = (created.json as { id: string }).id;
-      const { res, json } = await fetchJson(`/api/peers?accountId=${id}`);
+      if (res.status !== 403 && res.status !== 201) throw new Error(`status ${res.status}`);
+    },
+  },
+  {
+    name: 'GET /api/peers for live wallet (owner session, no practice bleed)',
+    run: async () => {
+      const email = process.env.SMOKE_EMAIL;
+      const password = process.env.SMOKE_PASSWORD;
+      if (!email || !password) return 'skipped: set SMOKE_EMAIL and SMOKE_PASSWORD for a registered smoke account';
+      const login = await fetchJson('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (login.res.status !== 200) throw new Error(`login ${login.res.status}`);
+      const cookie = login.res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+      if (!cookie) throw new Error('login set no session cookie');
+      const id = (login.json as { account?: { id?: string } }).account?.id;
+      if (!id) throw new Error('login returned no account id');
+
+      const anon = await fetchJson(`/api/peers?accountId=${id}`);
+      if (anon.res.status !== 401) throw new Error(`anonymous peers read must be 401, got ${anon.res.status}`);
+
+      const { res, json } = await fetchJson(`/api/peers?accountId=${id}`, { headers: { cookie } });
       if (res.status !== 200) throw new Error(`status ${res.status}`);
       const peers = json as { id: string }[];
       if (!Array.isArray(peers)) throw new Error('expected array');
@@ -121,6 +143,7 @@ const checks: Check[] = [
       if (practiceBleed) {
         throw new Error(`live wallet must not list practice peers: ${JSON.stringify(json)}`);
       }
+      await fetchJson('/api/auth/logout', { method: 'POST', headers: { cookie } }).catch(() => undefined);
     },
   },
   {
@@ -185,8 +208,9 @@ async function main(): Promise<void> {
   for (const check of checks) {
     const t0 = Date.now();
     try {
-      await check.run();
-      console.log(`  ok  ${check.name} (${Date.now() - t0}ms)`);
+      const skipped = await check.run();
+      if (typeof skipped === 'string') console.log(`  --  ${check.name} (${skipped})`);
+      else console.log(`  ok  ${check.name} (${Date.now() - t0}ms)`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(`  FAIL ${check.name}: ${msg}`);

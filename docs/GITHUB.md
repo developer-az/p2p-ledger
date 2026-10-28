@@ -14,6 +14,7 @@ This repo is designed to run as **your** stack: Java ledger (source of truth) + 
 | Name | Type | Purpose |
 |------|------|---------|
 | `ASSISTANT_URL` | **Variable** | Vercel (or other) deployment of `assistant/`. Keep-warm pings `/api/health`; **assistant CI** runs `npm run smoke:api` when this is set. |
+| `SMOKE_EMAIL` / `SMOKE_PASSWORD` | **Secrets** | Optional. A registered account on the live deployment used only by the smoke test to check that a live wallet needs its owner's session and lists no practice peers. Without them that check is skipped. |
 | `GEMINI_API_KEY` | **Secret** | Vercel chat + optional **assistant eval (Gemini)** workflow (manual only; not run on every push). |
 | `LLM_MODEL` | **Variable** (Vercel) | Optional; default in code is **`gemini-2.0-flash-lite`** (lighter free-tier usage than `flash-latest`). |
 | `OPENROUTER_API_KEY` | **Secret** (Vercel) | Optional backup when Gemini returns 429 (auto-failover if both keys set). |

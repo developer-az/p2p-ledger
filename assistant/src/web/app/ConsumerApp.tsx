@@ -40,6 +40,23 @@ type Sheetname = null | 'add' | 'log' | 'income' | 'setup' | 'settle';
 
 const DEMO_STEPS: DemoStepId[] = ['baseline', 'log', 'income', 'patterns', 'pace'];
 
+function readFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeFlag(key: string, on: boolean): void {
+  try {
+    if (on) localStorage.setItem(key, '1');
+    else localStorage.removeItem(key);
+  } catch {
+    /* private mode: the choice lasts for this visit */
+  }
+}
+
 function loadDemoProgress(key: string): DemoStepId[] {
   try {
     const raw = localStorage.getItem(key);
@@ -59,7 +76,6 @@ export function ConsumerApp() {
   const [bootReady, setBootReady] = useState(false);
 
   useEffect(() => {
-    document.title = 'Settle · know your money, keep the habit';
     document.documentElement.classList.add('settle-smooth-scroll');
     const minSplash = new Promise<void>((resolve) => { window.setTimeout(resolve, 720); });
     void Promise.all([
@@ -68,6 +84,10 @@ export function ConsumerApp() {
     ]).finally(() => setBootReady(true));
     return () => document.documentElement.classList.remove('settle-smooth-scroll');
   }, []);
+
+  useEffect(() => {
+    if (!session) document.title = 'Settle · know your money, keep the habit';
+  }, [session]);
 
   const start = useCallback((next: Session) => {
     saveSession(next);
@@ -118,9 +138,19 @@ export function ConsumerApp() {
   );
 }
 
-function Brand() {
+/** The logo always leads home: out of the sample household to the welcome page, or to Today in a wallet. */
+function Brand({ onHome }: { onHome?: () => void }) {
   return (
-    <a className="brand" href="/" aria-label="Settle home">
+    <a
+      className="brand"
+      href="/"
+      aria-label="Settle home"
+      onClick={onHome ? (e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+        e.preventDefault();
+        onHome();
+      } : undefined}
+    >
       <Pip size={30} track={false} mood="happy" />
       <span className="brand-word">settle</span>
     </a>
@@ -140,7 +170,13 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   const { data, error, refreshing, reload, run: walletRun } = useWallet(me.id);
   const [tab, setTab] = useState<Tab>('today');
   const [demoProgress, setDemoProgress] = useState<DemoStepId[]>(() => (demo ? loadDemoProgress(demoKey) : []));
-  const [showDemoGuide, setShowDemoGuide] = useState(true);
+  const guideHiddenKey = `settle:demo-guide-hidden:${me.id}`;
+  const [showDemoGuide, setShowDemoGuideState] = useState(() => !readFlag(guideHiddenKey));
+  /** Showing or hiding the quest card is remembered per sample wallet. */
+  const setShowDemoGuide = useCallback((show: boolean) => {
+    setShowDemoGuideState(show);
+    writeFlag(guideHiddenKey, !show);
+  }, [guideHiddenKey]);
   const [sheet, setSheet] = useState<Sheetname>(null);
   const [setupMode, setSetupMode] = useState<'onboarding' | 'edit'>('onboarding');
   const [setupStep, setSetupStep] = useState<0 | 1 | 2>(0);
@@ -181,8 +217,19 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
       return;
     }
     setDemoProgress(loadDemoProgress(demoKey));
-    setShowDemoGuide(true);
-  }, [demo, demoKey]);
+    setShowDemoGuideState(!readFlag(guideHiddenKey));
+  }, [demo, demoKey, guideHiddenKey]);
+
+  // Escape closes the quest card, unless a sheet or the menu has the key first.
+  useEffect(() => {
+    if (!demo || !showDemoGuide || sheet || menu) return;
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      setShowDemoGuide(false);
+    };
+    document.addEventListener('keydown', esc);
+    return () => document.removeEventListener('keydown', esc);
+  }, [demo, showDemoGuide, sheet, menu, setShowDemoGuide]);
 
   useEffect(() => {
     if (!demo || !data) return;
@@ -204,6 +251,11 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
     setSetupStep(0);
     setSheet('setup');
   }, [data, me.id]);
+
+  useEffect(() => {
+    const label = TABS.find((x) => x.id === tab)?.label ?? 'Today';
+    document.title = `${label} · Settle`;
+  }, [tab]);
 
   const go = (t: Tab) => {
     if (demo && t === 'patterns') markDemo('patterns');
@@ -274,7 +326,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
     <>
       <header className="topbar">
         <div className="topbar-inner">
-          <Brand />
+          <Brand onHome={demo ? onSignOut : () => { setMenu(false); setSheet(null); go('today'); }} />
           {demo ? <button type="button" className="demo-pill" onClick={() => setShowDemoGuide(true)} title="Open the guided demo">Demo</button> : null}
           <span className="spacer" />
           <div className="top-actions">

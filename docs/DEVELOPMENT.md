@@ -57,8 +57,19 @@ cp .env.example .env.local
 | `OPENROUTER_API_KEY` | Backup / alternate LLM | Auto-failover when Gemini returns 429 |
 | `LLM_PROVIDER` | No | `gemini` (default) or `anthropic` |
 | `LLM_MODEL` | No | Default **`gemini-2.0-flash-lite`** (higher free-tier headroom than `flash-latest`) |
+| `RESEND_API_KEY` | For password-reset email | [Resend](https://resend.com) API key. Without it (or `MAIL_FROM`), development prints the reset link to the server log and production sends nothing. |
+| `MAIL_FROM` | For password-reset email | Sender on a domain verified in Resend, e.g. `Settle <no-reply@anthony-zhou.com>` |
+| `APP_URL` | Recommended in production | Public origin used in emailed links, e.g. `https://ledger.anthony-zhou.com`. Falls back to the request's origin. |
 
-Vercel production also needs `LEDGER_URL` pointing at your Render ledger URL.
+Vercel production also needs `LEDGER_URL` pointing at your Render ledger URL, and `RESEND_API_KEY`, `MAIL_FROM` and `APP_URL` for password-reset emails.
+
+### Password reset
+
+Sign in → **Forgot password?** asks for an email and always answers the same way, whether or not an account uses it (no account enumeration; the response also takes a fixed minimum time). A known email gets a link to `/reset-password#token=…`. The token is 32 random bytes, stored only as a SHA-256 hash in `app_password_resets`, expires after 30 minutes, works once, and asking again cancels the previous link. A successful reset signs out every other session. The token lives in the URL fragment, so it never reaches server logs or `Referer` headers.
+
+### Security headers
+
+`src/server/security-headers.ts` is the single source: a page CSP (own scripts only, Google Fonts, no framing), HSTS, `nosniff`, `Referrer-Policy`, `X-Frame-Options: DENY`, `Permissions-Policy` and COOP. The API adds them to every response, the Node server adds them to the static site, and `vercel.json` repeats them for Vercel (a test keeps it in sync). The Vite dev server does not send the CSP.
 
 ## Run modes
 

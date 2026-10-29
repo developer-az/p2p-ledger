@@ -49,7 +49,7 @@ export function InsightsTab({
           <p className="page-sub">Built only from what you log. No bank feed, no guessing.</p>
         </div>
         <div className="patterns-head-badges">
-          <span className="streak-pill"><span aria-hidden="true">🔥</span><strong>{plan.streakDays}</strong><span>day streak</span></span>
+          <span className="streak-pill"><span className="streak-flame"><Icon name="flame" size={15} /></span><strong>{plan.streakDays}</strong><span>day streak</span></span>
           <button type="button" className="btn btn-sm" onClick={onAsk}><Icon name="sparkle" size={16} /> Ask about this</button>
         </div>
       </header>

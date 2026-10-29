@@ -60,8 +60,8 @@ export function DemoGuide({ progress, onStep, onDismiss, onExit, onPatterns }: D
       <div className="demo-guide-top">
         <span className="demo-badge"><Icon name="sparkle" size={13} /> Your quest</span>
         <span className="demo-count">{Math.min(done.size, STEPS.length)} / {STEPS.length} done</span>
-        <button type="button" className="demo-hide" onClick={onDismiss} aria-label="Hide demo guide">
-          <Icon name="x" size={16} />
+        <button type="button" className="demo-hide" onClick={onDismiss} aria-label="Close quest" title="Close (Esc)">
+          <Icon name="x" size={18} />
         </button>
       </div>
       <div className="demo-guide-body">

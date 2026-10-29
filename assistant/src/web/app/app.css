@@ -1284,3 +1284,40 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
   .pip-breathe, .pip-z, .app .w-tape-track, .app .feed-in .list > li, .app .chat-turn { animation: none !important; }
   .app * { transition-duration: 0.01ms !important; }
 }
+
+/* ---------- Icons and icon controls: one size scale, one stroke, one hover/focus language ---------- */
+.app .icon { display: block; flex-shrink: 0; }
+.app .icon-btn,
+.app .demo-hide {
+  width: 40px; height: 40px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+  display: inline-grid; place-items: center; cursor: pointer;
+  transition: transform 160ms var(--ease-out), color 150ms ease, border-color 150ms ease, background-color 150ms ease;
+}
+.app .demo-hide { width: 36px; height: 36px; margin-left: auto; }
+.app .icon-btn:hover,
+.app .demo-hide:hover { color: var(--ink); border-color: var(--line-strong); background: var(--surface-2); }
+.app .icon-btn:active,
+.app .demo-hide:active { transform: scale(0.94); }
+.app .icon-btn:focus-visible,
+.app .demo-hide:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 50%; }
+.app .streak-flame { display: inline-grid; place-items: center; color: #f97316; }
+.app .quick .icon { color: var(--muted); }
+.app .quick-primary .icon { color: currentColor; }
+.app .top-ask .icon, .app .btn .icon, .app .menu .icon { flex-shrink: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .app .icon-btn, .app .demo-hide { transition: none; }
+  .app .icon-btn:active, .app .demo-hide:active { transform: none; }
+}
+
+/* ---------- Password reset ---------- */
+.app .w-own .w-link { justify-self: start; background: none; border: 0; padding: 4px 0; color: #0e0e10; font-weight: 600; font-size: 0.9rem; text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+.app .w-own .w-ok { margin: 0; color: #14532d; font-size: 0.9rem; }
+.app .w-own .w-forgot-intro { margin: 0; }
+.app.reset-page { min-height: 100vh; }
+.app .reset-main { display: grid; place-items: start center; padding-top: clamp(32px, 8vh, 96px); }
+.app .reset-card { width: min(440px, 100%); display: grid; gap: 14px; }
+.app .reset-card h1 { font-size: 1.5rem; letter-spacing: -0.03em; }
+.app .reset-form { display: grid; gap: 14px; }
+.app .reset-form .link-btn { justify-self: center; }
+.app .reset-error { color: var(--bad); font-size: 0.9rem; margin: 0; }

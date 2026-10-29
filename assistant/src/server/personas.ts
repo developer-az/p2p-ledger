@@ -5,7 +5,7 @@ export interface AccountPersona {
 }
 
 export const PERSONA_BY_OWNER: Record<string, AccountPersona> = {
-  alex: {
+  anthony: {
     role: 'Director of Finance (AP)',
     blurb: 'Spend analytics demo — declined $12k vendor prepay (new-account rule). Ask about cashflow.',
   },

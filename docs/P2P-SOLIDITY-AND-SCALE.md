@@ -13,7 +13,7 @@ This document answers three questions for **p2p-ledger**:
 | **Who holds balances** | PostgreSQL behind `ledger-service` (custodial system of record) | Smart contract state + user wallets |
 | **Who can move money** | Anyone with API access + valid account ids; fraud rules in Java | Anyone with gas + correct calldata; rules in Solidity |
 | **Trust model** | You trust the operator + DB integrity (double-entry, append-only entries) | You trust contract code + chain consensus |
-| **Peer** | **Counterparties** (Alex pays Sam) via transfers between accounts | **Counterparties** settle on-chain or via L2 |
+| **Peer** | **Counterparties** (Anthony pays Sam) via transfers between accounts | **Counterparties** settle on-chain or via L2 |
 
 The product is **P2P in the payments sense**: person A sends value to person B without a separate “merchant acquirer” in the middle. It is **not** P2P in the **blockchain** sense (no global replicated state, no wallet signatures on every transfer).
 

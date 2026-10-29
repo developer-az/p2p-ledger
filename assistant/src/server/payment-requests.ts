@@ -11,7 +11,7 @@ export type RequestStatus = 'PENDING' | 'PAID' | 'DECLINED' | 'CANCELLED';
 export const SETTLE_RAILS = ['zelle', 'cashapp', 'venmo', 'cash', 'crypto', 'other'] as const;
 export type SettleRail = (typeof SETTLE_RAILS)[number];
 
-/** "Sam asks Alex for $18.00 for Uber." Money only moves when the payer accepts. */
+/** "Sam asks Anthony for $18.00 for Uber." Money only moves when the payer accepts. */
 export interface PaymentRequest {
   id: string;
   requesterAccountId: string;

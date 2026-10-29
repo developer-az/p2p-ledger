@@ -22,7 +22,7 @@ describe('parseMoney', () => {
 
 describe('names', () => {
   it('drops the random suffix on demo owners', () => {
-    expect(displayName('alex-4b4792')).toBe('Alex');
+    expect(displayName('anthony-4b4792')).toBe('Anthony');
     expect(displayName('sam')).toBe('Sam');
     expect(displayName('system:funding')).toBe('Your bank');
     expect(initials('jordan-1a2b3c')).toBe('J');

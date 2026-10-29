@@ -3,7 +3,7 @@
  * Usage: ASSISTANT_URL=https://p2p-ledger-pi.vercel.app npm run smoke:api
  */
 import {
-  PRACTICE_ALEX,
+  PRACTICE_ANTHONY,
   PRACTICE_SAM,
 } from '../src/server/practice-ledger.js';
 
@@ -78,23 +78,23 @@ const checks: Check[] = [
   {
     name: 'GET /api/accounts?id=',
     run: async () => {
-      const { res, json } = await fetchJson(`/api/accounts?id=${PRACTICE_ALEX}`);
+      const { res, json } = await fetchJson(`/api/accounts?id=${PRACTICE_ANTHONY}`);
       if (res.status !== 200) throw new Error(`status ${res.status}`);
-      if ((json as { owner?: string }).owner !== 'alex') throw new Error(`body ${JSON.stringify(json)}`);
+      if ((json as { owner?: string }).owner !== 'anthony') throw new Error(`body ${JSON.stringify(json)}`);
     },
   },
   {
     name: 'GET /api/accounts/:id',
     run: async () => {
-      const { res, json } = await fetchJson(`/api/accounts/${PRACTICE_ALEX}`);
+      const { res, json } = await fetchJson(`/api/accounts/${PRACTICE_ANTHONY}`);
       if (res.status !== 200) throw new Error(`status ${res.status}`);
-      if ((json as { owner?: string }).owner !== 'alex') throw new Error(`body ${JSON.stringify(json)}`);
+      if ((json as { owner?: string }).owner !== 'anthony') throw new Error(`body ${JSON.stringify(json)}`);
     },
   },
   {
     name: 'GET /api/peers?accountId= (practice)',
     run: async () => {
-      const { res, json } = await fetchJson(`/api/peers?accountId=${PRACTICE_ALEX}`);
+      const { res, json } = await fetchJson(`/api/peers?accountId=${PRACTICE_ANTHONY}`);
       if (res.status !== 200) throw new Error(`status ${res.status}`);
       const peers = json as { id: string }[];
       if (!Array.isArray(peers) || !peers.some((p) => p.id === PRACTICE_SAM)) {
@@ -149,7 +149,7 @@ const checks: Check[] = [
   {
     name: 'GET /api/accounts/:id/entries',
     run: async () => {
-      const { res, json } = await fetchJson(`/api/accounts/${PRACTICE_ALEX}/entries?limit=10`);
+      const { res, json } = await fetchJson(`/api/accounts/${PRACTICE_ANTHONY}/entries?limit=10`);
       if (res.status !== 200) throw new Error(`status ${res.status}`);
       const entries = (json as { entries?: unknown[] }).entries;
       if (!entries?.length) throw new Error('expected statement lines');
@@ -158,7 +158,7 @@ const checks: Check[] = [
   {
     name: 'GET /api/accounts/:id/statement.txt',
     run: async () => {
-      const res = await fetch(`${base}/api/accounts/${PRACTICE_ALEX}/statement.txt`, { signal: AbortSignal.timeout(timeoutMs) });
+      const res = await fetch(`${base}/api/accounts/${PRACTICE_ANTHONY}/statement.txt`, { signal: AbortSignal.timeout(timeoutMs) });
       const text = await res.text();
       assertNotVercelEdge404(res, text);
       if (res.status !== 200) throw new Error(`status ${res.status}`);
@@ -168,7 +168,7 @@ const checks: Check[] = [
   {
     name: 'POST /api/accounts/:id/deposits',
     run: async () => {
-      const { res, json } = await fetchJson(`/api/accounts/${PRACTICE_ALEX}/deposits`, {
+      const { res, json } = await fetchJson(`/api/accounts/${PRACTICE_ANTHONY}/deposits`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amountMinor: 1 }),
@@ -187,7 +187,7 @@ const checks: Check[] = [
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sourceAccountId: PRACTICE_ALEX,
+          sourceAccountId: PRACTICE_ANTHONY,
           destinationAccountId: PRACTICE_SAM,
           amountMinor: 1,
           currency: 'USD',

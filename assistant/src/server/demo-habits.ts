@@ -4,7 +4,7 @@ import type { SpendCategory, SpendLogStore } from './spend-log.js';
 const MS_DAY = 86_400_000;
 const MS_HOUR = 3_600_000;
 
-export type DemoPersona = 'alex' | 'sam' | 'jordan';
+export type DemoPersona = 'anthony' | 'sam' | 'jordan';
 
 interface DemoSpend {
   daysAgo: number;
@@ -23,7 +23,7 @@ interface DemoProfile {
   spends: DemoSpend[];
 }
 
-const ALEX: DemoProfile = {
+const ANTHONY: DemoProfile = {
   cashMinor: 320_000,
   creditMinor: 45_000,
   weeklyBudgetMinor: 45_000,
@@ -100,7 +100,7 @@ const JORDAN: DemoProfile = {
   ],
 };
 
-const PROFILES: Record<DemoPersona, DemoProfile> = { alex: ALEX, sam: SAM, jordan: JORDAN };
+const PROFILES: Record<DemoPersona, DemoProfile> = { anthony: ANTHONY, sam: SAM, jordan: JORDAN };
 
 function at(now: Date, daysAgo: number, hoursAgo = 0): string {
   return new Date(now.getTime() - daysAgo * MS_DAY - hoursAgo * MS_HOUR).toISOString();

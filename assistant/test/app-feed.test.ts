@@ -3,7 +3,7 @@ import type { AccountView } from '../src/web/api.js';
 import { buildFeed, filterFeed } from '../src/web/app/feed.js';
 
 const view = {
-  id: 'a', owner: 'alex-4b4792', balance: '$100.00', currency: 'USD', openedAt: '2026-10-01T00:00:00Z',
+  id: 'a', owner: 'anthony-4b4792', balance: '$100.00', currency: 'USD', openedAt: '2026-10-01T00:00:00Z',
   summary: { sent: '$0.00', received: '$0.00', deposited: '$0.00', stopped: '$0.00', declinedCount: 1 },
   transfers: [
     { transferId: 't1', direction: 'sent', counterparty: 'sam-4b4792', amount: '$42.50', status: 'COMPLETED', declineReason: null, declineExplanation: null, memo: 'Pizza night', createdAt: '2026-10-18T12:00:00Z', counterpartyAccountId: 's', kind: 'TRANSFER' },

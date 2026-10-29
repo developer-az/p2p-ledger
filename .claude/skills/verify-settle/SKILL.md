@@ -37,7 +37,7 @@ Read-only. Checks: our process is alive, the port is owned by our PID (not the u
 V=.claude/skills/verify-settle/verify.sh
 $V pw open http://127.0.0.1:5199/
 $V pw click "getByRole('button', { name: 'Preview a sample household' })"
-$V pw --raw snapshot | grep 'heading "Hi, Alex."'
+$V pw --raw snapshot | grep 'heading "Hi, Anthony."'
 $V pw click "getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Activity' })"
 ```
 
@@ -47,7 +47,7 @@ Conventions:
 - Bash expands `$` inside double quotes. Any locator with a dollar sign (e.g. `Log $7.25`) must be single-quoted: `'getByRole("button", { name: /^Log \$\d/ })'`.
 - `playwright-cli` returns exit 0 even when a locator matches nothing; it prints `### Error`. Grep the output for `Error` instead of trusting the exit code.
 - After a click that triggers a fetch, wait for the resulting text (`--raw snapshot | grep`), retrying a few times, rather than a fixed sleep.
-- Server side effects are readable over plain HTTP: `curl -s http://127.0.0.1:5199/api/accounts/<id>` (balance, transfers) and `.../habits` (`recentSpends` with notes). The demo focus account is Alex, `01111111-1111-7111-8111-111111111101`.
+- Server side effects are readable over plain HTTP: `curl -s http://127.0.0.1:5199/api/accounts/<id>` (balance, transfers) and `.../habits` (`recentSpends` with notes). The demo focus account is Anthony, `01111111-1111-7111-8111-111111111101`.
 - Session state lives in browser `localStorage` (`settle:session`, `p2p-ledger:wallets`, `settle:demo-progress:<id>`). `$V pw --raw localstorage-list` shows it.
 
 Feature recipes live in [features/README.md](features/README.md). Read the matching file before driving.

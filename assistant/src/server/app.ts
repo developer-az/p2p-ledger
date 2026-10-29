@@ -11,7 +11,7 @@ import { answerFromLedger } from './fallback.js';
 import { LedgerError, type LedgerAuditor, type LedgerReader, type LedgerWriter } from './ledger.js';
 import { isModelOutage } from './providers/retry.js';
 import type { LlmProvider } from './providers/types.js';
-import { PRACTICE_ALEX, PRACTICE_JORDAN, PRACTICE_SAM, type CompositeLedger, type PracticeLedger } from './practice-ledger.js';
+import { PRACTICE_ANTHONY, PRACTICE_JORDAN, PRACTICE_SAM, type CompositeLedger, type PracticeLedger } from './practice-ledger.js';
 import { LEDGER_CAPABILITIES } from './personas.js';
 import { formatLedgerStatement } from './statement-export.js';
 import {
@@ -485,12 +485,12 @@ export function createApp(deps: {
   let practiceSeeded: Promise<void> | null = null;
   function seedPracticeRequests(): Promise<void> {
     practiceSeeded ??= (async () => {
-      if ((await paymentRequests.listFor(PRACTICE_ALEX, 1)).length > 0) return;
+      if ((await paymentRequests.listFor(PRACTICE_ANTHONY, 1)).length > 0) return;
       const make = (requester: string, payer: string, amountMinor: number, memo: string) =>
         paymentRequests.create({ requesterAccountId: requester, payerAccountId: payer, amountMinor, currency: 'USD', memo }, now());
-      await make(PRACTICE_SAM, PRACTICE_ALEX, 1_850, 'Groceries run');
-      await make(PRACTICE_JORDAN, PRACTICE_ALEX, 6_000, 'Utilities share');
-      await make(PRACTICE_ALEX, PRACTICE_SAM, 3_500, 'Concert parking');
+      await make(PRACTICE_SAM, PRACTICE_ANTHONY, 1_850, 'Groceries run');
+      await make(PRACTICE_JORDAN, PRACTICE_ANTHONY, 6_000, 'Utilities share');
+      await make(PRACTICE_ANTHONY, PRACTICE_SAM, 3_500, 'Concert parking');
     })();
     return practiceSeeded;
   }
@@ -733,16 +733,16 @@ export function createApp(deps: {
       }, 503);
     }
     const seeded = await seedDemo(deps.liveLedger);
-    const personas: DemoPersona[] = ['alex', 'sam', 'jordan'];
+    const personas: DemoPersona[] = ['anthony', 'sam', 'jordan'];
     await Promise.all(seeded.accounts.map((account, i) =>
-      seedDemoHabits(deps.spendLogs, personalFinance, account.id, personas[i] ?? 'alex', now())));
-    const [alex, sam, jordan] = seeded.accounts;
-    if (alex && sam && jordan) {
+      seedDemoHabits(deps.spendLogs, personalFinance, account.id, personas[i] ?? 'anthony', now())));
+    const [anthony, sam, jordan] = seeded.accounts;
+    if (anthony && sam && jordan) {
       const ask = (requester: string, payer: string, amountMinor: number, memo: string) =>
         paymentRequests.create({ requesterAccountId: requester, payerAccountId: payer, amountMinor, currency: 'USD', memo }, now());
-      await ask(sam.id, alex.id, 1_850, 'Groceries run');
-      await ask(jordan.id, alex.id, 6_000, 'Utilities share');
-      await ask(alex.id, sam.id, 3_500, 'Concert parking');
+      await ask(sam.id, anthony.id, 1_850, 'Groceries run');
+      await ask(jordan.id, anthony.id, 6_000, 'Utilities share');
+      await ask(anthony.id, sam.id, 3_500, 'Concert parking');
     }
     return c.json(seeded);
   });
@@ -752,7 +752,7 @@ export function createApp(deps: {
     if (!allowSeed(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const boot = deps.practice.bootstrap();
     await Promise.all([
-      seedDemoHabits(deps.spendLogs, personalFinance, PRACTICE_ALEX, 'alex', now()),
+      seedDemoHabits(deps.spendLogs, personalFinance, PRACTICE_ANTHONY, 'anthony', now()),
       seedDemoHabits(deps.spendLogs, personalFinance, PRACTICE_SAM, 'sam', now()),
       seedDemoHabits(deps.spendLogs, personalFinance, PRACTICE_JORDAN, 'jordan', now()),
     ]);

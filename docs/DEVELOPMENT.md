@@ -96,7 +96,7 @@ docker compose up --build    # includes assistant on :8787 when enabled in compo
 
 ## Terminal workflow (local)
 
-1. **F2 ONBOARD** — seeds Alex/Sam/Jordan on live Postgres (`POST /api/demo`).
+1. **F2 ONBOARD** — seeds Anthony/Sam/Jordan on live Postgres (`POST /api/demo`).
 2. **Open wallet** — `open <handle>` or create handle; triggers **simulated bank welcome** (`POST /api/bank/welcome`: $500 deposit + inbound corridor peer).
 3. **ACH IN / ACH OUT** or CMD `bank in` / `bank out` — each call spins up a **new** corridor counterparty (`payroll-*`, `vendor-*`, …), funds if needed, posts a real transfer, then they appear in **PEERS** (dormant history).
 4. **F3** integrity — calls `GET /v1/ledger/integrity` on `ledger-service` (merge to `main` + Render deploy if production still shows the old banner).

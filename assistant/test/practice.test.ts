@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/server/app.js';
 import { InMemorySpendLogStore } from '../src/server/spend-log.js';
-import { CompositeLedger, PRACTICE_ALEX, PRACTICE_RENT_TRANSFER, PRACTICE_SAM, PracticeLedger } from '../src/server/practice-ledger.js';
+import { CompositeLedger, PRACTICE_ANTHONY, PRACTICE_RENT_TRANSFER, PRACTICE_SAM, PracticeLedger } from '../src/server/practice-ledger.js';
 import { ScriptedProvider } from '../src/server/providers/scripted.js';
 import type { LedgerAuditor, LedgerReader, LedgerWriter } from '../src/server/ledger.js';
 
@@ -37,7 +37,7 @@ describe('practice ledger', () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { live: boolean; practice: { focusAccountId: string; stoppedTransferId: string } };
     expect(body.live).toBe(false);
-    expect(body.practice.focusAccountId).toBe(PRACTICE_ALEX);
+    expect(body.practice.focusAccountId).toBe(PRACTICE_ANTHONY);
     expect(body.practice.stoppedTransferId).toBe(PRACTICE_RENT_TRANSFER);
   });
 
@@ -46,7 +46,7 @@ describe('practice ledger', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'test-1' },
       body: JSON.stringify({
-        sourceAccountId: PRACTICE_ALEX,
+        sourceAccountId: PRACTICE_ANTHONY,
         destinationAccountId: PRACTICE_SAM,
         amountMinor: 100,
         currency: 'USD',
@@ -82,7 +82,7 @@ describe('practice ledger', () => {
   });
 
   it('exposes double-entry statement lines for practice', async () => {
-    const res = await app.request(`/api/accounts/${PRACTICE_ALEX}/entries`);
+    const res = await app.request(`/api/accounts/${PRACTICE_ANTHONY}/entries`);
     expect(res.status).toBe(200);
     const body = await res.json() as { entries: { amountMinor: number; balanceAfterMinor: number }[] };
     expect(body.entries.length).toBeGreaterThan(3);
@@ -90,7 +90,7 @@ describe('practice ledger', () => {
   });
 
   it('shows VELOCITY_LIMIT decline on activity', async () => {
-    const res = await app.request(`/api/accounts?id=${PRACTICE_ALEX}`);
+    const res = await app.request(`/api/accounts?id=${PRACTICE_ANTHONY}`);
     const body = await res.json() as { transfers: { status: string; memo: string | null; declineExplanation: string | null }[] };
     const velocity = body.transfers.find((t) => t.memo?.includes('Concert'));
     expect(velocity).toMatchObject({ status: 'REJECTED' });
@@ -104,7 +104,7 @@ describe('practice ledger', () => {
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `vel-${i}` },
         body: JSON.stringify({
           sourceAccountId: PRACTICE_SAM,
-          destinationAccountId: PRACTICE_ALEX,
+          destinationAccountId: PRACTICE_ANTHONY,
           amountMinor: 10,
           currency: 'USD',
         }),
@@ -115,7 +115,7 @@ describe('practice ledger', () => {
       headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'vel-block' },
       body: JSON.stringify({
         sourceAccountId: PRACTICE_SAM,
-        destinationAccountId: PRACTICE_ALEX,
+        destinationAccountId: PRACTICE_ANTHONY,
         amountMinor: 10,
         currency: 'USD',
       }),
@@ -125,15 +125,15 @@ describe('practice ledger', () => {
     expect(row).toMatchObject({ status: 'REJECTED', rejectionReason: 'VELOCITY_LIMIT' });
   });
 
-  it('loads Alex with a declined rent payment', async () => {
-    const res = await app.request(`/api/accounts?id=${PRACTICE_ALEX}`);
+  it('loads Anthony with a declined rent payment', async () => {
+    const res = await app.request(`/api/accounts?id=${PRACTICE_ANTHONY}`);
     expect(res.status).toBe(200);
     const body = await res.json() as {
       owner: string;
       balance: string;
       transfers: { status: string; memo: string | null; declineExplanation: string | null }[];
     };
-    expect(body.owner).toBe('alex');
+    expect(body.owner).toBe('anthony');
     expect(body.balance).toMatch(/^\$/);
     const rent = body.transfers.find((t) => t.memo?.includes('Rent'));
     expect(rent).toMatchObject({ status: 'REJECTED' });

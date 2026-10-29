@@ -15,7 +15,7 @@ import type {
 import { LedgerError } from './ledger.js';
 import { personaForOwner } from './personas.js';
 
-export const PRACTICE_ALEX = '01111111-1111-7111-8111-111111111101';
+export const PRACTICE_ANTHONY = '01111111-1111-7111-8111-111111111101';
 export const PRACTICE_SAM = '01111111-1111-7111-8111-111111111102';
 export const PRACTICE_JORDAN = '01111111-1111-7111-8111-111111111103';
 const FUNDING = '00000000-0000-7000-8000-000000000001';
@@ -33,8 +33,8 @@ function daysAgo(days: number): string {
 function buildPracticeData(): { accounts: Account[]; transfers: Transfer[] } {
   const accounts: Account[] = [
     {
-      id: PRACTICE_ALEX,
-      ownerId: 'alex',
+      id: PRACTICE_ANTHONY,
+      ownerId: 'anthony',
       currency: 'USD',
       type: 'USER',
       balanceMinor: 344_951,
@@ -89,23 +89,23 @@ function buildPracticeData(): { accounts: Account[]; transfers: Transfer[] } {
   });
 
   const transfers: Transfer[] = [
-    transfer('p-dep-alex', FUNDING, PRACTICE_ALEX, 500_000, daysAgo(1), 'Added from bank', null, 'DEPOSIT'),
+    transfer('p-dep-anthony', FUNDING, PRACTICE_ANTHONY, 500_000, daysAgo(1), 'Added from bank', null, 'DEPOSIT'),
     transfer('p-dep-sam', FUNDING, PRACTICE_SAM, 120_000, daysAgo(20), 'Added from bank', null, 'DEPOSIT'),
-    transfer('p-pizza', PRACTICE_ALEX, PRACTICE_SAM, 4_250, daysAgo(6), 'Pizza night'),
+    transfer('p-pizza', PRACTICE_ANTHONY, PRACTICE_SAM, 4_250, daysAgo(6), 'Pizza night'),
     transfer(
       PRACTICE_RENT_TRANSFER,
-      PRACTICE_ALEX,
+      PRACTICE_ANTHONY,
       PRACTICE_JORDAN,
       RENT_AMOUNT_MINOR,
       daysAgo(5),
       RENT_MEMO,
       'NEW_ACCOUNT_LARGE_TRANSFER',
     ),
-    transfer('p-uber', PRACTICE_SAM, PRACTICE_ALEX, 1_800, daysAgo(4), 'Uber split'),
-    transfer('p-concert', PRACTICE_ALEX, PRACTICE_SAM, 150_000, daysAgo(3), 'Concert tickets — team offsite', 'VELOCITY_LIMIT'),
-    transfer('p-groceries', PRACTICE_ALEX, PRACTICE_JORDAN, 2_599, daysAgo(2), 'Groceries'),
-    transfer('p-util', PRACTICE_ALEX, PRACTICE_JORDAN, 8_900, daysAgo(8), 'Utilities · electric + water'),
-    transfer('p-reimb', PRACTICE_SAM, PRACTICE_ALEX, 22_500, daysAgo(7), 'Reimbursement · team offsite travel'),
+    transfer('p-uber', PRACTICE_SAM, PRACTICE_ANTHONY, 1_800, daysAgo(4), 'Uber split'),
+    transfer('p-concert', PRACTICE_ANTHONY, PRACTICE_SAM, 150_000, daysAgo(3), 'Concert tickets — team offsite', 'VELOCITY_LIMIT'),
+    transfer('p-groceries', PRACTICE_ANTHONY, PRACTICE_JORDAN, 2_599, daysAgo(2), 'Groceries'),
+    transfer('p-util', PRACTICE_ANTHONY, PRACTICE_JORDAN, 8_900, daysAgo(8), 'Utilities · electric + water'),
+    transfer('p-reimb', PRACTICE_SAM, PRACTICE_ANTHONY, 22_500, daysAgo(7), 'Reimbursement · team offsite travel'),
   ];
 
   return { accounts, transfers };
@@ -145,7 +145,7 @@ export class PracticeLedger implements LedgerReader, LedgerWriter {
         const p = personaForOwner(a.ownerId);
         return { id: a.id, owner: a.ownerId, role: p.role, blurb: p.blurb };
       }),
-      focusAccountId: PRACTICE_ALEX,
+      focusAccountId: PRACTICE_ANTHONY,
       stoppedTransferId: PRACTICE_RENT_TRANSFER,
       hint: 'Practice network — same fraud story as live seed; statement tab shows double-entry lines.',
     };

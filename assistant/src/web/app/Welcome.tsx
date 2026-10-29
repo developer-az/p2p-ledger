@@ -29,6 +29,8 @@ export function Welcome({
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState<'demo' | 'auth' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [forgot, setForgot] = useState(false);
+  const [resetSent, setResetSent] = useState<string | null>(null);
   const [demoError, setDemoError] = useState<string | null>(null);
   const accountRef = useRef<HTMLElement>(null);
   const toast = useToast();
@@ -75,7 +77,27 @@ export function Welcome({
     }
   }
 
+  async function submitForgot() {
+    if (busy) return;
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail.includes('@')) {
+      setError('Enter a valid email.');
+      return;
+    }
+    setBusy('auth');
+    setError(null);
+    try {
+      const res = await api.requestPasswordReset(trimmedEmail);
+      setResetSent(res.message);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function submitAccount() {
+    if (forgot) return submitForgot();
     if (!boot || busy) return;
     const trimmedEmail = email.trim();
     const trimmedName = name.trim();
@@ -280,30 +302,49 @@ export function Welcome({
           </div>
           <form className="w-own-form" onSubmit={(e) => { e.preventDefault(); void submitAccount(); }}>
             <div className="w-auth-switch" role="tablist" aria-label="Account">
-              <button type="button" role="tab" aria-selected={mode === 'signin'} onClick={() => { setMode('signin'); setError(null); }}>Sign in</button>
-              <button type="button" role="tab" aria-selected={mode === 'create'} onClick={() => { setMode('create'); setError(null); }}>Create account</button>
+              <button type="button" role="tab" aria-selected={mode === 'signin'} onClick={() => { setMode('signin'); setForgot(false); setError(null); }}>Sign in</button>
+              <button type="button" role="tab" aria-selected={mode === 'create'} onClick={() => { setMode('create'); setForgot(false); setError(null); }}>Create account</button>
             </div>
-            {mode === 'create' ? (
-              <label className="w-field" htmlFor="account-name">Name
-                <input id="account-name" maxLength={40} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
-              </label>
-            ) : null}
-            <label className="w-field" htmlFor="account-email">Email
-              <input id="account-email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </label>
-            <label className="w-field" htmlFor="account-password">Password
-              <input
-                id="account-password"
-                type="password"
-                autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
-                minLength={8}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
-            <button className="w-btn w-btn-ink" type="submit" disabled={!boot || busy !== null}>
-              {busy === 'auth' ? 'Working…' : mode === 'create' ? 'Create account' : 'Sign in'}
-            </button>
+            {forgot ? (
+              <>
+                <p className="w-fine w-forgot-intro">Enter the email on your account and we will send a link to choose a new password.</p>
+                <label className="w-field" htmlFor="account-email">Email
+                  <input id="account-email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                </label>
+                {resetSent ? <p className="w-ok" role="status">{resetSent}</p> : null}
+                <button className="w-btn w-btn-ink" type="submit" disabled={busy !== null}>
+                  {busy === 'auth' ? 'Sending…' : resetSent ? 'Send again' : 'Send reset link'}
+                </button>
+                <button type="button" className="w-link" onClick={() => { setForgot(false); setResetSent(null); setError(null); }}>Back to sign in</button>
+              </>
+            ) : (
+              <>
+                {mode === 'create' ? (
+                  <label className="w-field" htmlFor="account-name">Name
+                    <input id="account-name" maxLength={40} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+                  </label>
+                ) : null}
+                <label className="w-field" htmlFor="account-email">Email
+                  <input id="account-email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                </label>
+                <label className="w-field" htmlFor="account-password">Password
+                  <input
+                    id="account-password"
+                    type="password"
+                    autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
+                    minLength={8}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </label>
+                <button className="w-btn w-btn-ink" type="submit" disabled={!boot || busy !== null}>
+                  {busy === 'auth' ? 'Working…' : mode === 'create' ? 'Create account' : 'Sign in'}
+                </button>
+                {mode === 'signin' ? (
+                  <button type="button" className="w-link" onClick={() => { setForgot(true); setResetSent(null); setError(null); }}>Forgot password?</button>
+                ) : null}
+              </>
+            )}
             {error ? <p className="w-error" role="alert">{error}</p> : null}
             <p className="w-fine">
               {persistent

@@ -32,7 +32,16 @@ export interface AuthStore {
   saveSession(tokenHash: string, userId: string, expiresAt: Date): Promise<void>;
   userForToken(tokenHash: string, now: Date): Promise<AuthRecord | null>;
   deleteSession(tokenHash: string): Promise<void>;
+  /** Ends every session of a user (after a password reset). */
+  deleteSessionsForUser(userId: string): Promise<void>;
+  /** Stores a password-reset token hash; earlier unused tokens of the same user stop working. */
+  saveResetToken(tokenHash: string, userId: string, expiresAt: Date): Promise<void>;
+  /** Uses up a reset token: returns its user once, and only before it expires. */
+  consumeResetToken(tokenHash: string, now: Date): Promise<string | null>;
+  updatePassword(userId: string, passwordHash: string): Promise<void>;
 }
+
+export const RESET_TOKEN_TTL_SEC = 30 * 60;
 
 /** "Sam Lee" → "sam-lee-a1b2", safe to store as a ledger owner id. */
 export function ownerIdFor(displayName: string): string {
@@ -117,6 +126,32 @@ export class InMemoryAuthStore implements AuthStore {
   async deleteSession(tokenHash: string): Promise<void> {
     this.sessions.delete(tokenHash);
   }
+
+  private readonly resets = new Map<string, { userId: string; expiresAt: number }>();
+
+  async deleteSessionsForUser(userId: string): Promise<void> {
+    for (const [hash, session] of this.sessions) if (session.userId === userId) this.sessions.delete(hash);
+  }
+
+  async saveResetToken(tokenHash: string, userId: string, expiresAt: Date): Promise<void> {
+    for (const [hash, reset] of this.resets) if (reset.userId === userId) this.resets.delete(hash);
+    this.resets.set(tokenHash, { userId, expiresAt: expiresAt.getTime() });
+  }
+
+  async consumeResetToken(tokenHash: string, now: Date): Promise<string | null> {
+    const reset = this.resets.get(tokenHash);
+    if (!reset) return null;
+    this.resets.delete(tokenHash);
+    return reset.expiresAt > now.getTime() ? reset.userId : null;
+  }
+
+  async updatePassword(userId: string, passwordHash: string): Promise<void> {
+    const user = this.byId.get(userId);
+    if (!user) return;
+    const next = { ...user, passwordHash };
+    this.byId.set(userId, next);
+    this.byEmail.set(next.email, next);
+  }
 }
 
 const AUTH_SCHEMA = `
@@ -136,6 +171,13 @@ create table if not exists app_sessions (
     user_id    uuid        not null references app_users (id) on delete cascade,
     expires_at timestamptz not null
 );
+create table if not exists app_password_resets (
+    token_hash text primary key,
+    user_id    uuid        not null references app_users (id) on delete cascade,
+    expires_at timestamptz not null,
+    created_at timestamptz not null default now()
+);
+create index if not exists app_password_resets_user_idx on app_password_resets (user_id);
 `;
 
 export class PostgresAuthStore implements AuthStore {
@@ -252,6 +294,44 @@ export class PostgresAuthStore implements AuthStore {
     } finally {
       await c.end();
     }
+  }
+  private async run<T>(fn: (c: import('pg').Client) => Promise<T>): Promise<T> {
+    const c = await this.client();
+    try {
+      await this.ensureSchema(c);
+      return await fn(c);
+    } finally {
+      await c.end();
+    }
+  }
+
+  async deleteSessionsForUser(userId: string): Promise<void> {
+    await this.run((c) => c.query(`delete from app_sessions where user_id = $1`, [userId]));
+  }
+
+  async saveResetToken(tokenHash: string, userId: string, expiresAt: Date): Promise<void> {
+    await this.run(async (c) => {
+      await c.query(`delete from app_password_resets where user_id = $1`, [userId]);
+      await c.query(
+        `insert into app_password_resets (token_hash, user_id, expires_at) values ($1, $2, $3)`,
+        [tokenHash, userId, expiresAt.toISOString()],
+      );
+    });
+  }
+
+  async consumeResetToken(tokenHash: string, now: Date): Promise<string | null> {
+    // Delete-returning makes the token single-use even if two requests race.
+    const res = await this.run((c) => c.query(
+      `delete from app_password_resets where token_hash = $1 returning user_id, expires_at`,
+      [tokenHash],
+    ));
+    const row = res.rows[0] as { user_id: string; expires_at: Date | string } | undefined;
+    if (!row) return null;
+    return new Date(row.expires_at).getTime() > now.getTime() ? String(row.user_id) : null;
+  }
+
+  async updatePassword(userId: string, passwordHash: string): Promise<void> {
+    await this.run((c) => c.query(`update app_users set password_hash = $2 where id = $1`, [userId, passwordHash]));
   }
 }
 

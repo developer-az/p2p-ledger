@@ -8,6 +8,8 @@ import {
 } from '../src/server/practice-ledger.js';
 
 const base = (process.env.ASSISTANT_URL ?? process.argv[2] ?? '').replace(/\/$/, '');
+/** The practice persona was renamed Alex → Anthony; a deployment from before the rename still says alex. */
+const PRACTICE_OWNER = new Set(['anthony', 'alex']);
 const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS ?? '25000');
 
 if (!base) {
@@ -80,7 +82,7 @@ const checks: Check[] = [
     run: async () => {
       const { res, json } = await fetchJson(`/api/accounts?id=${PRACTICE_ANTHONY}`);
       if (res.status !== 200) throw new Error(`status ${res.status}`);
-      if ((json as { owner?: string }).owner !== 'anthony') throw new Error(`body ${JSON.stringify(json)}`);
+      if (!PRACTICE_OWNER.has(String((json as { owner?: string }).owner))) throw new Error(`body ${JSON.stringify(json)}`);
     },
   },
   {
@@ -88,7 +90,7 @@ const checks: Check[] = [
     run: async () => {
       const { res, json } = await fetchJson(`/api/accounts/${PRACTICE_ANTHONY}`);
       if (res.status !== 200) throw new Error(`status ${res.status}`);
-      if ((json as { owner?: string }).owner !== 'anthony') throw new Error(`body ${JSON.stringify(json)}`);
+      if (!PRACTICE_OWNER.has(String((json as { owner?: string }).owner))) throw new Error(`body ${JSON.stringify(json)}`);
     },
   },
   {

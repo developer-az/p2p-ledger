@@ -7,7 +7,7 @@ const B = 'bbbbbbbb-bbbb-7bbb-8bbb-bbbbbbbbbbbb';
 
 function ledgerWith(transfers: Transfer[]): LedgerReader {
   const accounts = new Map<string, Account>([
-    [A, { id: A, ownerId: 'alex-x', currency: 'USD', type: 'USER', balanceMinor: 1000, createdAt: '2026-01-01T00:00:00Z' }],
+    [A, { id: A, ownerId: 'anthony-x', currency: 'USD', type: 'USER', balanceMinor: 1000, createdAt: '2026-01-01T00:00:00Z' }],
     [B, { id: B, ownerId: 'sam-y', currency: 'USD', type: 'USER', balanceMinor: 500, createdAt: '2026-01-01T00:00:00Z' }],
   ]);
   return {

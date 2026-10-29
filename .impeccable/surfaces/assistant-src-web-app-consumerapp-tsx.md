@@ -21,7 +21,7 @@ OWN-WORLD: Warm paper ground (#f4f0e6) with a faint dot grid; surfaces are clean
 
 STORY: Visitor sees net + ring on a journal page, fills dots by logging, opens Patterns for the eight-week spread. Photos on Welcome prove the product is calm and real.
 
-FIRST VIEWPORT: Today — sage-tinted topbar, “Hi, Alex”, light hero card (left pen rule) with net figure, weekly ring, habit-dot row under the ring; play tiles and feed below. FAB in pen green.
+FIRST VIEWPORT: Today — sage-tinted topbar, “Hi, Anthony”, light hero card (left pen rule) with net figure, weekly ring, habit-dot row under the ring; play tiles and feed below. FAB in pen green.
 
 FORM: Bullet-journal habit tracker (grounded #1), pinned over roll assignment. seed:98d70fceba27c1ae
 

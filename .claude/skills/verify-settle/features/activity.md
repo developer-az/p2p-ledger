@@ -17,13 +17,13 @@ Activity ("Every move, in one place.") lists logged spends, income and ledger tr
 
 Preconditions:
 
-- Inside the demo as Alex. Demo seed includes declined transfers (`Concert tickets — team offsite`, `Rent share - October`).
+- Inside the demo as Anthony. Demo seed includes declined transfers (`Concert tickets — team offsite`, `Rent share - October`).
 
 - **Open.** `$V pw click "getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Activity' })"`. Heading `Every move, in one place.` and pill `Everything [pressed]`.
 - **Filter declined.** `$V pw click "getByRole('button', { name: 'Declined', exact: true })"`. Rows all read `Declined · To ...`; `Logged by you` rows are gone.
 - **Filter spending.** `$V pw click "getByRole('button', { name: 'Spending', exact: true })"`. Rows all read `Logged by you · <category>`.
 - **Receipt.** `$V pw click "getByRole('button', { name: /^Concert tickets/ })"` under `Declined`. A `dialog` opens with the transfer detail.
-- **Side effect check.** Declined transfers appear in `curl -s .../api/accounts/<alex-id>` under `transfers` with a declined status.
+- **Side effect check.** Declined transfers appear in `curl -s .../api/accounts/<anthony-id>` under `transfers` with a declined status.
 - **Proof.** `$V pw snapshot --filename=activity-filter-after.yml`, `$V pw screenshot --filename=activity.png`.
 
 ## Gotchas

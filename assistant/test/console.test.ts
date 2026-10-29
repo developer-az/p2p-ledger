@@ -6,7 +6,7 @@ import { CompositeLedger, PracticeLedger } from '../src/server/practice-ledger.j
 import { ScriptedProvider } from '../src/server/providers/scripted.js';
 
 const FUNDING = '00000000-0000-7000-8000-000000000001';
-const ALEX = '0199c0de-0000-7000-8000-0000000000a1';
+const ANTHONY = '0199c0de-0000-7000-8000-0000000000a1';
 const SAM = '0199c0de-0000-7000-8000-0000000000a2';
 const EVE = '0199c0de-0000-7000-8000-0000000000a3';
 
@@ -21,7 +21,7 @@ class MemoryLedger implements LedgerReader, LedgerWriter, LedgerAuditor {
     const open = (id: string, ownerId: string, balanceMinor: number, type: Account['type'] = 'USER') =>
       this.accounts.set(id, { id, ownerId, currency: 'USD', type, balanceMinor, createdAt: '2026-10-01T00:00:00Z' });
     open(FUNDING, 'system:funding', 0, 'SYSTEM');
-    open(ALEX, 'alex', 0);
+    open(ANTHONY, 'anthony', 0);
     open(SAM, 'sam', 0);
     open(EVE, 'eve', 0);
   }
@@ -71,7 +71,7 @@ class MemoryLedger implements LedgerReader, LedgerWriter, LedgerAuditor {
   }
 
   async tamperChecks(transferId: string) {
-    return { transferId, accountId: ALEX, attempts: [{ attempt: 'Delete a posted entry', sql: 'delete …', refused: true, databaseSaid: 'ledger_entries is append-only' }] };
+    return { transferId, accountId: ANTHONY, attempts: [{ attempt: 'Delete a posted entry', sql: 'delete …', refused: true, databaseSaid: 'ledger_entries is append-only' }] };
   }
 
   private write(key: string, kind: Transfer['kind'], from: string, to: string, amountMinor: number, memo: string | null, rejection: string | null) {
@@ -110,10 +110,10 @@ function appWith(ledger: MemoryLedger) {
 
 async function setup() {
   const ledger = new MemoryLedger();
-  await ledger.deposit(ALEX, 500_000, 'dep-alex');
+  await ledger.deposit(ANTHONY, 500_000, 'dep-anthony');
   await ledger.deposit(SAM, 50_000, 'dep-sam');
-  const pizza = await ledger.transfer({ sourceAccountId: ALEX, destinationAccountId: SAM, amountMinor: 4_250, currency: 'USD', memo: 'Pizza' }, 'k-pizza');
-  const rent = await ledger.transfer({ sourceAccountId: ALEX, destinationAccountId: SAM, amountMinor: 120_000, currency: 'USD', memo: 'Rent' }, 'k-rent');
+  const pizza = await ledger.transfer({ sourceAccountId: ANTHONY, destinationAccountId: SAM, amountMinor: 4_250, currency: 'USD', memo: 'Pizza' }, 'k-pizza');
+  const rent = await ledger.transfer({ sourceAccountId: ANTHONY, destinationAccountId: SAM, amountMinor: 120_000, currency: 'USD', memo: 'Rent' }, 'k-rent');
   const app = appWith(ledger);
   const post = (path: string, body: unknown, ip = '2.2.2.2') => app.request(`/api${path}`, {
     method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json', 'x-forwarded-for': ip },
@@ -124,11 +124,11 @@ async function setup() {
 describe('payment trail', () => {
   it('shows both legs of a completed payment and that they sum to zero', async () => {
     const { app, pizza } = await setup();
-    const res = await app.request(`/api/trail?account=${ALEX}&transfer=${pizza.id}`);
+    const res = await app.request(`/api/trail?account=${ANTHONY}&transfer=${pizza.id}`);
     expect(res.status).toBe(200);
     const body = await res.json() as { legs: { account: string; side: string; amount: string }[]; legsSum: string; request: { idempotencyKey: string; path: string }; events: { deliveryMs: number }[] };
     expect(body.legs).toEqual([
-      expect.objectContaining({ account: 'alex', side: 'debit', amount: '$42.50' }),
+      expect.objectContaining({ account: 'anthony', side: 'debit', amount: '$42.50' }),
       expect.objectContaining({ account: 'sam', side: 'credit', amount: '$42.50' }),
     ]);
     expect(body.legsSum).toBe('$0.00');
@@ -138,7 +138,7 @@ describe('payment trail', () => {
 
   it('shows no legs for a declined payment, with the rule that stopped it', async () => {
     const { app, rent } = await setup();
-    const body = await (await app.request(`/api/trail?account=${ALEX}&transfer=${rent.id}`)).json() as { legs: unknown[]; decline: { code: string; explanation: string } };
+    const body = await (await app.request(`/api/trail?account=${ANTHONY}&transfer=${rent.id}`)).json() as { legs: unknown[]; decline: { code: string; explanation: string } };
     expect(body.legs).toEqual([]);
     expect(body.decline.code).toBe('NEW_ACCOUNT_LARGE_TRANSFER');
     expect(body.decline.explanation).toMatch(/24 hours/);
@@ -147,7 +147,7 @@ describe('payment trail', () => {
   it('will not open a payment the viewed account is not part of', async () => {
     const { app, pizza } = await setup();
     expect((await app.request(`/api/trail?account=${EVE}&transfer=${pizza.id}`)).status).toBe(404);
-    expect((await app.request(`/api/trail?account=${ALEX}&transfer=nope`)).status).toBe(404);
+    expect((await app.request(`/api/trail?account=${ANTHONY}&transfer=nope`)).status).toBe(404);
   });
 });
 
@@ -156,7 +156,7 @@ describe('against a ledger build without the audit endpoints', () => {
     const { ledger, pizza } = await setup();
     ledger.trail = async () => null;
     const app = appWith(ledger);
-    const res = await app.request(`/api/trail?account=${ALEX}&transfer=${pizza.id}`);
+    const res = await app.request(`/api/trail?account=${ANTHONY}&transfer=${pizza.id}`);
     expect(res.status).toBe(200);
     const body = await res.json() as { audited: boolean; legs: { side: string }[]; legsSum: string; events: unknown[] };
     expect(body).toMatchObject({ audited: false, legsSum: '$0.00', events: [] });
@@ -180,7 +180,7 @@ describe('replay', () => {
   it('returns the stored result and posts nothing new', async () => {
     const { post, pizza, ledger } = await setup();
     const before = ledger.entriesList.length;
-    const res = await post('/replay', { accountId: ALEX, transferId: pizza.id });
+    const res = await post('/replay', { accountId: ANTHONY, transferId: pizza.id });
     expect(await res.json()).toMatchObject({
       httpStatus: 200, replayed: true, sameTransfer: true, entriesBefore: 2, entriesAfter: 2,
       balanceBefore: '$4,957.50', balanceAfter: '$4,957.50',
@@ -193,7 +193,7 @@ describe('race', () => {
   it('turns five identical in-flight requests into one payment', async () => {
     const { post, ledger } = await setup();
     const before = ledger.transfers.length;
-    const res = await post('/race', { accountId: ALEX, fromAccountId: SAM });
+    const res = await post('/race', { accountId: ANTHONY, fromAccountId: SAM });
     const body = await res.json() as { attempts: { httpStatus: number; replayed: boolean }[]; distinctTransfers: number; entriesPosted: number; amount: string };
     expect(body.attempts).toHaveLength(5);
     expect(body.attempts.filter((a) => a.httpStatus === 201)).toHaveLength(1);
@@ -204,18 +204,18 @@ describe('race', () => {
 
   it('rejects a sender that is the same account or a system account', async () => {
     const { post } = await setup();
-    expect((await post('/race', { accountId: ALEX, fromAccountId: ALEX })).status).toBe(400);
-    expect((await post('/race', { accountId: ALEX, fromAccountId: FUNDING })).status).toBe(404);
+    expect((await post('/race', { accountId: ANTHONY, fromAccountId: ANTHONY })).status).toBe(400);
+    expect((await post('/race', { accountId: ANTHONY, fromAccountId: FUNDING })).status).toBe(404);
   });
 });
 
 describe('tamper and books', () => {
   it('runs the database checks only on a payment that posted entries', async () => {
     const { post, pizza, rent } = await setup();
-    const ok = await post('/tamper', { accountId: ALEX, transferId: pizza.id });
+    const ok = await post('/tamper', { accountId: ANTHONY, transferId: pizza.id });
     expect(ok.status).toBe(200);
     expect(((await ok.json()) as { attempts: { refused: boolean }[] }).attempts.every((a) => a.refused)).toBe(true);
-    expect((await post('/tamper', { accountId: ALEX, transferId: rent.id })).status).toBe(400);
+    expect((await post('/tamper', { accountId: ANTHONY, transferId: rent.id })).status).toBe(400);
     expect((await post('/tamper', { accountId: EVE, transferId: pizza.id })).status).toBe(404);
   });
 

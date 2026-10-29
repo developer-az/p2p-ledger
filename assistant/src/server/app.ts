@@ -11,7 +11,7 @@ import { answerFromLedger } from './fallback.js';
 import { LedgerError, type LedgerAuditor, type LedgerReader, type LedgerWriter } from './ledger.js';
 import { isModelOutage } from './providers/retry.js';
 import type { LlmProvider } from './providers/types.js';
-import { PRACTICE_ALEX, PRACTICE_JORDAN, PRACTICE_SAM, type CompositeLedger, type PracticeLedger } from './practice-ledger.js';
+import { PRACTICE_ANTHONY, PRACTICE_JORDAN, PRACTICE_SAM, type CompositeLedger, type PracticeLedger } from './practice-ledger.js';
 import { LEDGER_CAPABILITIES } from './personas.js';
 import { formatLedgerStatement } from './statement-export.js';
 import {
@@ -42,12 +42,15 @@ import { explainDecline } from './peer-ledger.js';
 import { providerFromEnv } from './providers/index.js';
 import { MAX_MINOR_UI } from './money.js';
 import { LlmGuard, trimHistory } from './llm-guard.js';
+import { API_HEADERS, securityHeaders } from './security-headers.js';
+import { createMailer, passwordResetEmail, type Mailer } from './mailer.js';
 import { rateLimiter, retryAfterSeconds } from './rate-limit.js';
 import { SETTLE_RAILS, type SettleRail } from './payment-requests.js';
 import {
   EmailTakenError,
   InMemoryAuthStore,
   SESSION_COOKIE,
+  RESET_TOKEN_TTL_SEC,
   SESSION_MAX_AGE_SEC,
   dummyPasswordHash,
   hashPassword,
@@ -146,6 +149,10 @@ export function createApp(deps: {
   isLiveLedgerUp?: () => Promise<boolean>;
   /** Tests and practice mode use memory. Production passes Postgres when a database URL is set. */
   auth?: AuthStore;
+  /** Sends password-reset links. Defaults to Resend when configured, else the server log (dev). */
+  mailer?: Mailer;
+  /** Public origin used in emailed links (APP_URL). Falls back to the request's own origin. */
+  appUrl?: string;
   /** Practice fixtures stay public; production requires registered identities for all other wallets. */
   enforceWalletAuth?: boolean;
   /** Tests inject a fake model; production loads Gemini/Claude on first chat only. */
@@ -159,6 +166,8 @@ export function createApp(deps: {
   const paymentRequests = deps.paymentRequests ?? new InMemoryPaymentRequestStore();
   const llmGuard = deps.llmGuard ?? new LlmGuard();
   const auth = deps.auth ?? new InMemoryAuthStore();
+  const mailer = deps.mailer ?? createMailer();
+  const appUrl = (deps.appUrl ?? process.env.APP_URL ?? '').trim().replace(/\/$/, '');
   const enforceWalletAuth = deps.enforceWalletAuth ?? (auth.persistent || process.env.NODE_ENV === 'production');
   const app = new Hono().basePath('/api');
   const allowChat = rateLimiter(20, 60_000);
@@ -208,6 +217,7 @@ export function createApp(deps: {
     if (denied) return denied;
     await next();
   };
+  app.use('*', securityHeaders(API_HEADERS));
   app.use('/accounts/:id', protectWalletPath);
   app.use('/accounts/:id/*', protectWalletPath);
 
@@ -356,6 +366,57 @@ export function createApp(deps: {
     return c.json({ ok: true });
   });
 
+  // Password reset. The request step answers the same way whether or not the email has an account,
+  // and takes at least RESET_MIN_MS so timing does not tell either. Tokens are random, stored hashed,
+  // expire after RESET_TOKEN_TTL_SEC, work once, and a successful reset signs out every other session.
+  const allowReset = rateLimiter(5, 60_000);
+  const RESET_MIN_MS = 600;
+  const resetRequestBody = z.object({ email: z.string().trim().email().max(254) });
+  const resetConfirmBody = z.object({
+    token: z.string().min(20).max(200),
+    password: z.string().min(8, 'Use at least 8 characters.').max(72),
+  });
+  const RESET_ACCEPTED = 'If an account uses that email, a reset link is on its way. It expires in 30 minutes.';
+
+  app.post('/auth/password-reset/request', async (c) => {
+    if (!allowReset(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
+    const started = Date.now();
+    const parsed = resetRequestBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Enter a valid email.' }, 400);
+    const email = parsed.data.email.toLowerCase();
+    try {
+      const user = await auth.findByEmail(email);
+      if (user) {
+        const token = newSessionToken();
+        await auth.saveResetToken(hashSessionToken(token), user.id, new Date(now().getTime() + RESET_TOKEN_TTL_SEC * 1000));
+        const origin = appUrl || new URL(c.req.url).origin;
+        const link = `${origin}/reset-password#token=${token}`;
+        await mailer.send(passwordResetEmail(user.email, user.displayName, link, RESET_TOKEN_TTL_SEC / 60));
+      }
+    } catch (e) {
+      console.error('[auth] password reset request failed:', (e as Error).message);
+    }
+    const wait = RESET_MIN_MS - (Date.now() - started);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    return c.json({ ok: true, message: RESET_ACCEPTED }, 202);
+  });
+
+  app.post('/auth/password-reset/confirm', async (c) => {
+    if (!allowReset(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
+    const parsed = resetConfirmBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      const field = parsed.error.issues[0]?.path[0];
+      if (field === 'password') return c.json({ error: 'Use at least 8 characters.' }, 400);
+      return c.json({ error: 'This reset link is invalid or has expired. Ask for a new one.' }, 400);
+    }
+    const userId = await auth.consumeResetToken(hashSessionToken(parsed.data.token), now());
+    if (!userId) return c.json({ error: 'This reset link is invalid or has expired. Ask for a new one.' }, 400);
+    await auth.updatePassword(userId, await hashPassword(parsed.data.password));
+    await auth.deleteSessionsForUser(userId);
+    await issueSession(c, userId);
+    return c.json({ ok: true });
+  });
+
   app.get('/accounts', async (c) => {
     const id = c.req.query('id');
     const limit = Number(c.req.query('limit') ?? '30');
@@ -485,12 +546,12 @@ export function createApp(deps: {
   let practiceSeeded: Promise<void> | null = null;
   function seedPracticeRequests(): Promise<void> {
     practiceSeeded ??= (async () => {
-      if ((await paymentRequests.listFor(PRACTICE_ALEX, 1)).length > 0) return;
+      if ((await paymentRequests.listFor(PRACTICE_ANTHONY, 1)).length > 0) return;
       const make = (requester: string, payer: string, amountMinor: number, memo: string) =>
         paymentRequests.create({ requesterAccountId: requester, payerAccountId: payer, amountMinor, currency: 'USD', memo }, now());
-      await make(PRACTICE_SAM, PRACTICE_ALEX, 1_850, 'Groceries run');
-      await make(PRACTICE_JORDAN, PRACTICE_ALEX, 6_000, 'Utilities share');
-      await make(PRACTICE_ALEX, PRACTICE_SAM, 3_500, 'Concert parking');
+      await make(PRACTICE_SAM, PRACTICE_ANTHONY, 1_850, 'Groceries run');
+      await make(PRACTICE_JORDAN, PRACTICE_ANTHONY, 6_000, 'Utilities share');
+      await make(PRACTICE_ANTHONY, PRACTICE_SAM, 3_500, 'Concert parking');
     })();
     return practiceSeeded;
   }
@@ -733,16 +794,16 @@ export function createApp(deps: {
       }, 503);
     }
     const seeded = await seedDemo(deps.liveLedger);
-    const personas: DemoPersona[] = ['alex', 'sam', 'jordan'];
+    const personas: DemoPersona[] = ['anthony', 'sam', 'jordan'];
     await Promise.all(seeded.accounts.map((account, i) =>
-      seedDemoHabits(deps.spendLogs, personalFinance, account.id, personas[i] ?? 'alex', now())));
-    const [alex, sam, jordan] = seeded.accounts;
-    if (alex && sam && jordan) {
+      seedDemoHabits(deps.spendLogs, personalFinance, account.id, personas[i] ?? 'anthony', now())));
+    const [anthony, sam, jordan] = seeded.accounts;
+    if (anthony && sam && jordan) {
       const ask = (requester: string, payer: string, amountMinor: number, memo: string) =>
         paymentRequests.create({ requesterAccountId: requester, payerAccountId: payer, amountMinor, currency: 'USD', memo }, now());
-      await ask(sam.id, alex.id, 1_850, 'Groceries run');
-      await ask(jordan.id, alex.id, 6_000, 'Utilities share');
-      await ask(alex.id, sam.id, 3_500, 'Concert parking');
+      await ask(sam.id, anthony.id, 1_850, 'Groceries run');
+      await ask(jordan.id, anthony.id, 6_000, 'Utilities share');
+      await ask(anthony.id, sam.id, 3_500, 'Concert parking');
     }
     return c.json(seeded);
   });
@@ -752,7 +813,7 @@ export function createApp(deps: {
     if (!allowSeed(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const boot = deps.practice.bootstrap();
     await Promise.all([
-      seedDemoHabits(deps.spendLogs, personalFinance, PRACTICE_ALEX, 'alex', now()),
+      seedDemoHabits(deps.spendLogs, personalFinance, PRACTICE_ANTHONY, 'anthony', now()),
       seedDemoHabits(deps.spendLogs, personalFinance, PRACTICE_SAM, 'sam', now()),
       seedDemoHabits(deps.spendLogs, personalFinance, PRACTICE_JORDAN, 'jordan', now()),
     ]);

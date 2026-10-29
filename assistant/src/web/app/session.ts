@@ -1,10 +1,10 @@
 import type { AccountRef } from '../api.js';
-import { PRACTICE_ALEX_ID, PRACTICE_JORDAN_ID, PRACTICE_SAM_ID } from '../practice-fixture.js';
+import { PRACTICE_ANTHONY_ID, PRACTICE_JORDAN_ID, PRACTICE_SAM_ID } from '../practice-fixture.js';
 
 const KEY = 'settle:session';
 
 /** The only accounts a sample-household session may ever point at. */
-const PRACTICE_IDS = new Set([PRACTICE_ALEX_ID, PRACTICE_SAM_ID, PRACTICE_JORDAN_ID]);
+const PRACTICE_IDS = new Set([PRACTICE_ANTHONY_ID, PRACTICE_SAM_ID, PRACTICE_JORDAN_ID]);
 
 export interface SessionUser {
   email: string;
@@ -13,7 +13,7 @@ export interface SessionUser {
 
 export interface Session {
   account: AccountRef;
-  /** The demo household (Alex, Sam, Jordan), so one person can "view as" another. */
+  /** The demo household (Anthony, Sam, Jordan), so one person can "view as" another. */
   household: AccountRef[];
   /** True only for the guided demo; personal wallets are never marked demo. */
   demo?: boolean;

@@ -13,7 +13,7 @@ export interface CharacterPalette {
 }
 
 export const CAST: Record<string, CharacterPalette> = {
-  alex: {
+  anthony: {
     hair: '#1a1208', skin: '#c68642', suit: '#1e3a5f', suitShadow: '#0f1f33',
     shirt: '#e8e8e8', shoes: '#111', tie: '#3dd68c',
   },

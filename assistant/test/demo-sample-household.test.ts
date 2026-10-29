@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/server/app.js';
 import { InMemoryAuthStore } from '../src/server/auth.js';
-import { CompositeLedger, PRACTICE_ALEX, PracticeLedger } from '../src/server/practice-ledger.js';
+import { CompositeLedger, PRACTICE_ANTHONY, PracticeLedger } from '../src/server/practice-ledger.js';
 import { InMemorySpendLogStore } from '../src/server/spend-log.js';
 import { loadSession, saveSession } from '../src/web/app/session.js';
-import { PRACTICE_ALEX_ID } from '../src/web/practice-fixture.js';
+import { PRACTICE_ANTHONY_ID } from '../src/web/practice-fixture.js';
 
 function memoryStorage() {
   const store = new Map<string, string>();
@@ -35,7 +35,7 @@ describe('sample household (consumer preview)', () => {
     const seeded = await api.request('/api/demo/practice', { method: 'POST' });
     expect(seeded.status).toBe(200);
     const body = await seeded.json() as { accounts: { id: string }[]; focusAccountId: string };
-    expect(body.focusAccountId).toBe(PRACTICE_ALEX);
+    expect(body.focusAccountId).toBe(PRACTICE_ANTHONY);
     const view = await api.request(`/api/accounts?id=${body.focusAccountId}`);
     expect(view.status).toBe(200);
   });
@@ -45,18 +45,18 @@ describe('sample household (consumer preview)', () => {
 
     // Pre-fix live demo: real Postgres account id, demo flag, no user.
     saveSession({
-      account: { id: '123e4567-e89b-12d3-a456-426614174000', owner: 'alex-abcdef' },
-      household: [{ id: '123e4567-e89b-12d3-a456-426614174000', owner: 'alex-abcdef' }],
+      account: { id: '123e4567-e89b-12d3-a456-426614174000', owner: 'anthony-abcdef' },
+      household: [{ id: '123e4567-e89b-12d3-a456-426614174000', owner: 'anthony-abcdef' }],
       demo: true,
     });
     expect(loadSession()).toBeNull();
 
     saveSession({
-      account: { id: PRACTICE_ALEX_ID, owner: 'alex' },
-      household: [{ id: PRACTICE_ALEX_ID, owner: 'alex' }],
+      account: { id: PRACTICE_ANTHONY_ID, owner: 'anthony' },
+      household: [{ id: PRACTICE_ANTHONY_ID, owner: 'anthony' }],
       demo: true,
     });
-    expect(loadSession()?.account.id).toBe(PRACTICE_ALEX_ID);
+    expect(loadSession()?.account.id).toBe(PRACTICE_ANTHONY_ID);
 
     saveSession({
       account: { id: '123e4567-e89b-12d3-a456-426614174001', owner: 'me-abcdef' },

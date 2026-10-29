@@ -58,12 +58,12 @@ export function Home({ me, name, data, actions, guide, cheer = 0 }: { me: Accoun
         </div>
         <div className="hello-badges">
           <span className="streak-pill" title="Consecutive days with a logged spend">
-            <span aria-hidden="true">🔥</span>
+            <span className="streak-flame"><Icon name="flame" size={15} /></span>
             <strong>{plan.streakDays}</strong>
             <span>{plan.streakDays === 1 ? 'day' : 'days'}</span>
           </span>
-          <button type="button" className="icon-btn" onClick={actions.seeWallet} aria-label="Open wallet settings">
-            <Icon name="settings" size={19} />
+          <button type="button" className="icon-btn" onClick={actions.seeWallet} aria-label="Wallet settings" title="Wallet settings">
+            <Icon name="settings" size={20} />
           </button>
         </div>
       </header>
@@ -77,10 +77,10 @@ export function Home({ me, name, data, actions, guide, cheer = 0 }: { me: Accoun
           <Icon name="plus" size={18} /><span>Log spend</span>
         </button>
         <button type="button" className="quick" onClick={actions.logIncome}>
-          <span aria-hidden="true">↙</span><span>Income</span>
+          <Icon name="income" size={18} /><span>Income</span>
         </button>
         <button type="button" className="quick" onClick={actions.settleUp}>
-          <span aria-hidden="true">⇄</span><span>Split</span>
+          <Icon name="swap" size={18} /><span>Split</span>
         </button>
       </section>
 

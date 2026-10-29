@@ -20,7 +20,7 @@ The user logs an amount and a category in a bottom sheet titled "What did you bu
 
 Preconditions:
 
-- Inside the demo as Alex (run [demo.md](./demo.md) `demo-start` first).
+- Inside the demo as Anthony (run [demo.md](./demo.md) `demo-start` first).
 
 - **Open sheet.** `$V pw click "getByRole('button', { name: 'Log spend', exact: true })"`. A `dialog` with heading `What did you buy?` appears; the submit button reads `Log it` and is disabled.
 - **Amount.** `$V pw fill "getByRole('dialog').getByRole('textbox', { name: 'Amount' })" "7.25"`. The submit button relabels to `Log $7.25` and enables.

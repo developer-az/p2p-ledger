@@ -19,7 +19,7 @@ const SCENES: StoryScene[] = [
     blurb:
       'This is a full ledger product — PostgreSQL, Java ledger-service, idempotent writes, fraud rules, and event relay — engineered to scale, not to fake balances in a UI.',
     actors: [
-      { cast: 'alex', pose: 'wave', x: 70, y: 0 },
+      { cast: 'anthony', pose: 'wave', x: 70, y: 0 },
       { cast: 'sam', pose: 'idle', x: 200, y: 0 },
       { cast: 'jordan', pose: 'idle', x: 330, y: 0 },
     ],
@@ -31,9 +31,9 @@ const SCENES: StoryScene[] = [
     blurb: 'Bank funding debits, your wallet credits — double-entry in one transaction, safe to retry with an Idempotency-Key.',
     actors: [
       { cast: 'clerk', pose: 'idle', x: 40, y: 0 },
-      { cast: 'alex', pose: 'wave', x: 220, y: 0 },
+      { cast: 'anthony', pose: 'wave', x: 220, y: 0 },
     ],
-    handoffHook: 'tour-practice-alex',
+    handoffHook: 'tour-practice-anthony',
   },
   {
     id: 'p2p',
@@ -41,7 +41,7 @@ const SCENES: StoryScene[] = [
     title: 'Peer-to-peer transfers',
     blurb: 'USER pays USER through the ledger API; the web app never stores a shadow balance.',
     actors: [
-      { cast: 'alex', pose: 'pay', x: 100, y: 0 },
+      { cast: 'anthony', pose: 'pay', x: 100, y: 0 },
       { cast: 'sam', pose: 'idle', x: 280, y: 0 },
     ],
   },
@@ -51,7 +51,7 @@ const SCENES: StoryScene[] = [
     title: 'Declines stay auditable',
     blurb: 'Rejected payments are recorded with reason codes — limits and fraud rules run before commit, with account rows locked in order.',
     actors: [
-      { cast: 'alex', pose: 'blocked', x: 90, y: 0 },
+      { cast: 'anthony', pose: 'blocked', x: 90, y: 0 },
       { cast: 'jordan', pose: 'idle', x: 260, y: 0 },
     ],
     handoffHook: 'tour-activity-hint',
@@ -71,7 +71,7 @@ const SCENES: StoryScene[] = [
     blurb: 'Overview charts sum integer cents from your account view — the same paths production monitoring would use.',
     actors: [
       { cast: 'sam', pose: 'readLedger', x: 120, y: 0 },
-      { cast: 'alex', pose: 'idle', x: 260, y: 0 },
+      { cast: 'anthony', pose: 'idle', x: 260, y: 0 },
     ],
   },
   {
@@ -81,7 +81,7 @@ const SCENES: StoryScene[] = [
     blurb: 'Bad connectivity fires the same payment five times; Postgres serializes on the idempotency key so only one transfer posts.',
     actors: [
       { cast: 'sam', pose: 'pay', x: 120, y: 0 },
-      { cast: 'alex', pose: 'idle', x: 280, y: 0 },
+      { cast: 'anthony', pose: 'idle', x: 280, y: 0 },
     ],
     handoffHook: 'tour-retry-hint',
   },
@@ -89,13 +89,13 @@ const SCENES: StoryScene[] = [
     id: 'handoff',
     layout: 'handoff',
     title: 'Open a wallet',
-    blurb: 'Practice offline with Alex, seed a live household on PostgreSQL, or create your own wallet — then run the retry storm on Overview.',
+    blurb: 'Practice offline with Anthony, seed a live household on PostgreSQL, or create your own wallet — then run the retry storm on Overview.',
     actors: [
-      { cast: 'alex', pose: 'wave', x: 60, y: 0 },
+      { cast: 'anthony', pose: 'wave', x: 60, y: 0 },
       { cast: 'sam', pose: 'idle', x: 180, y: 0 },
       { cast: 'jordan', pose: 'idle', x: 300, y: 0 },
     ],
-    handoffHook: 'tour-practice-alex',
+    handoffHook: 'tour-practice-anthony',
   },
 ];
 

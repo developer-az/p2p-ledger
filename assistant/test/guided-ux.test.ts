@@ -126,7 +126,7 @@ describe('sprite drawCharacter', () => {
     canvas.height = 64;
     const ctx = canvas.getContext('2d');
     expect(ctx).toBeTruthy();
-    drawCharacter(ctx!, 'alex', 'idle', 4, 4, 2);
+    drawCharacter(ctx!, 'anthony', 'idle', 4, 4, 2);
     const data = ctx!.getImageData(8, 8, 1, 1).data;
     expect(data.some((v) => v > 0)).toBe(true);
   });

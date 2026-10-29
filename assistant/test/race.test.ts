@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/server/app.js';
 import { InMemorySpendLogStore } from '../src/server/spend-log.js';
-import { CompositeLedger, PracticeLedger, PRACTICE_ALEX, PRACTICE_SAM } from '../src/server/practice-ledger.js';
+import { CompositeLedger, PracticeLedger, PRACTICE_ANTHONY, PRACTICE_SAM } from '../src/server/practice-ledger.js';
 import { ScriptedProvider } from '../src/server/providers/scripted.js';
 import type { LedgerAuditor, LedgerReader, LedgerWriter, Transfer, TransferRequest, WriteResult } from '../src/server/ledger.js';
 
@@ -43,7 +43,7 @@ describe('POST /api/race', () => {
     const res = await app.request('/api/race', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accountId: PRACTICE_ALEX, fromAccountId: PRACTICE_SAM }),
+      body: JSON.stringify({ accountId: PRACTICE_ANTHONY, fromAccountId: PRACTICE_SAM }),
     });
     expect(res.status).toBe(200);
     const body = await res.json() as { distinctTransfers: number; copies: number; attempts: { replayed: boolean }[] };

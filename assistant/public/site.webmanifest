@@ -1,0 +1,13 @@
+{
+  "name": "Settle",
+  "short_name": "Settle",
+  "description": "Log spends in two taps, keep a weekly pace, and settle up with friends.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f3ee",
+  "theme_color": "#0e0e10",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

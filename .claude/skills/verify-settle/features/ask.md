@@ -19,7 +19,7 @@ Ask ("A conversation with your records.") answers questions about the current wa
 
 Preconditions:
 
-- Inside the demo as Alex. `verify.sh doctor` shows `chat uses ledger fallback`.
+- Inside the demo as Anthony. `verify.sh doctor` shows `chat uses ledger fallback`.
 
 - **Open.** `$V pw click "getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Ask' })"`. Region `Conversation` with heading `What do you want to know?`.
 - **Starter.** `$V pw click "getByRole('button', { name: 'How much did I spend this week?' })"`. Within a few seconds the region shows the question, the notice `The language model is not connected on this server...`, and an answer starting `Balance $` plus `Looked at: ...`.

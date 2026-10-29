@@ -1,4 +1,4 @@
-const KNOWN_PEERS = new Set(['alex', 'sam', 'jordan', 'treasurer']);
+const KNOWN_PEERS = new Set(['anthony', 'sam', 'jordan', 'treasurer']);
 
 /** Display name for ledger owner_id (peers, bank corridors). */
 export function personName(owner: string): string {

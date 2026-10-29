@@ -9,7 +9,7 @@ describe('demo habits', () => {
   it('gives a demo wallet a personal history and a weekly pace', async () => {
     const spends = new InMemorySpendLogStore();
     const finance = new InMemoryPersonalFinanceStore();
-    const seeded = await seedDemoHabits(spends, finance, ACCOUNT, 'alex', new Date('2026-10-18T18:00:00Z'));
+    const seeded = await seedDemoHabits(spends, finance, ACCOUNT, 'anthony', new Date('2026-10-18T18:00:00Z'));
     expect(seeded).toBe(true);
 
     const profile = await finance.getProfile(ACCOUNT, 'USD');

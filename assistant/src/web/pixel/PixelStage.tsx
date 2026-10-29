@@ -12,7 +12,7 @@ export type StageLayout =
   | 'handoff';
 
 export interface StageActor {
-  cast: 'alex' | 'sam' | 'jordan' | 'clerk';
+  cast: 'anthony' | 'sam' | 'jordan' | 'clerk';
   pose: Pose;
   x: number;
   y: number;

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { createAssistantApi } from '../src/server/instance.js';
 import {
-  PRACTICE_ALEX,
+  PRACTICE_ANTHONY,
   PRACTICE_SAM,
 } from '../src/server/practice-ledger.js';
 
@@ -46,28 +46,28 @@ describe('Vercel API entry (fetch export)', () => {
   });
 
   it('GET /api/accounts?id= (query style used by UI)', async () => {
-    const res = await vercelFetch(req(`/api/accounts?id=${PRACTICE_ALEX}`));
+    const res = await vercelFetch(req(`/api/accounts?id=${PRACTICE_ANTHONY}`));
     expect(res.status).toBe(200);
     const body = await res.json() as { owner: string };
-    expect(body.owner).toBe('alex');
+    expect(body.owner).toBe('anthony');
   });
 
   it('GET /api/accounts/:id (nested path)', async () => {
-    const res = await vercelFetch(req(`/api/accounts/${PRACTICE_ALEX}`));
+    const res = await vercelFetch(req(`/api/accounts/${PRACTICE_ANTHONY}`));
     expect(res.status).toBe(200);
     const body = await res.json() as { owner: string };
-    expect(body.owner).toBe('alex');
+    expect(body.owner).toBe('anthony');
   });
 
   it('GET /api/peers?accountId=', async () => {
-    const res = await vercelFetch(req(`/api/peers?accountId=${PRACTICE_ALEX}`));
+    const res = await vercelFetch(req(`/api/peers?accountId=${PRACTICE_ANTHONY}`));
     expect(res.status).toBe(200);
     const peers = await res.json() as { id: string }[];
     expect(peers.some((p) => p.id === PRACTICE_SAM)).toBe(true);
   });
 
   it('POST /api/accounts/:id/deposits (multi-segment — Vercel edge 404 without rewrite)', async () => {
-    const res = await vercelFetch(req(`/api/accounts/${PRACTICE_ALEX}/deposits`, {
+    const res = await vercelFetch(req(`/api/accounts/${PRACTICE_ANTHONY}/deposits`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amountMinor: 1 }),
@@ -82,7 +82,7 @@ describe('Vercel API entry (fetch export)', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        sourceAccountId: PRACTICE_ALEX,
+        sourceAccountId: PRACTICE_ANTHONY,
         destinationAccountId: PRACTICE_SAM,
         amountMinor: 1,
         currency: 'USD',

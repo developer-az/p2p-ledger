@@ -13,7 +13,7 @@ export function money(minor: number, currency = 'USD'): string {
   return formatMoney(minor, currency);
 }
 
-/** "alex-4b4792" to "Alex". The random suffix only exists to keep demo accounts unique. */
+/** "anthony-4b4792" to "Anthony". The random suffix only exists to keep demo accounts unique. */
 export function displayName(owner: string): string {
   if (owner.startsWith('Bank funding') || owner === 'system:funding') return 'Your bank';
   const base = owner.split('-').filter(Boolean)[0] ?? owner;

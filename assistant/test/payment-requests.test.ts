@@ -4,7 +4,7 @@ import { splitEvenly } from '../src/server/money.js';
 import { InMemoryPaymentRequestStore } from '../src/server/payment-requests.js';
 import {
   CompositeLedger,
-  PRACTICE_ALEX,
+  PRACTICE_ANTHONY,
   PRACTICE_JORDAN,
   PRACTICE_SAM,
   PracticeLedger,
@@ -55,7 +55,7 @@ describe('payment requests', () => {
   it('creates one request per person and lists them for both sides', async () => {
     const { app, post } = setup();
     const res = await post('/requests', {
-      requesterAccountId: PRACTICE_ALEX,
+      requesterAccountId: PRACTICE_ANTHONY,
       memo: 'Dinner',
       payers: [
         { accountId: PRACTICE_SAM, amountMinor: 2000 },
@@ -69,16 +69,16 @@ describe('payment requests', () => {
       incoming: { memo: string; amount: string; requester: { owner: string } }[]; outgoing: unknown[];
     };
     expect(sam.incoming).toHaveLength(1);
-    expect(sam.incoming[0]).toMatchObject({ memo: 'Dinner', amount: '$20.00', requester: { owner: 'alex' } });
+    expect(sam.incoming[0]).toMatchObject({ memo: 'Dinner', amount: '$20.00', requester: { owner: 'anthony' } });
     expect(sam.outgoing).toHaveLength(0);
-    const alex = await (await app.request(`/api/requests?accountId=${PRACTICE_ALEX}`)).json() as { outgoing: unknown[] };
-    expect(alex.outgoing).toHaveLength(2);
+    const anthony = await (await app.request(`/api/requests?accountId=${PRACTICE_ANTHONY}`)).json() as { outgoing: unknown[] };
+    expect(anthony.outgoing).toHaveLength(2);
   });
 
   it('refuses asking yourself, asking someone twice, and unknown accounts', async () => {
     const { post } = setup();
-    const base = { requesterAccountId: PRACTICE_ALEX };
-    expect((await post('/requests', { ...base, payers: [{ accountId: PRACTICE_ALEX, amountMinor: 100 }] })).status).toBe(400);
+    const base = { requesterAccountId: PRACTICE_ANTHONY };
+    expect((await post('/requests', { ...base, payers: [{ accountId: PRACTICE_ANTHONY, amountMinor: 100 }] })).status).toBe(400);
     expect((await post('/requests', {
       ...base,
       payers: [{ accountId: PRACTICE_SAM, amountMinor: 100 }, { accountId: PRACTICE_SAM, amountMinor: 100 }],
@@ -92,11 +92,11 @@ describe('payment requests', () => {
   it('moves money once even when the payer clicks pay twice at the same moment', async () => {
     const { post, balance } = setup();
     const created = await (await post('/requests', {
-      requesterAccountId: PRACTICE_ALEX,
+      requesterAccountId: PRACTICE_ANTHONY,
       payers: [{ accountId: PRACTICE_SAM, amountMinor: 2500 }],
     })).json() as RequestBody;
     const id = created.requests[0]!.id;
-    const [alexBefore, samBefore] = [await balance(PRACTICE_ALEX), await balance(PRACTICE_SAM)];
+    const [anthonyBefore, samBefore] = [await balance(PRACTICE_ANTHONY), await balance(PRACTICE_SAM)];
 
     const results = await Promise.all([
       post(`/requests/${id}/pay`, { accountId: PRACTICE_SAM }),
@@ -107,14 +107,14 @@ describe('payment requests', () => {
 
     expect(new Set(bodies.map((b) => b.transfer.id)).size).toBe(1);
     expect(bodies.every((b) => b.request.status === 'PAID')).toBe(true);
-    expect(await balance(PRACTICE_ALEX)).toBe(alexBefore + 2500);
+    expect(await balance(PRACTICE_ANTHONY)).toBe(anthonyBefore + 2500);
     expect(await balance(PRACTICE_SAM)).toBe(samBefore - 2500);
   });
 
   it('keeps a request open after a decline and lets the payer try again once funded', async () => {
     const { app, post, balance } = setup();
     const created = await (await post('/requests', {
-      requesterAccountId: PRACTICE_ALEX,
+      requesterAccountId: PRACTICE_ANTHONY,
       payers: [{ accountId: PRACTICE_JORDAN, amountMinor: 10_000 }],
     })).json() as RequestBody;
     const id = created.requests[0]!.id;
@@ -145,29 +145,29 @@ describe('payment requests', () => {
   it('only lets the right person act, and only while the request is pending', async () => {
     const { post } = setup();
     const created = await (await post('/requests', {
-      requesterAccountId: PRACTICE_ALEX,
+      requesterAccountId: PRACTICE_ANTHONY,
       payers: [{ accountId: PRACTICE_SAM, amountMinor: 500 }],
     })).json() as RequestBody;
     const id = created.requests[0]!.id;
 
     expect((await post(`/requests/${id}/pay`, { accountId: PRACTICE_JORDAN })).status).toBe(403);
-    expect((await post(`/requests/${id}/decline`, { accountId: PRACTICE_ALEX })).status).toBe(403);
+    expect((await post(`/requests/${id}/decline`, { accountId: PRACTICE_ANTHONY })).status).toBe(403);
     expect((await post(`/requests/${id}/cancel`, { accountId: PRACTICE_SAM })).status).toBe(403);
 
     expect((await post(`/requests/${id}/decline`, { accountId: PRACTICE_SAM })).status).toBe(200);
     expect((await post(`/requests/${id}/decline`, { accountId: PRACTICE_SAM })).status).toBe(409);
     expect((await post(`/requests/${id}/pay`, { accountId: PRACTICE_SAM })).status).toBe(409);
-    expect((await post(`/requests/${id}/cancel`, { accountId: PRACTICE_ALEX })).status).toBe(409);
+    expect((await post(`/requests/${id}/cancel`, { accountId: PRACTICE_ANTHONY })).status).toBe(409);
     expect((await post('/requests/00000000-0000-4000-8000-000000000000/pay', { accountId: PRACTICE_SAM })).status).toBe(404);
   });
 
   it('lets the requester cancel a pending request', async () => {
     const { post } = setup();
     const created = await (await post('/requests', {
-      requesterAccountId: PRACTICE_ALEX,
+      requesterAccountId: PRACTICE_ANTHONY,
       payers: [{ accountId: PRACTICE_SAM, amountMinor: 500 }],
     })).json() as RequestBody;
-    const res = await post(`/requests/${created.requests[0]!.id}/cancel`, { accountId: PRACTICE_ALEX });
+    const res = await post(`/requests/${created.requests[0]!.id}/cancel`, { accountId: PRACTICE_ANTHONY });
     expect(res.status).toBe(200);
     expect(((await res.json()) as { request: { status: string } }).request.status).toBe('CANCELLED');
   });

@@ -98,7 +98,7 @@ export async function welcomeBankPackage(
   openingDepositMinor: number,
 ): Promise<{ depositTransferId: string; corridor: CorridorResult }> {
   const key = randomUUID();
-  const deposit = await ledger.deposit(userAccountId, openingDepositMinor, key);
+  const deposit = await ledger.deposit(userAccountId, openingDepositMinor, key, 'Opening balance');
   const corridor = await simulateInboundCorridor(ledger, userAccountId);
   return { depositTransferId: deposit.id, corridor };
 }

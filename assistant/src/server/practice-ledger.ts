@@ -268,7 +268,7 @@ export class PracticeLedger implements LedgerReader, LedgerWriter {
     return account;
   }
 
-  async deposit(accountId: string, amountMinor: number, idempotencyKey: string): Promise<Transfer> {
+  async deposit(accountId: string, amountMinor: number, idempotencyKey: string, memo?: string): Promise<Transfer> {
     const cached = this.idempotency.get(idempotencyKey);
     if (cached) return cached;
     const dest = this.account(accountId);
@@ -280,7 +280,7 @@ export class PracticeLedger implements LedgerReader, LedgerWriter {
       destinationAccountId: accountId,
       amountMinor,
       currency: dest.currency,
-      memo: 'Bank deposit',
+      memo: memo ?? 'Bank deposit',
       status: 'COMPLETED',
       rejectionReason: null,
       createdAt: new Date().toISOString(),
@@ -390,11 +390,11 @@ export class CompositeLedger implements LedgerReader, LedgerWriter, LedgerAudito
     return this.practice.openAccount(ownerId, currency);
   }
 
-  async deposit(accountId: string, amountMinor: number, idempotencyKey: string) {
+  async deposit(accountId: string, amountMinor: number, idempotencyKey: string, memo?: string) {
     if (await this.practice.getAccount(accountId)) {
-      return this.practice.deposit(accountId, amountMinor, idempotencyKey);
+      return this.practice.deposit(accountId, amountMinor, idempotencyKey, memo);
     }
-    return this.live.deposit(accountId, amountMinor, idempotencyKey);
+    return this.live.deposit(accountId, amountMinor, idempotencyKey, memo);
   }
 
   async transfer(req: Parameters<LedgerWriter['transfer']>[0], idempotencyKey: string) {
@@ -494,7 +494,7 @@ export class CompositeLedger implements LedgerReader, LedgerWriter, LedgerAudito
     idempotencyKey: string,
   ): Promise<WriteResult> {
     if (await this.practice.getAccount(accountId)) {
-      const transfer = await this.practice.deposit(accountId, body.amountMinor, idempotencyKey);
+      const transfer = await this.practice.deposit(accountId, body.amountMinor, idempotencyKey, body.memo);
       return { status: 201, replayed: false, transfer };
     }
     return this.live.postDeposit(accountId, body, idempotencyKey);

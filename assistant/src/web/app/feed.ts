@@ -61,7 +61,7 @@ export function buildFeed(view: AccountView): FeedItem[] {
         declineExplanation: t.declineExplanation,
       });
     } else if (t.direction === 'deposit') {
-      items.push({ ...base, kind: 'deposit', title: 'Added from bank', subtitle: 'Bank transfer', signedMinor: minor, counterparty: t.counterparty });
+      items.push({ ...base, kind: 'deposit', title: t.memo || 'Added from bank', subtitle: 'Bank transfer', signedMinor: minor, counterparty: t.counterparty });
     } else if (t.direction === 'received') {
       items.push({ ...base, kind: 'received', title: t.memo || `From ${name}`, subtitle: `From ${name}`, signedMinor: minor, counterparty: t.counterparty });
     } else {

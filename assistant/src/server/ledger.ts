@@ -104,7 +104,7 @@ export interface LedgerReader {
 
 export interface LedgerWriter {
   openAccount(ownerId: string, currency: string): Promise<Account>;
-  deposit(accountId: string, amountMinor: number, idempotencyKey: string): Promise<Transfer>;
+  deposit(accountId: string, amountMinor: number, idempotencyKey: string, memo?: string): Promise<Transfer>;
   transfer(req: TransferRequest, idempotencyKey: string): Promise<Transfer>;
 }
 
@@ -168,10 +168,10 @@ export class HttpLedgerClient implements LedgerReader, LedgerWriter, LedgerAudit
     return this.request<Account>('POST', '/v1/accounts', { ownerId, currency });
   }
 
-  async deposit(accountId: string, amountMinor: number, idempotencyKey: string) {
+  async deposit(accountId: string, amountMinor: number, idempotencyKey: string, memo?: string) {
     this.clearCache();
     return this.request<Transfer>('POST', `/v1/accounts/${encodeURIComponent(accountId)}/deposits`,
-      { amountMinor }, idempotencyKey);
+      memo ? { amountMinor, memo } : { amountMinor }, idempotencyKey);
   }
 
   async transfer(req: Parameters<LedgerWriter['transfer']>[0], idempotencyKey: string) {

@@ -1,5 +1,11 @@
 # Engineering Handoff (latest)
 
+## Session: display names with digits (2026-11-01)
+- **Bug:** Signup rejected any display name containing a digit. Found in the PR #25 live check: "Verify Check 25" got a 400 from `POST /api/auth/register`, so the verification account was created under a letters-only name.
+- **Root cause:** `displayNameField` in `assistant/src/server/app.ts` allowed letters, spaces, `'`, `.`, `-` only.
+- **Fix:** The rule now also allows digits after the first letter. Underscores and other handle characters are still refused with "Use your name, not a handle."
+- **Verify:** New regression test in `assistant/test/auth.test.ts` (registers "Verify Check 25", still refuses `sam_lee99`); it failed with 400 before the fix. Full assistant suite passes (186 tests) and `tsc --noEmit` is clean.
+
 ## Session: email sign-in, account-first welcome
 - **Auth:** `POST /api/auth/register|login|logout` and `GET /api/auth/session`. Passwords are scrypt hashes. The session is an httpOnly `settle_session` cookie (30 days), stored in memory or in Postgres `app_users` / `app_sessions` when `DATABASE_URL` or `LEDGER_DATABASE_URL` is set (`identity.persistent` on bootstrap).
 - **Welcome:** Create account and Sign in are the nav and the hero. The sample household is a text link. The name-only create-wallet form is gone. Signed-in chrome says Sign out and shows the email. The footer no longer calls the product a demo.

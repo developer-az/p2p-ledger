@@ -304,13 +304,10 @@ export function createApp(deps: {
     } catch (e) {
       return c.json({ error: (e as Error).message }, 400);
     }
-    let funded = false;
-    try {
-      await welcomeBankPackage(deps.ledger, account.id, 500_00);
-      funded = true;
-    } catch {
-      /* The account still exists. The person can add money from the wallet. */
-    }
+    /* New accounts start empty on purpose. The setup sheet collects the
+       person's own cash, cards, and pace — no simulated funding at signup.
+       The $500 welcome package still exists, but only as the explicit
+       bank-simulator action (POST /api/bank/welcome, ops console). */
     const userId = randomUUID();
     try {
       await auth.insert({
@@ -329,7 +326,6 @@ export function createApp(deps: {
     return c.json({
       user: { email, displayName },
       account: { id: account.id, owner: account.ownerId },
-      funded,
     }, 201);
   });
 

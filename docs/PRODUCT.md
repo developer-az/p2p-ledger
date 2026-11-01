@@ -20,12 +20,12 @@
 |---|---|---|
 | Entry | **Preview a sample household** | **Create account** (email and password) |
 | Data | Seeded household + personal history for Anthony, Sam, Jordan | New ledger account, no spend logs, no demo household |
-| First money | Existing demo balances/transfers | **$500 simulated deposit + one inbound corridor** so the ledger is never empty |
+| First money | Existing demo balances/transfers | **None — the account starts empty**; setup collects the owner's real cash, cards, and pace |
 | Guidance | Five-step card: baseline → log spend → log income → Patterns → weekly pace; **Demo** pill reopens it | Normal first-run setup; cash prefilled from the funded Settle wallet |
 | Isolation | `spend_logs`, `money_profiles` and progress keyed by demo account ids | Keyed by the new account id; demo data never enters it |
 | Persistence | Practice: memory; live: Postgres | Live: Postgres; practice: memory until restart |
 
-The demo is deliberately instructive: it has a believable history, a real declined payment, ledger entries, and a progress card that points at the feature each step proves. The personal wallet is deliberately clean: funded, with a first peer, but no demo story.
+The demo is deliberately instructive: it has a believable history, a real declined payment, ledger entries, and a progress card that points at the feature each step proves. The personal wallet is deliberately clean: empty, no first peer, no demo story — the owner sets the starting point from their own numbers.
 
 What actually runs, with no pretence:
 
@@ -87,7 +87,7 @@ SQL migration: [`assistant/sql/V1__spend_logs.sql`](../assistant/sql/V1__spend_l
 ## Live demo (today)
 
 1. **Seed live household** on sign-in → anthony-/sam-/jordan-* wallets with history and personal demo logs.
-2. **Create account** → email, password, and name. Opens a ledger wallet, funds a **$500 opening deposit + inbound corridor**, and keeps sample data out. Sign in returns the same wallet.
+2. **Create account** → email, password, and name. Opens a ledger wallet that **starts empty** (no opening deposit, no corridor), and keeps sample data out. Setup collects the owner's own cash, cards, and pace. Sign in returns the same wallet.
 3. **Practice mode** → full ledger without Java; created wallets live in memory until restart.
 4. **Log habits** → the two-tap sheet on Today, or `log 12 dining coffee` in the ops console.
 

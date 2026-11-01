@@ -51,11 +51,20 @@ describe('account sign-in', () => {
       body: JSON.stringify({ email: 'Sam@Example.com', password: 'correct-horse', displayName: 'Sam Lee' }),
     });
     expect(created.status).toBe(201);
-    const body = await created.json() as { user: { email: string; displayName: string }; account: { id: string; owner: string }; funded: boolean };
+    const body = await created.json() as { user: { email: string; displayName: string }; account: { id: string; owner: string } };
     expect(body.user).toEqual({ email: 'sam@example.com', displayName: 'Sam Lee' });
     expect(body.account.owner.startsWith('sam-lee-')).toBe(true);
-    expect(body.funded).toBe(true);
+    expect('funded' in body).toBe(false);
     const cookie = cookieFrom(created);
+
+    // A new account starts empty: no welcome funding, no corridor, no history.
+    const own = await api.request(`/api/accounts/${body.account.id}`, { headers: { cookie } });
+    expect(own.status).toBe(200);
+    const view = await own.json() as { balance: string; summary: { deposited: string; received: string }; transfers: unknown[] };
+    expect(view.balance).toBe('$0.00');
+    expect(view.summary.deposited).toBe('$0.00');
+    expect(view.summary.received).toBe('$0.00');
+    expect(view.transfers).toHaveLength(0);
 
     const session = await api.request('/api/auth/session', { headers: { cookie } });
     expect(session.status).toBe(200);

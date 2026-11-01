@@ -367,7 +367,6 @@ export interface AuthUser {
 export interface AuthResult {
   user: AuthUser;
   account: AccountRef;
-  funded?: boolean;
 }
 
 export interface ToolCall { tool: string; args: unknown; result: unknown; ms: number }

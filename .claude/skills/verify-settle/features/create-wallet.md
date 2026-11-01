@@ -1,11 +1,11 @@
 # Create an account
 
-A person signs up with name, email, and password. The wallet gets a $500 opening deposit plus one inbound corridor, starts with no spend logs, and opens the setup sheet. Sign-out returns to Welcome. Signing in with the same email returns the same wallet while that server process is still up.
+A person signs up with name, email, and password. The wallet **starts empty** — no opening deposit, no inbound corridor — starts with no spend logs, and opens the setup sheet, where the person enters their own cash, cards, and pace. Sign-out returns to Welcome. Signing in with the same email returns the same wallet while that server process is still up.
 
 ## Sub-features
 
 - `account-leave` signs out and returns to Welcome.
-- `account-create` registers and funds a wallet.
+- `account-create` registers an empty wallet (signup never funds it).
 - `account-return` signs in again and lands on the same greeting.
 
 ## How to get to it (user POV)
@@ -22,7 +22,7 @@ Preconditions:
 
 - **Leave.** `$V pw click "getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Wallet' })"`, then `$V pw click "getByRole('button', { name: 'Exit sample' })"`. Welcome renders with heading `Start clean. Keep it yours.` once Create account is selected. No confirm dialog.
 - **Create.** `$V pw click "getByRole('tab', { name: 'Create account' })"`, then fill Name `Verifya`, Email `verifya@example.com`, Password `correct-horse`, then `$V pw click "getByRole('button', { name: 'Create account' }).last()"`. Today shows heading `Hi, Verifya.` and the setup sheet `Set your starting point`.
-- **Side effect.** `$V pw --raw localstorage-get settle:session` gives the new account id and `"email":"verifya@example.com"`; `curl -s http://127.0.0.1:5199/api/accounts/<id>` shows `"deposited":"$500.00"` and a received corridor (assert deposit exactly and received > 0). `GET /api/auth/session` with the browser cookie returns the same account.
+- **Side effect.** `$V pw --raw localstorage-get settle:session` gives the new account id and `"email":"verifya@example.com"`; `curl -s http://127.0.0.1:5199/api/accounts/<id>` shows `"deposited":"$0.00"` and `"received":"$0.00"` with an empty transfers list (assert both exactly $0.00 — signup never funds; the $500 welcome package is ops-console only). `GET /api/auth/session` with the browser cookie returns the same account.
 - **Proof.** `$V pw snapshot --filename=wallet-create-after.yml`, `$V pw screenshot --filename=wallet-create.png`, the `/api` JSON saved to evidence.
 
 ## Gotchas

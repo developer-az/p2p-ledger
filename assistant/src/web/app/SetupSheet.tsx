@@ -50,7 +50,7 @@ export function SetupSheet({
   useEffect(() => {
     if (!open) return;
     setStep(initialStep);
-    setCashText(textFromMinor(profile?.walletCashMinor ?? suggestedCashMinor));
+    setCashText(textFromMinor(profile?.walletCashMinor ?? (suggestedCashMinor || null)));
     setCreditText(textFromMinor(profile?.creditOwedMinor ?? 0));
     setBudgetText(textFromMinor(profile?.weeklyBudgetMinor));
     setAffectsWallet(profile?.spendLogsAffectWallet ?? true);
@@ -62,7 +62,7 @@ export function SetupSheet({
   const creditParsed = parseMinor(creditText);
   const creditMinor = creditParsed ?? 0;
   const budgetMinor = parseMinor(budgetText);
-  const balanceForPace = cashMinor ?? profile?.walletCashMinor ?? suggestedCashMinor ?? null;
+  const balanceForPace = cashMinor ?? profile?.walletCashMinor ?? (suggestedCashMinor || null);
   const suggestion = useMemo(
     () => suggestedWeeklyBudget(balanceForPace, 0),
     [balanceForPace],

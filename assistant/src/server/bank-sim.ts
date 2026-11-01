@@ -91,7 +91,9 @@ export async function simulateOutboundCorridor(
   };
 }
 
-/** Opening deposit + one inbound corridor so new wallets are never empty and alone. */
+/** Opening deposit + one inbound corridor. Explicit simulator action only
+ *  (POST /api/bank/welcome, ops console) — registration never calls this;
+ *  new accounts start empty and setup collects the person's own values. */
 export async function welcomeBankPackage(
   ledger: LedgerWriter,
   userAccountId: string,

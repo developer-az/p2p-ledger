@@ -122,9 +122,7 @@ export function Welcome({
       onStart({ account: result.account, household: [], demo: false, user: result.user });
       toast(
         mode === 'create'
-          ? (result.funded
-            ? 'Your account is ready — a $500 opening deposit, plus a first inbound payment.'
-            : 'Your account is ready. Add money whenever you like.')
+          ? 'Your account is ready. Set your starting point with your own numbers.'
           : `Welcome back, ${result.user.displayName}.`,
         { tone: 'good' },
       );
@@ -298,7 +296,7 @@ export function Welcome({
           <div className="w-own-copy">
             <p className="w-kicker">Your account</p>
             <h2 id="own-title" className="w-h2">{mode === 'create' ? <>Start clean.<br />Keep it yours.</> : <>Welcome back.<br />Pick up where you left off.</>}</h2>
-            <p>One email, one wallet. The sample household never mixes with yours. You start with a $500 opening deposit, plus a first inbound payment, so it isn’t empty.</p>
+            <p>One email, one wallet. The sample household never mixes with yours. You start empty — setup collects your real cash, cards, and pace, not a pretend balance.</p>
           </div>
           <form className="w-own-form" onSubmit={(e) => { e.preventDefault(); void submitAccount(); }}>
             <div className="w-auth-switch" role="tablist" aria-label="Account">

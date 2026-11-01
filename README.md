@@ -57,7 +57,7 @@ The design rules: **three numbers to start** (cash, card balance, weekly pace), 
 
 **The demo is a guided tour, not a sandbox.** It seeds a believable personal history and a five-step progress card: set the baseline, log a spend, log income, open Patterns, adjust the weekly pace. Each step points at a real feature and the state updates as you go. A **Demo** pill reopens the guide; **Start my own wallet** leaves the tour.
 
-**Your wallet is isolated from the demo.** Creating a wallet opens a new ledger account, funds it with a **$500 simulated deposit plus one inbound corridor** so the ledger is never empty, pre-fills the cash step from that balance, and starts with no spend logs, no demo household, and no demo progress. In live mode the wallet persists in PostgreSQL; in practice mode it lives in memory.
+**Your wallet is isolated from the demo.** Creating an account opens a new ledger account that **starts empty** — no simulated deposit, no fake first payment. The setup sheet collects your own cash, cards, and weekly pace, and the account starts with no spend logs, no demo household, and no demo progress. In live mode the wallet persists in PostgreSQL; in practice mode it lives in memory.
 
 
 ## Terminal UI
@@ -84,7 +84,7 @@ flowchart LR
 
 ### Simulated bank (same ledger)
 
-`bank-sim` models ACH-style flows without a second database: each corridor **opens a counterparty wallet**, posts deposits/transfers, then leaves the peer in **PEERS** as history. New wallets get **`/api/bank/welcome`** ($500 + one inbound corridor).
+`bank-sim` models ACH-style flows without a second database: each corridor **opens a counterparty wallet**, posts deposits/transfers, then leaves the peer in **PEERS** as history. Accounts start empty at signup; **`/api/bank/welcome`** ($500 + one inbound corridor) is an explicit simulator action (ops console), never called by registration.
 
 ## System context
 

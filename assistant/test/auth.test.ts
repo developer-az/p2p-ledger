@@ -184,4 +184,28 @@ describe('account sign-in', () => {
     expect(unknown.status).toBe(401);
     expect((await unknown.json() as { error: string }).error).toBe('Email or password is incorrect.');
   });
+
+  it('accepts a display name with digits and still refuses a handle', async () => {
+    const api = app();
+    // Regression (live check 2026-11-01): "Verify Check 25" was rejected at
+    // signup because the name rule allowed letters only, so a verification
+    // account had to be created under a letters-only name instead.
+    const created = await api.request('/api/auth/register', {
+      method: 'POST',
+      headers: json,
+      body: JSON.stringify({ email: 'verify25@example.com', password: 'correct-horse', displayName: 'Verify Check 25' }),
+    });
+    expect(created.status).toBe(201);
+    const body = await created.json() as { user: { email: string; displayName: string }; account: { id: string; owner: string } };
+    expect(body.user).toEqual({ email: 'verify25@example.com', displayName: 'Verify Check 25' });
+    expect(body.account.owner.startsWith('verify-check-25-')).toBe(true);
+
+    const handle = await api.request('/api/auth/register', {
+      method: 'POST',
+      headers: json,
+      body: JSON.stringify({ email: 'handle@example.com', password: 'correct-horse', displayName: 'sam_lee99' }),
+    });
+    expect(handle.status).toBe(400);
+    expect((await handle.json() as { error: string }).error).toBe('Use your name, not a handle.');
+  });
 });

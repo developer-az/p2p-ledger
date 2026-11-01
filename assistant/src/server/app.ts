@@ -66,7 +66,10 @@ const openAccountBody = z.object({
   currency: z.string().length(3).default('USD'),
 });
 
-const displayNameField = z.string().trim().min(1).max(40).regex(/^[\p{L}][\p{L}\s'.-]{0,39}$/u, 'Use your name, not a handle.');
+/* Digits are allowed after the first letter: a name like "Verify Check 25"
+   is a name, not a handle. The letters-only version of this rule rejected
+   it at signup (found in the 2026-11-01 live check). */
+const displayNameField = z.string().trim().min(1).max(40).regex(/^[\p{L}][\p{L}\p{N}\s'.-]{0,39}$/u, 'Use your name, not a handle.');
 const registerBody = z.object({
   email: z.string().trim().email().max(254),
   password: z.string().min(8, 'Use at least 8 characters.').max(72),

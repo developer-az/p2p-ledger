@@ -24,7 +24,7 @@ export function AppPreloader({ visible }: { visible: boolean }) {
       <div className="app-preloader-inner">
         <Pip size={84} track={false} mood="happy" />
         <p className="app-preloader-copy">settle</p>
-        <p className="app-preloader-sub">waking up the ledger…</p>
+        <p className="app-preloader-sub">getting your day ready…</p>
       </div>
     </div>
   );

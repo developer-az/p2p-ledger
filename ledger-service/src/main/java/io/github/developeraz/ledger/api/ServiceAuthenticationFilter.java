@@ -30,7 +30,7 @@ public class ServiceAuthenticationFilter extends OncePerRequestFilter {
         // Match Spring's matrix-parameter normalization; encoded alternate paths are not part of this API.
         if (path.contains("%")) { reject(res, 400, "Use canonical API paths"); return; }
         path = path.replaceAll(";[^/]*", "");
-        boolean sensitive = path.startsWith("/v1/requests") || path.matches("/v1/transfers/[^/]+/receipt")
+        boolean sensitive = path.equals("/v1/capabilities") || path.matches("/v1/accounts/[^/]+/provision") || path.startsWith("/v1/requests") || path.matches("/v1/transfers/[^/]+/receipt")
                 || path.matches("/v1/accounts/[^/]+/spends(?:/.*)?");
         if (!path.equals("/actuator/health") && (!key.isEmpty() || sensitive)) {
             if (key.isEmpty()) { reject(res, 503, "Configure LEDGER_API_KEY to use this integration"); return; }

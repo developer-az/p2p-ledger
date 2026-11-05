@@ -62,3 +62,17 @@ Persistent sign-in and personal-finance snapshots still require the assistant's 
 ## Verification
 
 `ledger-service/mvnw verify` runs real PostgreSQL tests for split atomicity, retries, declined attempts, parallel pay/cancel, duplicate clicks, CSV rollback/deduplication/account isolation, plus bounded relay failure tests. `contracts/npm test` runs EVM behavior checks; `npm run test:integration` starts the actual jar with PostgreSQL and Hardhat and tests persistence across restart. Assistant tests check live delegation and wallet authorization. The contract package's CI includes the integrated chain path.
+
+
+## Settle workflow version 2 rollout
+
+The BFF now requires Java `GET /v1/capabilities` to advertise `workflows: 2` before production signup. This includes `PUT /v1/accounts/{id}/provision`, protected with `X-Ledger-Key`. The provisioned UUID comes from the durable BFF signup reservation. Replays return the original account; a different owner/currency fails without changing it.
+
+1. Deploy the Java artifact from this PR and run its Flyway migrations, with the same random 32+ character `LEDGER_API_KEY` used by the BFF. Do not point the new BFF at an older Java deployment.
+2. Deploy the BFF with `NODE_ENV=production`, durable `DATABASE_URL` (or `LEDGER_DATABASE_URL`), `LEDGER_URL`, and canonical HTTPS `APP_URL`. Existing BFF identity/profile data must remain in the same database. Signup attempts and credential budgets are additive tables; existing identities remain valid.
+3. Require `GET /api/ready` to return 200. A 503 indicates unavailable identity storage, missing credentials, or incompatible Java workflows. Do not route new signup traffic to an unready release.
+4. Run `npm run smoke:api -- https://YOUR_APP_HOST`, then verify login, spend/save/reload/undo and signup retry. The internal capability response must be version 2.
+
+The initial deploy order matters: a frontend preview cannot install Java routes into the separately hosted production ledger. A missing Spring static resource is a backend release mismatch, not an expense-validation error. Never fall back to memory to acknowledge live expenses.
+
+Credential attempts are limited per normalized email in PostgreSQL, across BFF instances. IP write limits remain a second local layer; production ingress still needs its own distributed abuse controls. PostgreSQL signup locks are transaction-scoped to support transaction poolers. Reset password/token/session updates are atomic.

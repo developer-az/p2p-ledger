@@ -107,3 +107,19 @@ describe('live Java workflows',()=>{
     expect(await memory.list(requester)).toEqual([]);
   });
 });
+
+it('treats an old Java deployment missing workflow routes as unavailable', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+    detail: 'No static resource v1/accounts/private-account/spends.',
+  }), { status: 404, headers: { 'Content-Type': 'application/json' } }));
+  try {
+    await expect(new JavaWorkflows('https://ledger.example', 'test-key').request('GET', '/v1/accounts/test/spends'))
+      .rejects.toMatchObject({ status: 503, message: 'Your wallet connection is unavailable. Try again shortly.' });
+  } finally { fetchMock.mockRestore(); }
+});
+
+it('refuses an incompatible workflow version before provisioning', async () => {
+  const mock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ workflows: 1 }), { status: 200 }));
+  try { await expect(new JavaWorkflows('https://ledger.example', 'test-key').assertReady()).rejects.toMatchObject({ status: 503 }); }
+  finally { mock.mockRestore(); }
+});

@@ -70,6 +70,20 @@ export function Home({ me, name, data, actions, guide, cheer = 0 }: { me: Accoun
 
       {guide}
 
+      <section className="spend-launcher" aria-labelledby="spend-launcher-title">
+        <div className="card-head"><div><p className="eyebrow">A little check-in</p><h2 id="spend-launcher-title">What did you spend on?</h2></div></div>
+        <div className="spend-bubbles">
+          {(['dining', 'groceries', 'transport', 'shopping', 'entertainment', 'other'] as SpendCategory[]).map(category => {
+            const meta = categoryMeta(category);
+            return <button key={category} type="button" onClick={() => actions.logSpend({ category })}>
+              <span aria-hidden="true" style={{ '--cat': meta.color } as CSSProperties}>{meta.emoji}</span>
+              {meta.label}
+            </button>;
+          })}
+        </div>
+        <p className="hint">Pick a bubble. Choose an amount. Check it and save.</p>
+      </section>
+
       {plan.hasBaseline ? <MoneyHero plan={plan} dots={dots} weekChange={weekChange} actions={actions} /> : <SetupHero actions={actions} />}
 
       <section className="quick-row" aria-label="Quick actions">
@@ -80,7 +94,7 @@ export function Home({ me, name, data, actions, guide, cheer = 0 }: { me: Accoun
           <Icon name="income" size={18} /><span>Income</span>
         </button>
         <button type="button" className="quick" onClick={actions.settleUp}>
-          <Icon name="swap" size={18} /><span>Split</span>
+          <Icon name="swap" size={18} /><span>Split a bill</span>
         </button>
       </section>
 
@@ -103,7 +117,7 @@ export function Home({ me, name, data, actions, guide, cheer = 0 }: { me: Accoun
                 One log wakes Pip up and unlocks your week ring. About five seconds.
               </EmptyState>
             ) : (
-              <FeedList items={habitFeed.slice(0, 5)} onOpen={actions.openItem} grouped={false} />
+              <FeedList items={feed.slice(0, 5)} onOpen={actions.openItem} grouped={false} />
             )}
           </section>
         </div>

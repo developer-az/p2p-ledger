@@ -90,6 +90,7 @@ export function SetupSheet({
     try {
       await api.updateFinance(me.id, {
         walletCashMinor: cashMinor,
+        rebaseCash: cashMinor !== profile?.walletCashMinor,
         creditOwedMinor: creditMinor,
         weeklyBudgetMinor: budgetMinor,
         spendLogsAffectWallet: affectsWallet,
@@ -142,7 +143,7 @@ export function SetupSheet({
                 </button>
               ))}
             </div>
-            <p className="hint">You can update this any time. It stays on this account.</p>
+            <p className="hint">Changing cash starts a fresh snapshot from today. Your spending history stays.</p>
           </div>
         ) : null}
 

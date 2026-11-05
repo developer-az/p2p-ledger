@@ -161,7 +161,7 @@ export function Welcome({
           <div className="w-copy">
             <m.p className="w-status" {...rise(0.05)}>
               <span className={`w-status-dot${live ? ' is-live' : ''}`} aria-hidden="true" />
-              {boot ? (live ? 'Ledger online' : 'Ready') : 'Connecting…'}
+              {boot ? (live ? 'Connected' : 'Practice available') : 'Connecting…'}
               <span className="w-status-extra"><span className="w-status-sep">/</span> your own account</span>
             </m.p>
             <h1 id="w-title" className="w-title">
@@ -181,7 +181,7 @@ export function Welcome({
               </span>
             </h1>
             <m.p className="w-lede" {...rise(0.5)}>
-              Log a spend in two taps. See your week in one glance. A tiny bean named Pip keeps the streak honest.
+              Pick a bubble. Log a spend. See your week in one glance. A tiny bean named Pip keeps the streak honest.
             </m.p>
             <m.div className="w-actions" {...rise(0.62)}>
               <button type="button" className="w-btn w-btn-volt" onClick={() => focusAuth('create')} disabled={!boot || busy !== null}>
@@ -261,8 +261,8 @@ export function Welcome({
           </InView>
           <InView as="article" className="w-tile" delay={0.08}>
             <span className="w-tile-n">02</span>
-            <h3>Two taps to log.</h3>
-            <p>Amount, category, done. Pip hops when you keep the streak alive.</p>
+            <h3>A few taps to log.</h3>
+            <p>Category, amount, review. Pip hops when you keep the streak alive.</p>
             <div className="w-mini w-mini-log" aria-hidden="true">
               <strong>$4.50</strong>
               <span className="chips-row"><i className="is-on">☕ Dining</i><i>🛒 Groceries</i><i>🚌 Transit</i></span>

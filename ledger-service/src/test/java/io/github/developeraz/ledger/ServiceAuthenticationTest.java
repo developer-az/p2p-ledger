@@ -10,7 +10,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 class ServiceAuthenticationTest {
     private final ChainProperties disabled=new ChainProperties(false,0,null,null,null,null,null,null,null,0,0,0);
     @Test void newWorkflowsFailClosedWithoutServiceCredentials() throws Exception {
-        for(String path:new String[]{"/v1/requests","/v1/requests;ignored","/v1/accounts/123/spends/import","/v1/transfers/123/receipt"}) {
+        for(String path:new String[]{"/v1/capabilities","/v1/accounts/123/provision","/v1/requests","/v1/requests;ignored","/v1/accounts/123/spends/import","/v1/transfers/123/receipt"}) {
             var response=new MockHttpServletResponse();
             new ServiceAuthenticationFilter("",disabled).doFilter(new MockHttpServletRequest("POST",path),response,
                     (req,res) -> { throw new AssertionError("Unauthenticated request reached a workflow"); });

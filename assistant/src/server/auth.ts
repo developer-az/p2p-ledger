@@ -26,9 +26,12 @@ export interface AuthRecord {
 export interface AuthStore {
   /** True when accounts survive a process restart (Postgres). */
   readonly persistent: boolean;
+  allowAuthAttempt(bucket: string, now: Date, limit?: number): Promise<boolean>;
   findByEmail(email: string): Promise<AuthRecord | null>;
   findByAccountId(accountId: string): Promise<AuthRecord | null>;
   insert(user: AuthRecord): Promise<void>;
+  provision(input: { email: string; password: string; displayName: string },
+    createAccount: (user: AuthRecord) => Promise<void>): Promise<AuthRecord>;
   saveSession(tokenHash: string, userId: string, expiresAt: Date): Promise<void>;
   userForToken(tokenHash: string, now: Date): Promise<AuthRecord | null>;
   deleteSession(tokenHash: string): Promise<void>;
@@ -39,6 +42,7 @@ export interface AuthStore {
   /** Uses up a reset token: returns its user once, and only before it expires. */
   consumeResetToken(tokenHash: string, now: Date): Promise<string | null>;
   updatePassword(userId: string, passwordHash: string): Promise<void>;
+  completeReset(tokenHash: string, now: Date, passwordHash: string): Promise<string | null>;
 }
 
 export const RESET_TOKEN_TTL_SEC = 30 * 60;
@@ -91,6 +95,37 @@ export class InMemoryAuthStore implements AuthStore {
   private readonly byEmail = new Map<string, AuthRecord>();
   private readonly byId = new Map<string, AuthRecord>();
   private readonly sessions = new Map<string, { userId: string; expiresAt: number }>();
+
+  private readonly attempts = new Map<string, { window: number; count: number }>();
+  async allowAuthAttempt(bucket: string, now: Date, limit = 10): Promise<boolean> {
+    const window = Math.floor(now.getTime() / 60_000);
+    for (const [key, entry] of this.attempts) if (entry.window < window) this.attempts.delete(key);
+    const previous = this.attempts.get(bucket);
+    const entry = { window, count: previous?.window === window ? previous.count + 1 : 1 };
+    this.attempts.set(bucket, entry);
+    return entry.count <= limit;
+  }
+
+  private readonly provisioning = new Map<string, AuthRecord>();
+  private readonly registering = new Set<string>();
+  async provision(input: { email: string; password: string; displayName: string }, createAccount: (user: AuthRecord) => Promise<void>): Promise<AuthRecord> {
+    if (this.registering.has(input.email)) throw new EmailTakenError();
+    this.registering.add(input.email);
+    try {
+      if (await this.findByEmail(input.email)) throw new EmailTakenError();
+      let user = this.provisioning.get(input.email);
+      if (user && !await verifyPassword(input.password, user.passwordHash)) throw new EmailTakenError();
+      if (!user) {
+        user = { id: crypto.randomUUID(), accountId: crypto.randomUUID(), ownerId: ownerIdFor(input.displayName),
+          email: input.email, displayName: input.displayName, passwordHash: await hashPassword(input.password) };
+        this.provisioning.set(input.email, user);
+      }
+      await createAccount(user);
+      await this.insert(user);
+      this.provisioning.delete(input.email);
+      return user;
+    } finally { this.registering.delete(input.email); }
+  }
 
   async findByEmail(email: string): Promise<AuthRecord | null> {
     return this.byEmail.get(email) ?? null;
@@ -145,6 +180,19 @@ export class InMemoryAuthStore implements AuthStore {
     return reset.expiresAt > now.getTime() ? reset.userId : null;
   }
 
+  async completeReset(tokenHash: string, now: Date, passwordHash: string): Promise<string | null> {
+    const reset = this.resets.get(tokenHash);
+    if (!reset || reset.expiresAt <= now.getTime()) return null;
+    const user = this.byId.get(reset.userId);
+    if (!user) return null;
+    this.resets.delete(tokenHash);
+    const next = { ...user, passwordHash };
+    this.byId.set(user.id, next);
+    this.byEmail.set(user.email, next);
+    for (const [hash, session] of this.sessions) if (session.userId === user.id) this.sessions.delete(hash);
+    return user.id;
+  }
+
   async updatePassword(userId: string, passwordHash: string): Promise<void> {
     const user = this.byId.get(userId);
     if (!user) return;
@@ -166,6 +214,14 @@ create table if not exists app_users (
 );
 create unique index if not exists app_users_email_idx on app_users (email);
 create index if not exists app_users_account_id_idx on app_users (account_id);
+create table if not exists app_auth_attempts (
+    bucket text primary key, window_start bigint not null, attempts integer not null
+);
+create table if not exists app_signup_attempts (
+    email text primary key, id uuid not null, account_id uuid not null,
+    owner_id text not null, display_name text not null, password_hash text not null,
+    created_at timestamptz not null default now()
+);
 create table if not exists app_sessions (
     token_hash text primary key,
     user_id    uuid        not null references app_users (id) on delete cascade,
@@ -196,8 +252,13 @@ export class PostgresAuthStore implements AuthStore {
 
   private async ensureSchema(c: import('pg').Client) {
     if (this.schemaReady) return;
-    await c.query(AUTH_SCHEMA);
-    this.schemaReady = true;
+    await c.query('begin');
+    try {
+      await c.query("select pg_advisory_xact_lock(hashtextextended('settle:identity-schema', 0))");
+      await c.query(AUTH_SCHEMA);
+      await c.query('commit');
+      this.schemaReady = true;
+    } catch (error) { await c.query('rollback'); throw error; }
   }
 
   private row(row: Record<string, unknown>): AuthRecord {
@@ -209,6 +270,48 @@ export class PostgresAuthStore implements AuthStore {
       accountId: String(row.account_id),
       ownerId: String(row.owner_id),
     };
+  }
+
+  async allowAuthAttempt(bucket: string, now: Date, limit = 10): Promise<boolean> {
+    return this.run(async c => {
+      const window = Math.floor(now.getTime() / 60_000);
+      const result = await c.query(`insert into app_auth_attempts(bucket,window_start,attempts) values($1,$2,1)
+        on conflict(bucket) do update set window_start=$2,
+          attempts=case when app_auth_attempts.window_start=$2 then least(app_auth_attempts.attempts+1,1000) else 1 end returning attempts`,
+        [hashSessionToken(bucket), window]);
+      await c.query('delete from app_auth_attempts where window_start < $1', [window - 60]);
+      return Number(result.rows[0].attempts) <= limit;
+    });
+  }
+
+  async provision(input: { email: string; password: string; displayName: string }, createAccount: (user: AuthRecord) => Promise<void>): Promise<AuthRecord> {
+    const c = await this.client();
+    try {
+      await this.ensureSchema(c);
+      if ((await c.query('select 1 from app_users where email=$1', [input.email])).rowCount) throw new EmailTakenError();
+      // Commit the reservation before calling Java. Transaction-scoped locks also work with transaction poolers.
+      await c.query(`insert into app_signup_attempts(email,id,account_id,owner_id,display_name,password_hash)
+        values($1,$2,$3,$4,$5,$6) on conflict(email) do nothing`, [input.email, crypto.randomUUID(), crypto.randomUUID(),
+        ownerIdFor(input.displayName), input.displayName, await hashPassword(input.password)]);
+      await c.query('begin');
+      const lock = await c.query('select pg_try_advisory_xact_lock(hashtextextended($1, 0)) as acquired', ['signup:' + input.email]);
+      if (!lock.rows[0].acquired) throw new EmailTakenError();
+      if ((await c.query('select 1 from app_users where email=$1', [input.email])).rowCount) throw new EmailTakenError();
+      const row = (await c.query('select * from app_signup_attempts where email=$1', [input.email])).rows[0];
+      if (!row || !await verifyPassword(input.password, String(row.password_hash))) throw new EmailTakenError();
+      const user = this.row(row);
+      await createAccount(user);
+      await c.query(`insert into app_users(id,email,password_hash,display_name,account_id,owner_id) values($1,$2,$3,$4,$5,$6)`,
+        [user.id,user.email,user.passwordHash,user.displayName,user.accountId,user.ownerId]);
+      await c.query('delete from app_signup_attempts where email=$1', [input.email]);
+      await c.query('commit');
+      return user;
+    } catch (error) {
+      await c.query('rollback').catch(() => {});
+      throw error;
+    } finally {
+      await c.end();
+    }
   }
 
   async findByEmail(email: string): Promise<AuthRecord | null> {
@@ -328,6 +431,23 @@ export class PostgresAuthStore implements AuthStore {
     const row = res.rows[0] as { user_id: string; expires_at: Date | string } | undefined;
     if (!row) return null;
     return new Date(row.expires_at).getTime() > now.getTime() ? String(row.user_id) : null;
+  }
+
+  async completeReset(tokenHash: string, now: Date, passwordHash: string): Promise<string | null> {
+    return this.run(async c => {
+      await c.query('begin');
+      try {
+        const result = await c.query('delete from app_password_resets where token_hash=$1 and expires_at>$2 returning user_id', [tokenHash, now.toISOString()]);
+        const id = result.rows[0]?.user_id as string | undefined;
+        if (id) {
+          await c.query('update app_users set password_hash=$2 where id=$1', [id, passwordHash]);
+          await c.query('delete from app_sessions where user_id=$1', [id]);
+          await c.query('delete from app_password_resets where user_id=$1', [id]);
+        }
+        await c.query('commit');
+        return id ?? null;
+      } catch (error) { await c.query('rollback'); throw error; }
+    });
   }
 
   async updatePassword(userId: string, passwordHash: string): Promise<void> {

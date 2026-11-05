@@ -57,7 +57,6 @@ import {
   hashPassword,
   hashSessionToken,
   newSessionToken,
-  ownerIdFor,
   verifyPassword,
   type AuthStore,
 } from './auth.js';
@@ -124,6 +123,7 @@ const recordSpendBody = z.object({
 });
 
 const financePatchBody = z.object({
+  rebaseCash: z.boolean().optional(),
   walletCashMinor: z.number().int().min(0).max(MAX_MINOR_UI).nullable().optional(),
   creditOwedMinor: z.number().int().min(0).max(MAX_MINOR_UI).optional(),
   weeklyBudgetMinor: z.number().int().min(0).max(MAX_MINOR_UI).nullable().optional(),
@@ -175,6 +175,17 @@ export function createApp(deps: {
   const appUrl = (deps.appUrl ?? process.env.APP_URL ?? '').trim().replace(/\/$/, '');
   const enforceWalletAuth = deps.enforceWalletAuth ?? (auth.persistent || process.env.NODE_ENV === 'production');
   const app = new Hono().basePath('/api');
+  app.use('*', async (c, next) => {
+    c.header('Cache-Control', 'no-store');
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) {
+      const origin = c.req.header('Origin');
+      const allowed = new Set([new URL(c.req.url).origin]);
+      if (appUrl) allowed.add(new URL(appUrl).origin);
+      if (c.req.header('Sec-Fetch-Site') === 'cross-site' || (origin && !allowed.has(origin)))
+        return c.json({ error: 'This request must come from Settle. Reload the app and try again.' }, 403);
+    }
+    await next();
+  });
   const allowChat = rateLimiter(20, 60_000);
   const allowSeed = rateLimiter(3, 60_000);
   const allowWrite = rateLimiter(40, 60_000);
@@ -227,6 +238,15 @@ export function createApp(deps: {
   app.use('/accounts/:id/*', protectWalletPath);
 
   app.get('/health', (c) => c.json({ status: 'ok' }));
+
+  app.get('/ready', async (c) => {
+    if (!auth.persistent || !deps.javaWorkflows) return c.json({ ready: false }, 503);
+    try {
+      await auth.findByEmail('readiness-probe@invalid.local');
+      await deps.javaWorkflows.assertReady();
+      return c.json({ ready: true });
+    } catch { return c.json({ ready: false }, 503); }
+  });
 
   app.get('/bootstrap', async (c) => {
     const practice = deps.practice.bootstrap();
@@ -284,7 +304,7 @@ export function createApp(deps: {
       sameSite: 'Lax',
       path: '/',
       maxAge: SESSION_MAX_AGE_SEC,
-      secure,
+      secure: secure || process.env.NODE_ENV === 'production',
     });
   };
 
@@ -300,33 +320,30 @@ export function createApp(deps: {
       return c.json({ error: 'Check the email, name, and password.' }, 400);
     }
     const email = parsed.data.email.toLowerCase();
+    if (!await auth.allowAuthAttempt('credentials:' + email, now()))
+      return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
     const displayName = parsed.data.displayName.replace(/\s+/g, ' ');
-    if (await auth.findByEmail(email)) return c.json({ error: 'An account with that email already exists. Sign in instead.' }, 409);
-    const ownerId = ownerIdFor(displayName);
-    let account: { id: string; ownerId: string };
+    if (process.env.NODE_ENV === 'production' && !auth.persistent)
+      return c.json({ error: 'Account creation is temporarily unavailable. Please try again later.' }, 503);
+    let user;
     try {
-      account = await deps.ledger.openAccount(ownerId, 'USD');
-    } catch (e) {
-      return c.json({ error: (e as Error).message }, 400);
-    }
-    /* New accounts start empty on purpose. The setup sheet collects the
-       person's own cash, cards, and pace — no simulated funding at signup.
-       The $500 welcome package still exists, but only as the explicit
-       bank-simulator action (POST /api/bank/welcome, ops console). */
-    const userId = randomUUID();
-    try {
-      await auth.insert({
-        id: userId,
-        email,
-        passwordHash: await hashPassword(parsed.data.password),
-        displayName,
-        accountId: account.id,
-        ownerId: account.ownerId,
+      user = await auth.provision({ email, password: parsed.data.password, displayName }, async (reserved) => {
+        if (deps.javaWorkflows && auth.persistent) {
+          await deps.javaWorkflows.assertReady();
+          await deps.javaWorkflows.request('PUT', `/v1/accounts/${reserved.accountId}/provision`,
+            { ownerId: reserved.ownerId, currency: 'USD' });
+        } else {
+          if (process.env.NODE_ENV === 'production') throw new LedgerError(503, 'Account creation is temporarily unavailable.');
+          const account = await deps.ledger.openAccount(reserved.ownerId, 'USD');
+          reserved.accountId = account.id;
+        }
       });
     } catch (e) {
       if (e instanceof EmailTakenError) return c.json({ error: e.message }, 409);
-      throw e;
+      return c.json({ error: 'We could not finish creating your account. Try again with the same email and password.' }, 503);
     }
+    const userId = user.id;
+    const account = { id: user.accountId, ownerId: user.ownerId };
     await issueSession(c, userId);
     return c.json({
       user: { email, displayName },
@@ -339,6 +356,8 @@ export function createApp(deps: {
     const parsed = loginBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Enter the email and password for your account.' }, 400);
     const email = parsed.data.email.toLowerCase();
+    if (!await auth.allowAuthAttempt('credentials:' + email, now()))
+      return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
     const user = await auth.findByEmail(email);
     const ok = await verifyPassword(parsed.data.password, user?.passwordHash ?? await dummyPasswordHash());
     if (!user || !ok) return c.json({ error: 'Email or password is incorrect.' }, 401);
@@ -410,10 +429,8 @@ export function createApp(deps: {
       if (field === 'password') return c.json({ error: 'Use at least 8 characters.' }, 400);
       return c.json({ error: 'This reset link is invalid or has expired. Ask for a new one.' }, 400);
     }
-    const userId = await auth.consumeResetToken(hashSessionToken(parsed.data.token), now());
+    const userId = await auth.completeReset(hashSessionToken(parsed.data.token), now(), await hashPassword(parsed.data.password));
     if (!userId) return c.json({ error: 'This reset link is invalid or has expired. Ask for a new one.' }, 400);
-    await auth.updatePassword(userId, await hashPassword(parsed.data.password));
-    await auth.deleteSessionsForUser(userId);
     await issueSession(c, userId);
     return c.json({ ok: true });
   });
@@ -436,7 +453,7 @@ export function createApp(deps: {
 
   app.post('/accounts', async (c) => {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
-    if (deps.isLiveLedgerUp && await deps.isLiveLedgerUp()) {
+    if (process.env.NODE_ENV === 'production' || (deps.isLiveLedgerUp && await deps.isLiveLedgerUp())) {
       return c.json({ error: 'Create a wallet through account registration.' }, 403);
     }
     const parsed = openAccountBody.safeParse(await c.req.json().catch(() => null));
@@ -763,7 +780,10 @@ export function createApp(deps: {
     if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
     const parsed = financePatchBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
-    const profile = await personalFinance.updateProfile(accountId, account.currency, parsed.data, now());
+    const { rebaseCash, ...patch } = parsed.data;
+    if (rebaseCash && patch.walletCashMinor == null) return c.json({ error: 'Set a cash amount to start a new snapshot.' }, 400);
+    const profile = await personalFinance.updateProfile(accountId, account.currency,
+      { ...patch, ...(rebaseCash ? { periodStart: now().toISOString() } : {}) }, now());
     const spends = await deps.spendLogs.list(accountId, { limit: 500 });
     const incomes = await personalFinance.listIncome(accountId, { limit: 500 });
     const finance = buildFinanceSnapshot(profile, formatMoney(account.balanceMinor, account.currency), spends, incomes);

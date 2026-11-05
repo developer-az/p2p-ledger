@@ -207,6 +207,7 @@ export function LogSpendSheet({
 }) {
   const toast = useToast();
   const [text, setText] = useState('');
+  const [step, setStep] = useState<'category' | 'amount' | 'review'>('category');
   const [category, setCategory] = useState<SpendCategory>('dining');
   const pendingSpend = useRef<{ body: string; key: string } | null>(null);
   const [note, setNote] = useState('');
@@ -218,6 +219,7 @@ export function LogSpendSheet({
     if (open) {
       setText(initialAmount ? (initialAmount / 100).toFixed(initialAmount % 100 === 0 ? 0 : 2) : '');
       setCategory(initialCategory ?? 'dining');
+      setStep(initialAmount ? 'review' : initialCategory ? 'amount' : 'category');
       setNote('');
       setError(null);
       setBusy(false);
@@ -238,7 +240,7 @@ export function LogSpendSheet({
   }, [recent]);
 
   async function submit() {
-    if (minor === null) return;
+    if (minor === null || busy || step !== 'review') return;
     setBusy(true);
     setError(null);
     try {
@@ -292,16 +294,17 @@ export function LogSpendSheet({
   return (
     <Sheet
       open={open}
-      title="What did you buy?"
-      subtitle="Amount + category. That’s it — your week ring updates right away."
+      title={step === 'category' ? "What did you buy?" : step === 'amount' ? "How much was it?" : "Looking good?"}
+      subtitle={`Step ${step === 'category' ? 1 : step === 'amount' ? 2 : 3} of 3 · Your spending, in a few taps.`}
       size="wide"
       onClose={onClose}
     >
-      <form className="log-form" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+      <form className="log-form spend-journey" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+        {step === 'amount' ? <>
+        <button type="button" className="chip" onClick={() => setStep('category')}>{categoryMeta(category).emoji} {categoryLabel(category)} · Change</button>
         <div className="log-amount">
           <span aria-hidden="true">$</span>
           <input
-            autoFocus
             inputMode="decimal"
             autoComplete="off"
             placeholder="0"
@@ -312,14 +315,15 @@ export function LogSpendSheet({
         </div>
 
         <div className="chips log-quick" role="group" aria-label="Quick amounts">
-          {QUICK.map((q) => (
+          {[500, 1000, 2000, 5000].map((q) => (
             <button key={q} type="button" className="chip" aria-pressed={minor === q} onClick={() => setText(String(q / 100))}>
               {money(q)}
             </button>
           ))}
         </div>
 
-        {again.length > 0 ? (
+        </> : null}
+        {step === 'category' && again.length > 0 ? (
           <div className="again">
             <p className="eyebrow">Again?</p>
             <div className="chips">
@@ -329,6 +333,7 @@ export function LogSpendSheet({
                   type="button"
                   className="chip chip-again"
                   onClick={() => {
+                    setStep('review');
                     setCategory(entry.category);
                     setNote(entry.note ?? '');
                     setText((entry.amountMinor / 100).toFixed(entry.amountMinor % 100 === 0 ? 0 : 2));
@@ -341,7 +346,7 @@ export function LogSpendSheet({
           </div>
         ) : null}
 
-        <div className="field">
+        {step === 'category' ? <div className="field">
           <span className="label" id="spend-cat">What was it?</span>
           <div className="cat-grid" role="group" aria-labelledby="spend-cat">
             {SPEND_CATEGORIES.map((c) => {
@@ -353,7 +358,7 @@ export function LogSpendSheet({
                   className="cat-tile"
                   aria-pressed={category === c}
                   style={{ '--cat': meta.color } as CSSProperties}
-                  onClick={() => setCategory(c)}
+                  onClick={() => { setCategory(c); setStep('amount'); }}
                 >
                   <span className="cat-emoji" aria-hidden="true">{meta.emoji}</span>
                   <span>{meta.label}</span>
@@ -361,18 +366,22 @@ export function LogSpendSheet({
               );
             })}
           </div>
-        </div>
-
+        </div> : null}
+        {step === 'review' ? <>
+        <p className="log-review">{categoryMeta(category).emoji} {categoryLabel(category)} · {minor === null ? '' : money(minor)}</p>
         <div className="field">
           <label className="label" htmlFor="spend-note">Note <span className="faint">(optional)</span></label>
           <input id="spend-note" className="input" maxLength={120} placeholder="Coffee with Sam" value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
 
-        <p className="hint">Only you see this. It never moves money or changes your Settle wallet.</p>
+        <p className="hint">This records spending in your plan. It does not send a payment or move bank money.</p>
+        </> : null}
         {error ? <p className="error-text" role="alert">{error}</p> : null}
-        <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={minor === null || busy}>
+        {step !== 'category' ? <button type="button" className="btn btn-block" disabled={busy} onClick={() => setStep(step === 'review' ? 'amount' : 'category')}>Back</button> : null}
+        {step === 'amount' ? <button type="button" className="btn btn-primary btn-block" disabled={minor === null} onClick={() => setStep('review')}>Review spending</button> : null}
+        {step === 'review' ? <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={minor === null || busy}>
           {busy ? 'Saving…' : minor === null ? 'Log it' : `Log ${money(minor)}`}
-        </button>
+        </button> : null}
       </form>
     </Sheet>
   );

@@ -519,6 +519,7 @@ export const api = {
   updateFinance: (
     accountId: string,
     body: {
+      rebaseCash?: boolean;
       walletCashMinor?: number | null;
       creditOwedMinor?: number;
       weeklyBudgetMinor?: number | null;

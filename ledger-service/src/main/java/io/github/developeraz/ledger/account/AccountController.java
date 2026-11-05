@@ -15,6 +15,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -39,6 +40,11 @@ public class AccountController {
     public ResponseEntity<Account> open(@Valid @RequestBody OpenAccountRequest request) {
         Account account = service.open(request.ownerId(), request.currency());
         return ResponseEntity.created(URI.create("/v1/accounts/" + account.id())).body(account);
+    }
+
+    @PutMapping("/{id}/provision")
+    public Account provision(@PathVariable UUID id, @Valid @RequestBody OpenAccountRequest request) {
+        return service.provision(id, request.ownerId(), request.currency());
     }
 
     @GetMapping

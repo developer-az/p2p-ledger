@@ -34,7 +34,7 @@ Global picks live in `~/.agents/SKILLS-ROUTING.md` ("Motion and visual stack"). 
 - Wallet's expense CSV import reuses the existing card, form, button and status styles. Activity's proof panel offers an explicit chain-receipt check and JSON download. Both show unavailable/error states without implying money moved. No new visual or animation dependencies.
 
 - Weekly **progress ring**, habit dots and pace copy on the Today card
-- Two-tap log sheet, category colors (Okabe–Ito), streak pill
+- Category bubbles, amount choices, explicit review and save; category colors (Okabe–Ito), streak pill
 - Patterns heatmap, demo guide, sheet dismiss (pointer down/up outside panel)
 - Ask is read-only; the Today ask bar only routes the question to the Ask tab
 
@@ -51,3 +51,7 @@ Global picks live in `~/.agents/SKILLS-ROUTING.md` ("Motion and visual stack"). 
 - Unattended roll → café punch card + `punch-card.css` on monochrome `app.css` + removed photos = half redesign.
 - `frontend-design` “pick extreme” without a pinned contract = template shopping.
 - Bullet-journal and AURA layers were stacked as override sheets on top of each other. Pocket replaced the token block and the whole override tail in one pass; keep one layer.
+
+## Spending journey (2026-11-05)
+
+Today leads with category bubbles. Presets are $5/$10/$20/$50; exact entry remains available. The keyboard opens when the amount field is chosen. Review names category and amount and explains that this records spending. The primary dock has Today, Activity, Wallet. Ask and Patterns remain contextual destinations. Personal Wallet omits simulated funding and the trust lab. Existing fonts, paper/ink/category tokens and reduced-motion rules apply. No dependencies added.

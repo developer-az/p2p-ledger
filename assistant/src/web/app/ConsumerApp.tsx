@@ -34,7 +34,8 @@ const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'wallet', label: 'Wallet', icon: 'wallet' },
 ];
 /** Tab order drives swipe direction: left reveals the next tab, right the previous. */
-const TAB_IDS: Tab[] = TABS.map((t) => t.id);
+const PRIMARY_TABS = TABS.filter(t => t.id !== 'patterns' && t.id !== 'ask');
+const TAB_IDS: Tab[] = PRIMARY_TABS.map((t) => t.id);
 
 type Sheetname = null | 'add' | 'log' | 'income' | 'setup' | 'settle';
 
@@ -130,7 +131,7 @@ export function ConsumerApp() {
                   ? `Signed in as ${session.user.email}`
                   : 'Create an account to keep a wallet of your own.'}
             </span>
-            <a href="/ops">Console</a>
+
           </footer>
         </div>
       </ToastProvider>
@@ -247,9 +248,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
     } catch {
       /* private mode: still show it this once */
     }
-    setSetupMode('onboarding');
-    setSetupStep(0);
-    setSheet('setup');
+    // Start with the useful action; the baseline is available on Today when wanted.
   }, [data, me.id]);
 
   useEffect(() => {
@@ -430,7 +429,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         </div>
       </main>
 
-      <FloatingDock tabs={TABS} active={tab} onSelect={go} syncing={refreshing} />
+      <FloatingDock tabs={PRIMARY_TABS} active={tab} onSelect={go} syncing={refreshing} />
 
       {tab !== 'today' ? (
         <button type="button" className="fab" onClick={() => openLog()} aria-label="Log what you spent">

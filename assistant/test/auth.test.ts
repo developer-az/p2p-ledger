@@ -209,3 +209,26 @@ describe('account sign-in', () => {
     expect((await handle.json() as { error: string }).error).toBe('Use your name, not a handle.');
   });
 });
+
+it('rejects cross-site signup before creating an account', async () => {
+  const response = await app().request('/api/auth/register', { method: 'POST',
+    headers: { ...json, origin: 'https://untrusted.example', 'sec-fetch-site': 'cross-site' },
+    body: JSON.stringify({ email: 'cross@example.com', password: 'correct-horse', displayName: 'Sam' }) });
+  expect(response.status).toBe(403);
+  expect(response.headers.get('Cache-Control')).toBe('no-store');
+});
+
+it('rebases cash without deducting previously recorded expenses again', async () => {
+  const api = app();
+  const created = await api.request('/api/auth/register', { method: 'POST', headers: json,
+    body: JSON.stringify({ email: 'baseline@example.com', password: 'correct-horse', displayName: 'Sam' }) });
+  const { account } = await created.json() as { account: { id: string } };
+  const headers = { ...json, cookie: cookieFrom(created) };
+  const spend = await api.request(`/api/accounts/${account.id}/spends`, { method: 'POST', headers,
+    body: JSON.stringify({ amountMinor: 2500, category: 'groceries', occurredAt: '2020-01-01T00:00:00Z' }) });
+  expect(spend.status).toBe(201);
+  const updated = await api.request(`/api/accounts/${account.id}/finance`, { method: 'PATCH', headers,
+    body: JSON.stringify({ walletCashMinor: 10000, rebaseCash: true }) });
+  expect(updated.status).toBe(200);
+  expect((await updated.json() as { finance: { projectedCash: string } }).finance.projectedCash).toBe('$100.00');
+});

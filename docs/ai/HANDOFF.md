@@ -1,5 +1,16 @@
 # Engineering Handoff (latest)
 
+## Session: Settle product and identity rework (2026-11-05)
+- Continued the owner-requested PR #27 rework. Today now leads with category bubbles; amount presets/custom entry lead to explicit review, retry-safe save, and undo. Main navigation is Today/Activity/Wallet. Ask and Patterns remain contextual. Removed the consumer console link and forced onboarding modal. Personal Wallet no longer shows simulated funding or the trust lab; the sample experience keeps them. Recent activity includes all sources.
+- Replaced contradictory PRODUCT.md directions with one Settle contract. The repository and Java accounting service are internal names, not separate products. Personal net position and simulated settlement balances must not be added together. Existing payments remain simulated; no Apple Pay/Venmo/bank integration was added.
+- Fixed cash editing via explicit rebaseCash: a new cash snapshot does not subtract old expenses again, while history stays available. Regression tested.
+- Production signup now fails closed without persistent identities and compatible Java. Durable signup reservations retain identity/account UUIDs across failures; transaction-scoped per-email locks work across instances and transaction poolers. Protected Java UUID provisioning uses insert-on-conflict and rejects mismatched owner/currency. No live-to-practice signup fallback.
+- Added authenticated Java workflow capability version 2 and BFF /api/ready; documented backend-before-BFF rollout. Original missing /spends error requires deploying the matching Java artifact, not just the frontend preview.
+- Hardened identity: shared PostgreSQL credential-attempt budgets, cross-site write rejection, no-store API responses, Secure cookies in production, serialized schema initialization, atomic reset-token/password/session transaction. Existing identity records/sessions remain compatible. Pending signup recovery requires the same password.
+- Verification: 205 app tests including real PostgreSQL signup recovery, cross-instance throttle concurrency and reset replay. The final suite had one auth test hit its 5-second timeout under local load; its 7-test file passed on an isolated run with a 15-second test deadline. Production build passes. Java reports cover 49 tests; initial transfer concurrency run hit a 3-second pool acquisition deadline, and the affected 19-test group passed with a 30-second integration acquisition deadline. No production pool configuration changed. Browser category/amount/review/save passed at 390 and 1280px without horizontal overflow. Existing JS gzip 71.13 to 71.36kB, no new dependencies. UTF-8 and whitespace checked.
+- Auth PostgreSQL integration is now enabled in assistant CI using a disposable database. Local evidence is under ignored .verify/. Java verification logs are ignored.
+- Release is still bounded by the prior instruction not to merge main or deploy production without owner approval. No production service upgraded by this work. Real-payment release still requires verified email/identity, provider onboarding, reconciliation and operational controls; code changes are not enterprise certification.
+
 ## Session: publish preview branch (2026-11-05)
 - Owner requested pushing `feat/java-workflows-chain-receipts` for a Vercel preview. Publish this feature branch without merging main or deploying the Java production service.
 - Preview UI builds from `assistant/`. Live Java features require a matching updated ledger plus the same server-only `LEDGER_API_KEY`; the existing production ledger is not upgraded by a feature-branch push. Chain receipts additionally require the documented signer/RPC/contract configuration.
@@ -118,3 +129,11 @@
 ## Prior UI/UX polish (summary)
 - Hero contrast, Patterns peek, Demo guide, topbar, log spend sheet, `netMinor` from `projectedCash`, setup pace chips, `/ops` terminal refresh.
 - Income/spend sheets use `ledger-store.run` via `ledger-mutations.ts`.
+
+## Session: PR #27 product review and spending journey (2026-11-05)
+- Reviewed PR #27 and the Java/BFF spending path. The reported Spring `No static resource .../spends` is consistent with the documented preview/production version mismatch: this branch contains SpendingController, while the prior handoff explicitly did not deploy Java. No deployment performed; root cause requires confirming the running backend version and deploying the matching artifact/migrations.
+- Changed the consumer spend sheet to category bubbles → amount bubbles/custom amount → review and save; retained idempotency and undo. Corrected misleading copy about personal spending versus money movement. No new dependencies or animation runtime.
+- Mapped upstream Spring missing-resource workflow failures to 503 without leaking internal paths; added regression coverage. This improves error handling, not backend availability.
+- Auth review: signup opens a Java account before identity insertion; partial failures/racing signup can orphan accounts. Provisioning needs durable idempotency/reconciliation. Existing scrypt/session/reset code does not establish enterprise readiness.
+- Remaining requested scope: coherent Settle balance/activity model, simpler onboarding, identity provisioning redesign, verified-email/provider/passkey strategy, distributed abuse controls, operational readiness and real payment-provider integration. Existing funding remains simulated. Do not represent the current change as a complete product rebuild or production approval.
+- Verification: typecheck passed; full app test/build results recorded in session output. Browser validation remains outstanding.

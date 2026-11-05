@@ -19,6 +19,16 @@ class SpendingServiceTest {
     @Autowired AccountService accounts;
     private UUID account() { return accounts.open("spending-" + UUID.randomUUID(), "USD").id(); }
 
+    @Test void provisioningReplayCreatesExactlyOneAccountAndRejectsConflicts() {
+        UUID id = UUID.randomUUID();
+        String owner = "signup-" + id;
+        var first = accounts.provision(id, owner, "USD");
+        assertThat(accounts.provision(id, owner, "USD")).isEqualTo(first);
+        assertThat(accounts.byOwner(owner)).hasSize(1);
+        assertThatThrownBy(() -> accounts.provision(id, "another-owner", "USD")).isInstanceOf(BadRequestException.class);
+        assertThat(accounts.get(id)).isEqualTo(first);
+    }
+
     @Test void recordsIdempotentlyAndDoesNotChangeLedgerMoney() {
         UUID account=account();
         var input=new SpendingService.Input(1250,"groceries","Weekly shop",null,null,"USD");

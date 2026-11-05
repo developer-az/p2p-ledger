@@ -7,6 +7,14 @@ import type { RecordSpendInput, SpendLogEntry, SpendLogStore } from './spend-log
 export class JavaWorkflows {
   constructor(private readonly baseUrl: string, private readonly apiKey: string, private readonly timeoutMs = 20_000) {}
 
+  private readyUntil = 0;
+  async assertReady(): Promise<void> {
+    if (Date.now() < this.readyUntil) return;
+    const capabilities = await this.request<{ workflows?: number }>('GET', '/v1/capabilities');
+    if (capabilities.workflows !== 2) throw new LedgerError(503, 'Your wallet connection is being updated. Try again shortly.');
+    this.readyUntil = Date.now() + 30_000;
+  }
+
   async request<T>(method: string, path: string, body?: unknown, key?: string): Promise<T> {
     let res: Response;
     try { res = await fetch(this.baseUrl.replace(/\/$/, '') + path, {
@@ -20,7 +28,7 @@ export class JavaWorkflows {
     if (!res.ok) {
       // Do not expose Java stack details or upstream infrastructure to the browser.
       const problem = await res.json().catch(() => ({})) as { detail?: string };
-      if (res.status === 401 || res.status === 503)
+      if ((res.status === 404 && (path === '/v1/capabilities' || problem.detail?.startsWith('No static resource'))) || res.status === 401 || res.status >= 500)
         throw new LedgerError(503, 'Your wallet connection is unavailable. Try again shortly.');
       throw new LedgerError(res.status, problem.detail ?? 'The ledger workflow is unavailable. Try again shortly.');
     }

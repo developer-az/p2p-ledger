@@ -32,6 +32,16 @@ public class AccountService {
         return account;
     }
 
+    @Transactional
+    public Account provision(UUID id, String ownerId, String currency) {
+        if (accounts.findFundingAccount(currency).isEmpty()) throw new BadRequestException("Unsupported currency");
+        accounts.insertIfAbsent(new Account(id, ownerId, currency, Account.AccountType.USER, 0, clock.instant()));
+        Account account = get(id);
+        if (!account.ownerId().equals(ownerId) || !account.currency().equals(currency) || account.type() != Account.AccountType.USER)
+            throw new BadRequestException("Account provisioning conflict");
+        return account;
+    }
+
     @Transactional(readOnly = true)
     public Account get(UUID id) {
         return accounts.findById(id).orElseThrow(() -> new NotFoundException("Account not found: " + id));

@@ -1321,3 +1321,20 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
 .app .reset-form { display: grid; gap: 14px; }
 .app .reset-form .link-btn { justify-self: center; }
 .app .reset-error { color: var(--bad); font-size: 0.9rem; margin: 0; }
+/* Spending journey: generous bubble targets, existing Pocket palette. */
+.spend-journey .cat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.spend-journey .cat-tile { border-radius: 28px; min-height: 96px; }
+.spend-journey .log-quick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.spend-journey .log-quick .chip { border-radius: 50%; min-width: 0; min-height: 64px; padding: 0; }
+.log-review { font-size: clamp(24px, 5vw, 36px); font-weight: 650; text-align: center; padding-block: 20px; }
+@media (max-width: 480px) { .spend-journey .cat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.spend-launcher { padding-block: 12px; }
+.spend-bubbles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-block: 20px; }
+.spend-bubbles button { display: grid; justify-items: center; gap: 10px; border: 0; background: none; color: var(--ink, #0e0e10); font: inherit; cursor: pointer; }
+.spend-bubbles button > span { display: grid; place-items: center; width: 76px; height: 76px; border: 1px solid var(--cat); background: color-mix(in srgb, var(--cat) 16%, var(--surface, white)); border-radius: 50%; font-size: 30px; transition: transform 160ms ease; }
+.spend-bubbles button:hover > span { transform: translateY(-3px); }
+.spend-bubbles button:active > span { transform: scale(.96); }
+.spend-bubbles button:focus-visible { outline: 2px solid currentColor; outline-offset: 5px; border-radius: 12px; }
+@media(max-width: 600px) { .spend-bubbles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media(prefers-reduced-motion: reduce) { .spend-bubbles button > span { transition: none; } .spend-bubbles button:hover > span { transform: none; } }

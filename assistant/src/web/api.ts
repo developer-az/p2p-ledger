@@ -1,5 +1,11 @@
 export interface AccountRef { id: string; owner: string }
 
+export interface ChainReceipt {
+  transferId: string; transferKey: string; commitment: string; preimage: string;
+  chainId: number; contractAddress: string; status: 'PENDING' | 'SUBMITTED' | 'FINALIZED' | 'FAILED';
+  transactionHash: string | null; blockNumber: number | null;
+}
+
 export interface AccountActivity {
   transferId: string;
   direction: 'sent' | 'received' | 'deposit';
@@ -495,9 +501,10 @@ export const api = {
     call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}&limit=${limit}&tzOffset=${encodeURIComponent(String(tzOffsetMinutes))}`),
   habits: (accountId: string) =>
     call<HabitsHome>(`/api/accounts/${encodeURIComponent(accountId)}/habits`),
-  recordSpend: (accountId: string, body: { amountMinor: number; category: SpendCategory; note?: string }) =>
+  recordSpend: (accountId: string, body: { amountMinor: number; category: SpendCategory; note?: string }, key: string = idempotencyKey()) =>
     call<{ id: string }>(`/api/accounts/${encodeURIComponent(accountId)}/spends`, {
       method: 'POST',
+      headers: { 'Idempotency-Key': key },
       body: JSON.stringify(body),
     }),
   deleteSpend: (accountId: string, spendId: string) =>
@@ -535,7 +542,15 @@ export const api = {
     requesterAccountId: string;
     memo?: string;
     payers: { accountId: string; amountMinor: number }[];
-  }) => call<{ requests: PaymentRequestView[] }>('/api/requests', { method: 'POST', body: JSON.stringify(body) }),
+  }, key: string = idempotencyKey()) => call<{ requests: PaymentRequestView[] }>('/api/requests', {
+    method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(body),
+  }),
+  importSpends: (accountId: string, csv: string) =>
+    call<{ imported: number; duplicates: number; rows: number }>(`/api/accounts/${encodeURIComponent(accountId)}/spends/import`, {
+      method: 'POST', body: JSON.stringify({ csv, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+    }),
+  chainReceipt: (accountId: string, transferId: string) =>
+    call<ChainReceipt>(`/api/transfers/${encodeURIComponent(transferId)}/receipt?accountId=${encodeURIComponent(accountId)}`),
   payRequest: (requestId: string, accountId: string) =>
     call<PayRequestResult>(`/api/requests/${encodeURIComponent(requestId)}/pay`, {
       method: 'POST',

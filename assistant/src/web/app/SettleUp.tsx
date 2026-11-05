@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   api,
   dollarsToMinor,
@@ -79,6 +79,7 @@ export function SettleUpSheet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { rows, error: rowsError, reload } = useRequests(me.id);
+  const pendingSplit = useRef<{ body: string; key: string } | null>(null);
   const minor = dollarsToMinor(text);
 
   useEffect(() => {
@@ -97,12 +98,17 @@ export function SettleUpSheet({
     setError(null);
     try {
       const split = splitShares(minor, picked.length);
-      await api.createRequests({
+      const body = {
         requesterAccountId: me.id,
         memo: memo.trim() || undefined,
         payers: picked.map((accountId, i) => ({ accountId, amountMinor: split[i]! })),
-      });
+      };
+      const serialized = JSON.stringify(body);
+      if (pendingSplit.current?.body !== serialized)
+        pendingSplit.current = { body: serialized, key: crypto.randomUUID() };
+      await api.createRequests(body, pendingSplit.current.key);
       await Promise.all([reload(), onChanged()]);
+      pendingSplit.current = null;
       toast(`Asked for ${money(minor)}`, { tone: 'good' });
       setPicked([]);
       setText('');

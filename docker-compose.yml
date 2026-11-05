@@ -40,6 +40,7 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/ledger
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       EVENTS_SINK: kafka
+      LEDGER_API_KEY: ${LEDGER_API_KEY:?Set LEDGER_API_KEY to the same random 32+ character value for Java and assistant}
     ports: ["8080:8080"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -50,6 +51,7 @@ services:
     build: ./assistant
     environment:
       LEDGER_URL: http://ledger:8080
+      LEDGER_API_KEY: ${LEDGER_API_KEY:?Set LEDGER_API_KEY}
       PORT: 8787
     ports: ["8787:8787"]
     depends_on:

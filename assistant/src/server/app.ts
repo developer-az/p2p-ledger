@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { JavaWorkflows } from './java-workflows.js';
 import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
@@ -148,6 +149,7 @@ export function createApp(deps: {
   spendLogs: SpendLogStore;
   personalFinance?: PersonalFinanceStore;
   paymentRequests?: PaymentRequestStore;
+  javaWorkflows?: JavaWorkflows;
   liveLedger?: LedgerWriter & LedgerAuditor;
   isLiveLedgerUp?: () => Promise<boolean>;
   /** Tests and practice mode use memory. Production passes Postgres when a database URL is set. */
@@ -518,6 +520,11 @@ export function createApp(deps: {
     const { requesterAccountId, payers, memo } = parsed.data;
     const denied = await walletAccessError(c, requesterAccountId);
     if (denied) return denied;
+    if (deps.javaWorkflows && !deps.ledger.isPracticeAccount(requesterAccountId)) {
+      const key = c.req.header('Idempotency-Key') ?? randomUUID();
+      const result = await deps.javaWorkflows.split(parsed.data, key);
+      return c.json({ requests: await Promise.all(result.requests.map(requestView)) }, 201);
+    }
     const requester = await deps.ledger.getAccount(requesterAccountId);
     if (!requester || requester.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
     const ids = payers.map((p) => p.accountId);
@@ -563,7 +570,8 @@ export function createApp(deps: {
     const denied = await walletAccessError(c, accountId);
     if (denied) return denied;
     if (deps.ledger.isPracticeAccount(accountId)) await seedPracticeRequests();
-    const rows = await paymentRequests.listFor(accountId, 60);
+    const rows = deps.javaWorkflows && !deps.ledger.isPracticeAccount(accountId)
+      ? await deps.javaWorkflows.list(accountId) : await paymentRequests.listFor(accountId, 60);
     const views = await Promise.all(rows.map(requestView));
     return c.json({
       incoming: views.filter((r) => r.payerAccountId === accountId),
@@ -575,15 +583,27 @@ export function createApp(deps: {
    * Pays a request from the payer's wallet. The idempotency key comes from the request itself,
    * so a double click, a retry after a timeout, or two open tabs move the money once.
    */
+  async function findRequest(id: string) {
+    return await paymentRequests.get(id) ?? await deps.javaWorkflows?.get(id) ?? null;
+  }
+
   app.post('/requests/:id/pay', async (c) => {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = requestActorBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
-    const request = await paymentRequests.get(c.req.param('id'));
+    const request = await findRequest(c.req.param('id'));
     if (!request) return c.json({ error: 'Request not found' }, 404);
     const denied = await walletAccessError(c, parsed.data.accountId);
     if (denied) return denied;
     if (request.payerAccountId !== parsed.data.accountId) return c.json({ error: 'Only the person asked can pay this' }, 403);
+    if (deps.javaWorkflows && !deps.ledger.isPracticeAccount(request.payerAccountId)) {
+      const result = await deps.javaWorkflows.pay(request.id, parsed.data.accountId,
+        c.req.header('Idempotency-Key') ?? `request-${request.id}-${request.declinedAttempts}`);
+      return c.json({ request: await requestView(result.request), transfer: {
+        id: result.transfer.id, status: result.transfer.status, rejectionReason: result.transfer.rejectionReason,
+        declineExplanation: explainDecline(result.transfer.rejectionReason),
+      } });
+    }
     if (request.status !== 'PENDING' && request.status !== 'PAID') {
       return c.json({ error: `This request was ${request.status.toLowerCase()}`, request: await requestView(request) }, 409);
     }
@@ -617,12 +637,16 @@ export function createApp(deps: {
       if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
       const parsed = requestActorBody.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
-      const request = await paymentRequests.get(c.req.param('id'));
+      const request = await findRequest(c.req.param('id'));
       if (!request) return c.json({ error: 'Request not found' }, 404);
       const denied = await walletAccessError(c, parsed.data.accountId);
       if (denied) return denied;
       if (request[who] !== parsed.data.accountId) {
         return c.json({ error: action === 'decline' ? 'Only the person asked can decline' : 'Only the person who asked can cancel' }, 403);
+      }
+      if (deps.javaWorkflows && !deps.ledger.isPracticeAccount(parsed.data.accountId)) {
+        const result = await deps.javaWorkflows.resolve(request.id, action, parsed.data.accountId);
+        return c.json({ request: await requestView(result.request) });
       }
       const resolved = await paymentRequests.resolve(request.id, status, null, now());
       if (!resolved) return c.json({ error: `This request was already ${request.status.toLowerCase()}`, request: await requestView(request) }, 409);
@@ -639,7 +663,7 @@ export function createApp(deps: {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = requestSettleBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
-    const request = await paymentRequests.get(c.req.param('id'));
+    const request = await findRequest(c.req.param('id'));
     if (!request) return c.json({ error: 'Request not found' }, 404);
     const denied = await walletAccessError(c, parsed.data.accountId);
     if (denied) return denied;
@@ -647,13 +671,44 @@ export function createApp(deps: {
       return c.json({ error: 'Only the person who asked can record an outside settlement' }, 403);
     }
     const settledVia = parsed.data.settledVia as SettleRail;
+    if (deps.javaWorkflows && !deps.ledger.isPracticeAccount(parsed.data.accountId)) {
+      const result = await deps.javaWorkflows.resolve(request.id, 'settle', parsed.data.accountId, settledVia);
+      return c.json({ request: await requestView(result.request) });
+    }
     const resolved = await paymentRequests.resolve(request.id, 'PAID', null, now(), settledVia);
     if (!resolved) return c.json({ error: `This request was already ${request.status.toLowerCase()}`, request: await requestView(request) }, 409);
     return c.json({ request: await requestView(resolved) });
   });
 
+  app.get('/transfers/:id/receipt', async (c) => {
+    const parsed = z.object({ id: z.string().uuid(), accountId: z.string().uuid() }).safeParse({
+      id: c.req.param('id'), accountId: c.req.query('accountId'),
+    });
+    if (!parsed.success) return c.json({ error: 'Provide a transfer id and your accountId' }, 400);
+    const { id, accountId } = parsed.data;
+    const denied = await walletAccessError(c, accountId);
+    if (denied) return denied;
+    const transfer = await deps.ledger.getTransfer(id);
+    if (!transfer) return c.json({ error: 'Transfer not found' }, 404);
+    if (transfer.sourceAccountId !== accountId && transfer.destinationAccountId !== accountId)
+      return c.json({ error: 'This receipt belongs to another wallet' }, 403);
+    if (!deps.javaWorkflows || deps.ledger.isPracticeAccount(accountId))
+      return c.json({ error: 'Chain receipts are available for live ledger transfers only' }, 404);
+    return c.json(await deps.javaWorkflows.receipt(id));
+  });
+
   // Direct links. The UI uses ?id= so a host that 404s a second path segment still reaches this app.
   app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, c.req.param('id'), 30, now, tzOffsetFrom(c))));
+
+  app.post('/accounts/:id/spends/import', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = z.object({ csv: z.string().min(1).max(1_000_000), timeZone: z.string().min(1).max(64).optional() }).safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Provide an expense CSV up to 1 MB' }, 400);
+    const id = c.req.param('id');
+    if (!deps.javaWorkflows || deps.ledger.isPracticeAccount(id))
+      return c.json({ error: 'CSV import is available for connected wallets. This wallet is in practice mode.' }, 409);
+    return c.json(await deps.javaWorkflows.importSpends(id, parsed.data.csv, parsed.data.timeZone));
+  });
 
   app.post('/accounts/:id/spends', async (c) => {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
@@ -667,7 +722,7 @@ export function createApp(deps: {
       ...parsed.data,
       currency: account.currency,
       source: 'manual',
-    }, now());
+    }, now(), c.req.header('Idempotency-Key'));
     return c.json({
       id: event.id,
       amountMinor: event.amountMinor,
@@ -992,12 +1047,16 @@ export function createApp(deps: {
   });
 
   app.onError((err, c) => {
+    if (err instanceof LedgerError) {
+      if ([502, 503, 504].includes(err.status))
+        return c.json({ error: 'The ledger is waking up. Try again in a moment.' }, 503);
+      const status = ([400, 401, 403, 404, 409, 422, 429, 503].includes(err.status) ? err.status
+        : [502, 504].includes(err.status) ? 503 : 502) as 400 | 401 | 403 | 404 | 409 | 422 | 429 | 502 | 503;
+      return c.json({ error: err.message }, status);
+    }
     console.error(err);
     if ((err as { status?: number }).status === 429 || /quota|RESOURCE_EXHAUSTED/i.test(err.message)) {
       return c.json({ error: 'The assistant is busy right now. Try again in a moment.' }, 429);
-    }
-    if (err instanceof LedgerError && (err.status === 502 || err.status === 503 || err.status === 504)) {
-      return c.json({ error: 'The ledger is waking up. Try again in a moment.' }, 503);
     }
     return c.json({ error: 'Something went wrong. Please try again.' }, 500);
   });

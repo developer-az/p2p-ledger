@@ -22,3 +22,5 @@ assistant/evals/results/
 *.log
 .cursor/
 .verify/
+.playwright-cli/
+

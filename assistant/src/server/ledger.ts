@@ -232,6 +232,7 @@ export class HttpLedgerClient implements LedgerReader, LedgerWriter, LedgerAudit
   /** Writes are safe to retry here because every one carries an idempotency key. */
   private async send(method: string, path: string, body?: unknown, idempotencyKey?: string): Promise<Response> {
     const headers: Record<string, string> = {};
+    if (process.env.LEDGER_API_KEY) headers['X-Ledger-Key'] = process.env.LEDGER_API_KEY;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
     for (let attempt = 1; ; attempt++) {

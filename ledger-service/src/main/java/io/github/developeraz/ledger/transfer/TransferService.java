@@ -52,15 +52,18 @@ public class TransferService {
     private final FraudEngine fraud;
     private final MeterRegistry meters;
     private final Clock clock;
+    private final io.github.developeraz.ledger.chain.ChainReceiptRepository chainReceipts;
 
     public TransferService(TransferRepository transfers, AccountRepository accounts, OutboxRepository outbox,
-                           FraudEngine fraud, MeterRegistry meters, Clock clock) {
+                           FraudEngine fraud, MeterRegistry meters, Clock clock,
+                           io.github.developeraz.ledger.chain.ChainReceiptRepository chainReceipts) {
         this.transfers = transfers;
         this.accounts = accounts;
         this.outbox = outbox;
         this.fraud = fraud;
         this.meters = meters;
         this.clock = clock;
+        this.chainReceipts = chainReceipts;
     }
 
     @Transactional
@@ -108,7 +111,7 @@ public class TransferService {
         Account destination = require(locked, cmd.destinationAccountId());
         validate(cmd, source, destination);
 
-        Instant now = clock.instant();
+        Instant now = clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         String rejection = decide(cmd, source, destination, now);
         Transfer transfer = new Transfer(UuidV7.generate(clock), key, hash, cmd.kind(), source.id(), destination.id(),
                 cmd.amountMinor(), cmd.currency(), cmd.memo(),
@@ -127,6 +130,7 @@ public class TransferService {
         }
 
         outbox.append(eventType(transfer), transfer.id(), transfer);
+        chainReceipts.enqueue(transfer);
         meters.counter("ledger.transfers", "kind", transfer.kind().name(), "status", transfer.status().name())
                 .increment();
         return new Result(transfer, false);

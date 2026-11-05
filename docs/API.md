@@ -78,4 +78,8 @@ OpenAPI for the assistant surface: `assistant/openapi.yaml`.
 
 ## Security
 
-Public demo deployments have **no wallet login** — account UUIDs act like capability tokens. LLM keys and database passwords must not be committed; see [SECURITY.md](SECURITY.md).
+Registered wallets use authenticated sessions. The sample household remains public; do not use its UUIDs for private records. Java service credentials, LLM keys and database passwords must not be committed; see [SECURITY.md](SECURITY.md).
+
+## Java workflow additions
+
+Live split requests, request actions and spend logging delegate to the Java ledger with a server-only `X-Ledger-Key`. New user-facing routes are `POST /api/accounts/{id}/spends/import` with `{csv}` and `GET /api/transfers/{id}/receipt?accountId=`. Wallet authorization applies before import, and receipt access additionally requires a transfer participant. See [the full workflow API and migration guide](JAVA-WORKFLOWS.md) and [chain runbook](../contracts/README.md).

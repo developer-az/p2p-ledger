@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   api,
   dollarsToMinor,
@@ -208,6 +208,7 @@ export function LogSpendSheet({
   const toast = useToast();
   const [text, setText] = useState('');
   const [category, setCategory] = useState<SpendCategory>('dining');
+  const pendingSpend = useRef<{ body: string; key: string } | null>(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -242,26 +243,28 @@ export function LogSpendSheet({
     setError(null);
     try {
       let spendId: string | undefined;
+      const body = { amountMinor: minor, category, note: note.trim() || undefined };
+      const serialized = JSON.stringify({ accountId: me.id, ...body });
+      if (pendingSpend.current?.body !== serialized)
+        pendingSpend.current = { body: serialized, key: crypto.randomUUID() };
+      const requestKey = pendingSpend.current.key;
       if (walletRun) {
         const base = recordSpendMutation(me.id, minor, category, note.trim() || undefined);
         const result = await walletRun({
           ...base,
           commit: async () => {
-            const created = await api.recordSpend(me.id, {
-              amountMinor: minor,
-              category,
-              note: note.trim() || undefined,
-            });
+            const created = await api.recordSpend(me.id, body, requestKey);
             spendId = created.id;
           },
         });
         if (!result.ok) throw new Error(result.error ?? 'Could not log spend');
       } else {
-        const result = await api.recordSpend(me.id, { amountMinor: minor, category, note: note.trim() || undefined });
+        const result = await api.recordSpend(me.id, body, requestKey);
         spendId = result.id;
         await onChanged();
       }
       onLogged?.();
+      pendingSpend.current = null;
       toast(`Logged ${money(minor)} · ${categoryLabel(category)}`, {
         tone: 'good',
         action: spendId

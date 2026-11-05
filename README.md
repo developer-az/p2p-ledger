@@ -33,6 +33,16 @@
 | **Approach** | `ledger-service` (Spring Boot + PostgreSQL) is the system of record. `assistant` is the product: a consumer **Settle** app with a money snapshot (cash, cards, weekly pace), **two-tap spend logging**, **Patterns** over the user's own history, **simulated bank corridors**, and read-only **LLM tools**. P2P endpoints remain in the API and `/ops`, but the consumer app is focused on spending habits. |
 | **Scope** | End-to-end portfolio system: Docker, native-image CI, Render + Vercel deploy path, k6 load tests, integration tests. Not a licensed bank — [SECURITY.md](docs/SECURITY.md). |
 
+## Java workflows and chain receipts
+
+Live bill splits, payment-request settlement, spending records and expense CSV import now run in `ledger-service`. Paying a request locks it and commits its status, ledger entries, retry result and event together; a racing cancel or external-settlement action cannot leave the request book disagreeing with the money movement. TypeScript keeps the UI, session authorization, read-only assistant and practice fixtures.
+
+In **Wallet → Import expenses**, use the CSV template to bring statement expenses into Activity and Patterns. Java validates the complete file before committing. Reimporting the same file skips duplicates; a stable `transactionId` also detects overlaps across statements. Expense logs do not move money. See [Java workflows and rollout](docs/JAVA-WORKFLOWS.md).
+
+The optional **Solidity registry** records immutable receipts for completed Java transfers. The Java relay checks the deployed bytecode and chain IDs, bounds gas and retries, and waits for finalized contract storage. Activity can download the receipt for independent verification. This is an attestation integration; funding remains simulated. Setup, tests, deployment roles and release boundaries: [contracts/README.md](contracts/README.md).
+
+Live workflows require the same random 32+ character `LEDGER_API_KEY` on Java and the assistant server. Docker Compose requires it too; provide it through the shell or a local ignored root `.env`. Keep it server-side and never use a `VITE_` prefix. Roll out the Java migrations before the matching BFF changes.
+
 ## Live surfaces
 
 | Surface | URL / config |

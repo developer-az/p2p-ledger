@@ -21,4 +21,13 @@ public class LedgerApplication {
     Clock clock() {
         return Clock.systemUTC();
     }
+
+    /** Chain RPC latency must not prevent the broker outbox from draining. */
+    @Bean
+    org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler taskScheduler() {
+        var scheduler = new org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(2);
+        scheduler.setThreadNamePrefix("ledger-relay-");
+        return scheduler;
+    }
 }

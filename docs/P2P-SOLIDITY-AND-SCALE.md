@@ -1,5 +1,7 @@
 # P2P truth, Solidity, and how much money the stack can hold
 
+**Implementation update:** the attestation path is now implemented in `contracts/src/LedgerAttestation.sol` and the Java `chain` package, with a transactional receipt queue, remote signer integration and finalized-state verification. See [the contract runbook](../contracts/README.md) and [Java workflows](JAVA-WORKFLOWS.md). The alternative escrow/token ideas below remain design options rather than implemented settlement rails.
+
 This document answers three questions for **p2p-ledger**:
 
 1. Is this repo “really” peer-to-peer?

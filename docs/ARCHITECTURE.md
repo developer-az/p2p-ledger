@@ -2,6 +2,8 @@
 
 Deep-dive for **ledger-service** — the Java system of record. The assistant client is documented in [API.md](API.md) and the root [README](../README.md).
 
+Live payment requests and spending records are also owned by Java: [workflows, endpoints and migration](JAVA-WORKFLOWS.md). Optional Solidity receipt delivery uses a separate transactional queue: [contract and relay runbook](../contracts/README.md). It does not reuse the broker outbox's publication cursor or duplicate ledger balances on chain.
+
 ## Data flow
 
 ```

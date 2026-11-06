@@ -274,6 +274,17 @@ export function createApp(deps: {
       chat.configured = false;
       chat.configHint = llmConfigError(e);
     }
+    const production = process.env.NODE_ENV === 'production';
+    let signupAvailable = !production;
+    let unavailableReason: string | undefined;
+    if (production && !auth.persistent) unavailableReason = 'Accounts are not connected on this deployment. You can explore the sample without signing up.';
+    else if (auth.persistent && deps.javaWorkflows) {
+      try {
+        await auth.findByEmail('readiness-probe@invalid.local');
+        await deps.javaWorkflows.assertReady();
+        signupAvailable = true;
+      } catch { signupAvailable = false; unavailableReason = 'Account services are being updated. The sample is available while setup is completed.'; }
+    } else if (production) unavailableReason = 'Account services are not connected on this deployment. The sample is available.';
     return c.json({
       live,
       practice,
@@ -289,7 +300,12 @@ export function createApp(deps: {
         auditCapabilities,
       },
       chat,
-      identity: { persistent: auth.persistent },
+      identity: {
+        persistent: auth.persistent, signupAvailable,
+        signinAvailable: !production || auth.persistent,
+        passwordResetAvailable: mailer.delivers && (!production || auth.persistent),
+        unavailableReason,
+      },
     });
   });
 
@@ -399,6 +415,8 @@ export function createApp(deps: {
   const RESET_ACCEPTED = 'If an account uses that email, a reset link is on its way. It expires in 30 minutes.';
 
   app.post('/auth/password-reset/request', async (c) => {
+    if (!mailer.delivers || (process.env.NODE_ENV === 'production' && !auth.persistent))
+      return c.json({ error: 'Password reset email is not connected on this deployment. No email was sent.' }, 503);
     if (!allowReset(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
     const started = Date.now();
     const parsed = resetRequestBody.safeParse(await c.req.json().catch(() => null));
@@ -1100,7 +1118,7 @@ async function accountView(
   tzOffsetMinutes = 0,
 ) {
   if (!z.string().uuid().safeParse(id).success) return null;
-  const base = await loadAccountView(ledger, id, limit);
+  const base = await loadAccountView(ledger, id, limit, now());
   if (!base) return null;
   const profile = await personalFinance.getProfile(id, base.currency, now());
   const allSpends = await spendLogs.list(id, { limit: 500 });

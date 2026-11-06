@@ -5,7 +5,7 @@ import { moneyPlan } from './money-plan.js';
 import { TrustTab } from './TrustTab.js';
 import type { WalletData } from './data.js';
 import { Icon, Skeleton } from './ui.js';
-import { CountUp, TiltCard } from './motion-kit.js';
+import { CountUp } from './motion-kit.js';
 import { Pip } from './Pip.js';
 
 export interface WalletActions {
@@ -57,7 +57,7 @@ export function WalletTab({
             </div>
             {plan.hasBaseline ? (
               <>
-                <TiltCard className="s-card snapshot-card-hero" max={4}>
+                <div className="snapshot-card-hero desk-wallet-summary">
                   <div className="s-card-top">
                     <span className="s-card-brand">settle</span>
                     <span className="s-card-private"><Icon name="lock" size={12} /> Private</span>
@@ -65,7 +65,7 @@ export function WalletTab({
                   <p className="s-card-label">Net position</p>
                   <p className="s-card-amount num"><CountUp minor={plan.netMinor ?? plan.ledgerMinor} /></p>
                   <p className="s-card-sub">Projected cash minus card balance</p>
-                </TiltCard>
+                </div>
                 <dl className="snapshot-rows">
                   <div><dt>Cash baseline</dt><dd className="num">{money(plan.cashMinor ?? 0)}</dd></div>
                   {periodIncomeMinor > 0 ? (

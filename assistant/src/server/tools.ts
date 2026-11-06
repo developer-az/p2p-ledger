@@ -275,7 +275,7 @@ export interface AccountSummary {
 }
 
 /** Balance, a 30-day summary, and recent activity. Arithmetic stays in integer cents. */
-export async function loadAccountView(ledger: LedgerReader, accountId: string, limit = 30) {
+export async function loadAccountView(ledger: LedgerReader, accountId: string, limit = 30, now = new Date()) {
   const account = await ledger.getAccount(accountId);
   if (!account || account.type !== 'USER') return null;
   const recent = await ledger.transfersForAccount(accountId, 50);
@@ -292,13 +292,13 @@ export async function loadAccountView(ledger: LedgerReader, accountId: string, l
     balance: formatMoney(account.balanceMinor, account.currency),
     currency: account.currency,
     openedAt: account.createdAt,
-    summary: summarize(recent, accountId, account.currency),
+    summary: summarize(recent, accountId, account.currency, now),
     transfers: described.slice(0, limit),
   };
 }
 
-function summarize(transfers: Transfer[], accountId: string, currency: string): AccountSummary {
-  const since = Date.now() - 30 * 86_400_000;
+function summarize(transfers: Transfer[], accountId: string, currency: string, now: Date): AccountSummary {
+  const since = now.getTime() - 30 * 86_400_000;
   let sent = 0;
   let received = 0;
   let deposited = 0;

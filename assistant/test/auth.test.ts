@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/server/app.js';
 import { InMemoryAuthStore } from '../src/server/auth.js';
 import { CompositeLedger, PracticeLedger } from '../src/server/practice-ledger.js';
@@ -231,4 +231,15 @@ it('rebases cash without deducting previously recorded expenses again', async ()
     body: JSON.stringify({ walletCashMinor: 10000, rebaseCash: true }) });
   expect(updated.status).toBe(200);
   expect((await updated.json() as { finance: { projectedCash: string } }).finance.projectedCash).toBe('$100.00');
+});
+
+it('publishes unavailable signup and sign-in when production identity storage is missing', async () => {
+  vi.stubEnv('NODE_ENV', 'production');
+  try {
+    const response = await app().request('/api/bootstrap');
+    const { identity } = await response.json() as { identity: { signupAvailable: boolean; signinAvailable: boolean; unavailableReason: string } };
+    expect(identity.signupAvailable).toBe(false);
+    expect(identity.signinAvailable).toBe(false);
+    expect(identity.unavailableReason).toContain('not connected');
+  } finally { vi.unstubAllEnvs(); }
 });

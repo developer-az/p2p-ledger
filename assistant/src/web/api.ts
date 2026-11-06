@@ -362,7 +362,7 @@ export interface BootstrapResponse {
     auditCapabilities?: boolean;
   };
   chat?: { provider: string; configured: boolean; model?: string; configHint?: string };
-  identity?: { persistent: boolean };
+  identity?: { persistent: boolean; signupAvailable?: boolean; signinAvailable?: boolean; passwordResetAvailable?: boolean; unavailableReason?: string };
 }
 
 export interface AuthUser {

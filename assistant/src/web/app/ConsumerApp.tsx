@@ -152,7 +152,6 @@ function Brand({ onHome }: { onHome?: () => void }) {
         onHome();
       } : undefined}
     >
-      <Pip size={30} track={false} mood="happy" />
       <span className="brand-word">settle</span>
     </a>
   );
@@ -172,7 +171,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   const [tab, setTab] = useState<Tab>('today');
   const [demoProgress, setDemoProgress] = useState<DemoStepId[]>(() => (demo ? loadDemoProgress(demoKey) : []));
   const guideHiddenKey = `settle:demo-guide-hidden:${me.id}`;
-  const [showDemoGuide, setShowDemoGuideState] = useState(() => !readFlag(guideHiddenKey));
+  const [showDemoGuide, setShowDemoGuideState] = useState(false);
   /** Showing or hiding the quest card is remembered per sample wallet. */
   const setShowDemoGuide = useCallback((show: boolean) => {
     setShowDemoGuideState(show);
@@ -218,7 +217,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
       return;
     }
     setDemoProgress(loadDemoProgress(demoKey));
-    setShowDemoGuideState(!readFlag(guideHiddenKey));
+    setShowDemoGuideState(false);
   }, [demo, demoKey, guideHiddenKey]);
 
   // Escape closes the quest card, unless a sheet or the menu has the key first.
@@ -355,7 +354,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
                     <Icon name="settings" size={18} />Edit money snapshot
                   </button>
                   <a role="menuitem" href={`/api/accounts/${encodeURIComponent(me.id)}/statement.txt`}><Icon name="download" size={18} />Download statement</a>
-                  <button type="button" role="menuitem" onClick={() => { setMenu(false); go('wallet'); }}><Icon name="wallet" size={18} />Wallet & trust</button>
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); go('wallet'); }}><Icon name="wallet" size={18} />Wallet settings</button>
                   <hr />
                   <button type="button" role="menuitem" onClick={onSignOut}><Icon name="logout" size={18} />{demo ? 'Exit sample' : 'Sign out'}</button>
                 </div>

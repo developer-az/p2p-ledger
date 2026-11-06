@@ -1,5 +1,10 @@
 # Engineering Handoff (latest)
 
+## Session: surface hierarchy correction (2026-11-06)
+- Owner correctly flagged the white-on-white redesign. Inspected shared CSS and rendered screens. The .app background still referenced undefined --dot-grid, invalidating the full background declaration. Replaced it with a valid background token.
+- Added distinct sage page ground, off-white capture/account panels, forest summary/action anchors and stronger borders; removed body edge margin for the consumer app. No component or authentication behavior changed.
+- Browser verified computed page/panel/summary colors, light and dark button text/background pairs, desktop and 390px layouts. Screenshots inspected with animations disabled to avoid capturing the entrance/theme-transition intermediate frames. Build passes; no new dependencies. Evidence: .verify/contrast-light-final.png and contrast-dark-final.png. Preserved user .gitignore edit.
+
 ## Session: preview capability diagnosis and Workbench redesign (2026-11-06)
 - Owner reported signup/recovery failures and requested a complete barebones, comfortable UI with Muse-like familiarity. Used bug-hunter/frontend-design and audited with aura-farming; kept existing Motion and Pip without new dependencies.
 - Confirmed through Vercel environment metadata: Preview has only LEDGER_URL and GEMINI_API_KEY. Production additionally has LEDGER_DATABASE_URL and model settings. Preview has no durable identity configuration, Java service key, or reset email sender credentials. No Vercel platform limitation was found. User authorized reuse of existing local configuration if available; no local Settle secrets were found in the repository, process environment or .p2p-secrets. Did not copy production identities to Preview or alter production services.

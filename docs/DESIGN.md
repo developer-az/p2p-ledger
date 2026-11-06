@@ -2,7 +2,7 @@
 
 One quiet application, with a small friendly companion. Utility-first like a desktop tool: obvious controls, readable records, little decoration. Familiar language and Pip provide warmth without a mascot competing with every task.
 
-- Ground: warm white #fafaf8; system dark mode supported. Existing ink, muted text and accessible category colors remain.
+- Ground: sage gray #e6ebe3, distinct off-white panels #fdfefb, forest #214e39 summary/action anchors; system dark mode supported. Existing ink, muted text and accessible category colors remain.
 - Typography: Geist UI, Geist Mono for metadata. Regular sentence case. No oversized condensed headlines in the app.
 - Flat surfaces, hairline dividers, 6px controls and 8px panels. No glass, sheen, tilt, marquee, gradient cards or decorative hero objects.
 - Welcome is a compact two-column introduction and account form, stacking on mobile. Available account/recovery capabilities come from bootstrap. Unavailable controls explain why and offer the sample before collecting input.

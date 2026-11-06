@@ -1,24 +1,27 @@
 /* Settle — "Pocket": ink, paper, one volt accent. /ops keeps its own look. */
 
 .app, .app-preloader {
-  --bg: #fafaf8;
+  --bg: #e6ebe3;
   --bg-2: #ebeae4;
-  --surface: #ffffff;
-  --surface-2: #f6f5f1;
+  --surface: #fdfefb;
+  --surface-2: #f0f3eb;
   --surface-3: #e8e6df;
   --ink: #0e0e10;
   --ink-2: #1d1d21;
   --muted: #5d5c57;
   --faint: #807f79;
-  --line: #e6e4dc;
-  --line-strong: #cdcac0;
-  --pen: #0e0e10;
-  --pen-hover: #2b2b30;
+  --line: #bdc7b6;
+  --line-strong: #8f9e87;
+  --pen: #214e39;
+  --pen-hover: #163b2a;
   --pen-soft: #ecebe5;
   --accent: var(--pen);
   --accent-hover: var(--pen-hover);
   --accent-ink: #ffffff;
   --accent-soft: var(--pen-soft);
+  --summary-bg: #214e39;
+  --summary-ink: #f4f8ef;
+  --summary-muted: #d0dfc8;
   --lime: #c8f53b;
   --lime-ink: #0e0e10;
   --coral: #e5484d;
@@ -80,13 +83,12 @@
   }
 }
 
+body:has(.app) { margin:0; }
+
 .app, .app * { box-sizing: border-box; }
 .app {
   min-height: 100vh;
-  background:
-    var(--dot-grid) 0 0 / 18px 18px,
-    radial-gradient(900px 420px at 12% -8%, color-mix(in srgb, var(--pen) 10%, transparent), transparent 55%),
-    var(--bg);
+  background: var(--bg);
   color: var(--ink);
   font-family: var(--font);
   font-size: 16px;
@@ -744,16 +746,16 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
 .desk-greeting { display:flex; align-items:center; justify-content:space-between; gap:20px; }
 .app .desk-greeting h1 { font-size:28px; margin-block:8px; }
 .desk-greeting .muted { font-size:14px; }
-.desk-capture { border-block:1px solid var(--line); padding-block:24px; }
+.desk-capture { border:1px solid var(--line); background:var(--surface); border-radius:8px; padding:24px; }
 .spend-bubbles { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:12px; margin-bottom:20px; }
 .spend-bubbles button { display:grid; justify-items:center; gap:10px; border:0; background:none; font:inherit; font-size:13px; cursor:pointer; }
 .spend-bubbles button > span { display:grid; place-items:center; width:56px; height:56px; border:1px solid var(--line); background:var(--surface); border-radius:50%; font-size:25px; transition:transform 140ms ease; }
 .spend-bubbles button:hover > span { transform:translateY(-2px); border-color:var(--ink); }
 .spend-bubbles button:active > span { transform:scale(.96); }
 .desk-actions { display:flex; flex-wrap:wrap; gap:10px; }
-.desk-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border-block:1px solid var(--line); padding-block:24px; gap:24px; }
+.desk-summary { background:var(--summary-bg); color:var(--summary-ink); padding:24px; border-radius:8px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border-block:1px solid var(--line); padding-block:24px; gap:24px; }
 .desk-summary > div { display:grid; gap:10px; }
-.desk-summary span { font-size:13px; }
+.desk-summary span { font-size:13px; color:var(--summary-muted); }
 .desk-summary strong { font-size:24px; font-weight:600; }
 .desk-baseline { display:flex; align-items:center; justify-content:space-between; gap:20px; }
 .desk-baseline .hint { max-width:48ch; }

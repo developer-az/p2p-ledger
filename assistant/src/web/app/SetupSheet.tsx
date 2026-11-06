@@ -90,6 +90,7 @@ export function SetupSheet({
     try {
       await api.updateFinance(me.id, {
         walletCashMinor: cashMinor,
+        rebaseCash: cashMinor !== profile?.walletCashMinor,
         creditOwedMinor: creditMinor,
         weeklyBudgetMinor: budgetMinor,
         spendLogsAffectWallet: affectsWallet,

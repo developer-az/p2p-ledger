@@ -37,6 +37,12 @@ public class AccountRepository {
                 .update();
     }
 
+    public void insertIfAbsent(Account account) {
+        jdbc.sql("insert into accounts(id,owner_id,currency,type,balance_minor,created_at) values(:id,:owner,:currency,'USER',0,:created) on conflict(id) do nothing")
+            .param("id", account.id()).param("owner", account.ownerId()).param("currency", account.currency())
+            .param("created", Timestamp.from(account.createdAt())).update();
+    }
+
     public Optional<Account> findById(UUID id) {
         return jdbc.sql("select " + COLUMNS + " from accounts where id = :id")
                 .param("id", id)

@@ -16,7 +16,8 @@
     "smoke:api": "tsx scripts/smoke-api.ts",
     "eval": "tsx --env-file-if-exists=.env.local evals/run.ts",
     "seed": "tsx scripts/seed.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:deployment": "tsx scripts/check-deployment.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

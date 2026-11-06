@@ -5,6 +5,7 @@ import { createSpendLogStore } from './spend-log.js';
 import { createPersonalFinanceStore } from './personal-finance.js';
 import { createPaymentRequestStore } from './payment-requests.js';
 import { createAuthStore } from './auth.js';
+import { JavaWorkflows, RoutedSpendLogStore } from './java-workflows.js';
 
 let spendLogs = createSpendLogStore();
 let personalFinance = createPersonalFinanceStore();
@@ -18,7 +19,8 @@ export function createAssistantApi() {
   const practice = new PracticeLedger();
   const isLiveLedgerUp = () => isLiveLedgerReachable(ledgerUrl);
   const ledger = new CompositeLedger(liveLedger, practice, isLiveLedgerUp);
-  spendLogs = createSpendLogStore();
+  const javaWorkflows = new JavaWorkflows(ledgerUrl, process.env.LEDGER_API_KEY ?? '', timeoutMs);
+  spendLogs = new RoutedSpendLogStore(createSpendLogStore(), javaWorkflows, id => ledger.isPracticeAccount(id));
   personalFinance = createPersonalFinanceStore();
   paymentRequests = createPaymentRequestStore();
   return createApp({
@@ -29,6 +31,7 @@ export function createAssistantApi() {
     spendLogs,
     personalFinance,
     paymentRequests,
+    javaWorkflows,
     auth: createAuthStore(),
   });
 }

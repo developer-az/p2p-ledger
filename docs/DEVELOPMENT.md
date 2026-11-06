@@ -152,3 +152,14 @@ Until those PNGs are checked in, the README uses **Mermaid figures** for the sam
 - Assistant routes: [API.md](API.md), `assistant/openapi.yaml`
 - Ledger HTTP: [ARCHITECTURE.md](ARCHITECTURE.md)
 - Deploy: [GITHUB.md](GITHUB.md)
+
+
+## Vercel preview accounts and email
+
+A preview is a separate runtime configuration; it does not inherit production-only variables. Vercel previews support signup and password-reset email when configured. `NODE_ENV` is production for preview builds too, so the app correctly refuses temporary in-memory identities.
+
+Configure an isolated preview PostgreSQL database via `DATABASE_URL` or `LEDGER_DATABASE_URL`, a preview Java deployment from this branch via `LEDGER_URL`, and matching `LEDGER_API_KEY` on both services. Add `RESEND_API_KEY` and a verified `MAIL_FROM` sender for recovery. Use the preview's HTTPS origin as `APP_URL` so emailed links do not send people into the production account store. Redeploy after changing environment variables. Do not copy production identities into a preview implicitly.
+
+Run `npm run check:deployment -- https://YOUR_PREVIEW_HOST`. It prints availability of signup, sign-in and reset email, without using passwords or printing credentials. The command exits nonzero when signup or recovery is disconnected. Bootstrap advertises these states to the UI; a missing service disables its control and explains the sample alternative.
+
+The configured reset path is covered with a capturing test mailer (token expiration, single use, old-session revocation, changed-password login). That is not proof of real email delivery: after configuring a sender, verify an inbox and the emailed preview origin end to end.

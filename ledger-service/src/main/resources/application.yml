@@ -33,6 +33,21 @@ management:
         include: health,info,metrics,prometheus
 
 ledger:
+  api-key: ${LEDGER_API_KEY:}
+  chain:
+    enabled: ${CHAIN_ENABLED:false}
+    chain-id: ${CHAIN_ID:31337}
+    namespace: ${CHAIN_NAMESPACE:local}
+    rpc-url: ${CHAIN_RPC_URL:}
+    signer-rpc-url: ${CHAIN_SIGNER_RPC_URL:}
+    contract-address: ${CHAIN_CONTRACT_ADDRESS:}
+    runtime-sha256: ${CHAIN_RUNTIME_SHA256:}
+    relayer-address: ${CHAIN_RELAYER_ADDRESS:}
+    finality-tag: ${CHAIN_FINALITY_TAG:finalized}
+    max-gas-price-wei: ${CHAIN_MAX_GAS_PRICE_WEI:50000000000}
+    max-gas: ${CHAIN_MAX_GAS:150000}
+    max-attempts: ${CHAIN_MAX_ATTEMPTS:12}
+    poll-interval-ms: ${CHAIN_POLL_INTERVAL_MS:10000}
   events:
     sink: ${EVENTS_SINK:log}   # log | kafka | sqs
     kafka-topic: ledger.events

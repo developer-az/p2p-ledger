@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { JavaWorkflows } from './java-workflows.js';
 import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
@@ -56,7 +57,6 @@ import {
   hashPassword,
   hashSessionToken,
   newSessionToken,
-  ownerIdFor,
   verifyPassword,
   type AuthStore,
 } from './auth.js';
@@ -123,6 +123,7 @@ const recordSpendBody = z.object({
 });
 
 const financePatchBody = z.object({
+  rebaseCash: z.boolean().optional(),
   walletCashMinor: z.number().int().min(0).max(MAX_MINOR_UI).nullable().optional(),
   creditOwedMinor: z.number().int().min(0).max(MAX_MINOR_UI).optional(),
   weeklyBudgetMinor: z.number().int().min(0).max(MAX_MINOR_UI).nullable().optional(),
@@ -148,6 +149,7 @@ export function createApp(deps: {
   spendLogs: SpendLogStore;
   personalFinance?: PersonalFinanceStore;
   paymentRequests?: PaymentRequestStore;
+  javaWorkflows?: JavaWorkflows;
   liveLedger?: LedgerWriter & LedgerAuditor;
   isLiveLedgerUp?: () => Promise<boolean>;
   /** Tests and practice mode use memory. Production passes Postgres when a database URL is set. */
@@ -173,6 +175,17 @@ export function createApp(deps: {
   const appUrl = (deps.appUrl ?? process.env.APP_URL ?? '').trim().replace(/\/$/, '');
   const enforceWalletAuth = deps.enforceWalletAuth ?? (auth.persistent || process.env.NODE_ENV === 'production');
   const app = new Hono().basePath('/api');
+  app.use('*', async (c, next) => {
+    c.header('Cache-Control', 'no-store');
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) {
+      const origin = c.req.header('Origin');
+      const allowed = new Set([new URL(c.req.url).origin]);
+      if (appUrl) allowed.add(new URL(appUrl).origin);
+      if (c.req.header('Sec-Fetch-Site') === 'cross-site' || (origin && !allowed.has(origin)))
+        return c.json({ error: 'This request must come from Settle. Reload the app and try again.' }, 403);
+    }
+    await next();
+  });
   const allowChat = rateLimiter(20, 60_000);
   const allowSeed = rateLimiter(3, 60_000);
   const allowWrite = rateLimiter(40, 60_000);
@@ -226,6 +239,15 @@ export function createApp(deps: {
 
   app.get('/health', (c) => c.json({ status: 'ok' }));
 
+  app.get('/ready', async (c) => {
+    if (!auth.persistent || !deps.javaWorkflows) return c.json({ ready: false }, 503);
+    try {
+      await auth.findByEmail('readiness-probe@invalid.local');
+      await deps.javaWorkflows.assertReady();
+      return c.json({ ready: true });
+    } catch { return c.json({ ready: false }, 503); }
+  });
+
   app.get('/bootstrap', async (c) => {
     const practice = deps.practice.bootstrap();
     let live = false;
@@ -252,6 +274,17 @@ export function createApp(deps: {
       chat.configured = false;
       chat.configHint = llmConfigError(e);
     }
+    const production = process.env.NODE_ENV === 'production';
+    let signupAvailable = !production;
+    let unavailableReason: string | undefined;
+    if (production && !auth.persistent) unavailableReason = 'Accounts are not connected on this deployment. You can explore the sample without signing up.';
+    else if (auth.persistent && deps.javaWorkflows) {
+      try {
+        await auth.findByEmail('readiness-probe@invalid.local');
+        await deps.javaWorkflows.assertReady();
+        signupAvailable = true;
+      } catch { signupAvailable = false; unavailableReason = 'Account services are being updated. The sample is available while setup is completed.'; }
+    } else if (production) unavailableReason = 'Account services are not connected on this deployment. The sample is available.';
     return c.json({
       live,
       practice,
@@ -267,7 +300,12 @@ export function createApp(deps: {
         auditCapabilities,
       },
       chat,
-      identity: { persistent: auth.persistent },
+      identity: {
+        persistent: auth.persistent, signupAvailable,
+        signinAvailable: !production || auth.persistent,
+        passwordResetAvailable: mailer.delivers && (!production || auth.persistent),
+        unavailableReason,
+      },
     });
   });
 
@@ -282,7 +320,7 @@ export function createApp(deps: {
       sameSite: 'Lax',
       path: '/',
       maxAge: SESSION_MAX_AGE_SEC,
-      secure,
+      secure: secure || process.env.NODE_ENV === 'production',
     });
   };
 
@@ -298,33 +336,30 @@ export function createApp(deps: {
       return c.json({ error: 'Check the email, name, and password.' }, 400);
     }
     const email = parsed.data.email.toLowerCase();
+    if (!await auth.allowAuthAttempt('credentials:' + email, now()))
+      return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
     const displayName = parsed.data.displayName.replace(/\s+/g, ' ');
-    if (await auth.findByEmail(email)) return c.json({ error: 'An account with that email already exists. Sign in instead.' }, 409);
-    const ownerId = ownerIdFor(displayName);
-    let account: { id: string; ownerId: string };
+    if (process.env.NODE_ENV === 'production' && !auth.persistent)
+      return c.json({ error: 'Account creation is temporarily unavailable. Please try again later.' }, 503);
+    let user;
     try {
-      account = await deps.ledger.openAccount(ownerId, 'USD');
-    } catch (e) {
-      return c.json({ error: (e as Error).message }, 400);
-    }
-    /* New accounts start empty on purpose. The setup sheet collects the
-       person's own cash, cards, and pace — no simulated funding at signup.
-       The $500 welcome package still exists, but only as the explicit
-       bank-simulator action (POST /api/bank/welcome, ops console). */
-    const userId = randomUUID();
-    try {
-      await auth.insert({
-        id: userId,
-        email,
-        passwordHash: await hashPassword(parsed.data.password),
-        displayName,
-        accountId: account.id,
-        ownerId: account.ownerId,
+      user = await auth.provision({ email, password: parsed.data.password, displayName }, async (reserved) => {
+        if (deps.javaWorkflows && auth.persistent) {
+          await deps.javaWorkflows.assertReady();
+          await deps.javaWorkflows.request('PUT', `/v1/accounts/${reserved.accountId}/provision`,
+            { ownerId: reserved.ownerId, currency: 'USD' });
+        } else {
+          if (process.env.NODE_ENV === 'production') throw new LedgerError(503, 'Account creation is temporarily unavailable.');
+          const account = await deps.ledger.openAccount(reserved.ownerId, 'USD');
+          reserved.accountId = account.id;
+        }
       });
     } catch (e) {
       if (e instanceof EmailTakenError) return c.json({ error: e.message }, 409);
-      throw e;
+      return c.json({ error: 'We could not finish creating your account. Try again with the same email and password.' }, 503);
     }
+    const userId = user.id;
+    const account = { id: user.accountId, ownerId: user.ownerId };
     await issueSession(c, userId);
     return c.json({
       user: { email, displayName },
@@ -337,6 +372,8 @@ export function createApp(deps: {
     const parsed = loginBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Enter the email and password for your account.' }, 400);
     const email = parsed.data.email.toLowerCase();
+    if (!await auth.allowAuthAttempt('credentials:' + email, now()))
+      return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
     const user = await auth.findByEmail(email);
     const ok = await verifyPassword(parsed.data.password, user?.passwordHash ?? await dummyPasswordHash());
     if (!user || !ok) return c.json({ error: 'Email or password is incorrect.' }, 401);
@@ -378,6 +415,8 @@ export function createApp(deps: {
   const RESET_ACCEPTED = 'If an account uses that email, a reset link is on its way. It expires in 30 minutes.';
 
   app.post('/auth/password-reset/request', async (c) => {
+    if (!mailer.delivers || (process.env.NODE_ENV === 'production' && !auth.persistent))
+      return c.json({ error: 'Password reset email is not connected on this deployment. No email was sent.' }, 503);
     if (!allowReset(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
     const started = Date.now();
     const parsed = resetRequestBody.safeParse(await c.req.json().catch(() => null));
@@ -408,10 +447,8 @@ export function createApp(deps: {
       if (field === 'password') return c.json({ error: 'Use at least 8 characters.' }, 400);
       return c.json({ error: 'This reset link is invalid or has expired. Ask for a new one.' }, 400);
     }
-    const userId = await auth.consumeResetToken(hashSessionToken(parsed.data.token), now());
+    const userId = await auth.completeReset(hashSessionToken(parsed.data.token), now(), await hashPassword(parsed.data.password));
     if (!userId) return c.json({ error: 'This reset link is invalid or has expired. Ask for a new one.' }, 400);
-    await auth.updatePassword(userId, await hashPassword(parsed.data.password));
-    await auth.deleteSessionsForUser(userId);
     await issueSession(c, userId);
     return c.json({ ok: true });
   });
@@ -434,7 +471,7 @@ export function createApp(deps: {
 
   app.post('/accounts', async (c) => {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
-    if (deps.isLiveLedgerUp && await deps.isLiveLedgerUp()) {
+    if (process.env.NODE_ENV === 'production' || (deps.isLiveLedgerUp && await deps.isLiveLedgerUp())) {
       return c.json({ error: 'Create a wallet through account registration.' }, 403);
     }
     const parsed = openAccountBody.safeParse(await c.req.json().catch(() => null));
@@ -518,6 +555,11 @@ export function createApp(deps: {
     const { requesterAccountId, payers, memo } = parsed.data;
     const denied = await walletAccessError(c, requesterAccountId);
     if (denied) return denied;
+    if (deps.javaWorkflows && !deps.ledger.isPracticeAccount(requesterAccountId)) {
+      const key = c.req.header('Idempotency-Key') ?? randomUUID();
+      const result = await deps.javaWorkflows.split(parsed.data, key);
+      return c.json({ requests: await Promise.all(result.requests.map(requestView)) }, 201);
+    }
     const requester = await deps.ledger.getAccount(requesterAccountId);
     if (!requester || requester.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
     const ids = payers.map((p) => p.accountId);
@@ -563,7 +605,8 @@ export function createApp(deps: {
     const denied = await walletAccessError(c, accountId);
     if (denied) return denied;
     if (deps.ledger.isPracticeAccount(accountId)) await seedPracticeRequests();
-    const rows = await paymentRequests.listFor(accountId, 60);
+    const rows = deps.javaWorkflows && !deps.ledger.isPracticeAccount(accountId)
+      ? await deps.javaWorkflows.list(accountId) : await paymentRequests.listFor(accountId, 60);
     const views = await Promise.all(rows.map(requestView));
     return c.json({
       incoming: views.filter((r) => r.payerAccountId === accountId),
@@ -575,15 +618,27 @@ export function createApp(deps: {
    * Pays a request from the payer's wallet. The idempotency key comes from the request itself,
    * so a double click, a retry after a timeout, or two open tabs move the money once.
    */
+  async function findRequest(id: string) {
+    return await paymentRequests.get(id) ?? await deps.javaWorkflows?.get(id) ?? null;
+  }
+
   app.post('/requests/:id/pay', async (c) => {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = requestActorBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
-    const request = await paymentRequests.get(c.req.param('id'));
+    const request = await findRequest(c.req.param('id'));
     if (!request) return c.json({ error: 'Request not found' }, 404);
     const denied = await walletAccessError(c, parsed.data.accountId);
     if (denied) return denied;
     if (request.payerAccountId !== parsed.data.accountId) return c.json({ error: 'Only the person asked can pay this' }, 403);
+    if (deps.javaWorkflows && !deps.ledger.isPracticeAccount(request.payerAccountId)) {
+      const result = await deps.javaWorkflows.pay(request.id, parsed.data.accountId,
+        c.req.header('Idempotency-Key') ?? `request-${request.id}-${request.declinedAttempts}`);
+      return c.json({ request: await requestView(result.request), transfer: {
+        id: result.transfer.id, status: result.transfer.status, rejectionReason: result.transfer.rejectionReason,
+        declineExplanation: explainDecline(result.transfer.rejectionReason),
+      } });
+    }
     if (request.status !== 'PENDING' && request.status !== 'PAID') {
       return c.json({ error: `This request was ${request.status.toLowerCase()}`, request: await requestView(request) }, 409);
     }
@@ -617,12 +672,16 @@ export function createApp(deps: {
       if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
       const parsed = requestActorBody.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
-      const request = await paymentRequests.get(c.req.param('id'));
+      const request = await findRequest(c.req.param('id'));
       if (!request) return c.json({ error: 'Request not found' }, 404);
       const denied = await walletAccessError(c, parsed.data.accountId);
       if (denied) return denied;
       if (request[who] !== parsed.data.accountId) {
         return c.json({ error: action === 'decline' ? 'Only the person asked can decline' : 'Only the person who asked can cancel' }, 403);
+      }
+      if (deps.javaWorkflows && !deps.ledger.isPracticeAccount(parsed.data.accountId)) {
+        const result = await deps.javaWorkflows.resolve(request.id, action, parsed.data.accountId);
+        return c.json({ request: await requestView(result.request) });
       }
       const resolved = await paymentRequests.resolve(request.id, status, null, now());
       if (!resolved) return c.json({ error: `This request was already ${request.status.toLowerCase()}`, request: await requestView(request) }, 409);
@@ -639,7 +698,7 @@ export function createApp(deps: {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = requestSettleBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
-    const request = await paymentRequests.get(c.req.param('id'));
+    const request = await findRequest(c.req.param('id'));
     if (!request) return c.json({ error: 'Request not found' }, 404);
     const denied = await walletAccessError(c, parsed.data.accountId);
     if (denied) return denied;
@@ -647,13 +706,44 @@ export function createApp(deps: {
       return c.json({ error: 'Only the person who asked can record an outside settlement' }, 403);
     }
     const settledVia = parsed.data.settledVia as SettleRail;
+    if (deps.javaWorkflows && !deps.ledger.isPracticeAccount(parsed.data.accountId)) {
+      const result = await deps.javaWorkflows.resolve(request.id, 'settle', parsed.data.accountId, settledVia);
+      return c.json({ request: await requestView(result.request) });
+    }
     const resolved = await paymentRequests.resolve(request.id, 'PAID', null, now(), settledVia);
     if (!resolved) return c.json({ error: `This request was already ${request.status.toLowerCase()}`, request: await requestView(request) }, 409);
     return c.json({ request: await requestView(resolved) });
   });
 
+  app.get('/transfers/:id/receipt', async (c) => {
+    const parsed = z.object({ id: z.string().uuid(), accountId: z.string().uuid() }).safeParse({
+      id: c.req.param('id'), accountId: c.req.query('accountId'),
+    });
+    if (!parsed.success) return c.json({ error: 'Provide a transfer id and your accountId' }, 400);
+    const { id, accountId } = parsed.data;
+    const denied = await walletAccessError(c, accountId);
+    if (denied) return denied;
+    const transfer = await deps.ledger.getTransfer(id);
+    if (!transfer) return c.json({ error: 'Transfer not found' }, 404);
+    if (transfer.sourceAccountId !== accountId && transfer.destinationAccountId !== accountId)
+      return c.json({ error: 'This receipt belongs to another wallet' }, 403);
+    if (!deps.javaWorkflows || deps.ledger.isPracticeAccount(accountId))
+      return c.json({ error: 'Chain receipts are available for live ledger transfers only' }, 404);
+    return c.json(await deps.javaWorkflows.receipt(id));
+  });
+
   // Direct links. The UI uses ?id= so a host that 404s a second path segment still reaches this app.
   app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, c.req.param('id'), 30, now, tzOffsetFrom(c))));
+
+  app.post('/accounts/:id/spends/import', async (c) => {
+    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = z.object({ csv: z.string().min(1).max(1_000_000), timeZone: z.string().min(1).max(64).optional() }).safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Provide an expense CSV up to 1 MB' }, 400);
+    const id = c.req.param('id');
+    if (!deps.javaWorkflows || deps.ledger.isPracticeAccount(id))
+      return c.json({ error: 'CSV import is available for connected wallets. This wallet is in practice mode.' }, 409);
+    return c.json(await deps.javaWorkflows.importSpends(id, parsed.data.csv, parsed.data.timeZone));
+  });
 
   app.post('/accounts/:id/spends', async (c) => {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
@@ -667,7 +757,7 @@ export function createApp(deps: {
       ...parsed.data,
       currency: account.currency,
       source: 'manual',
-    }, now());
+    }, now(), c.req.header('Idempotency-Key'));
     return c.json({
       id: event.id,
       amountMinor: event.amountMinor,
@@ -708,7 +798,10 @@ export function createApp(deps: {
     if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
     const parsed = financePatchBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
-    const profile = await personalFinance.updateProfile(accountId, account.currency, parsed.data, now());
+    const { rebaseCash, ...patch } = parsed.data;
+    if (rebaseCash && patch.walletCashMinor == null) return c.json({ error: 'Set a cash amount to start a new snapshot.' }, 400);
+    const profile = await personalFinance.updateProfile(accountId, account.currency,
+      { ...patch, ...(rebaseCash ? { periodStart: now().toISOString() } : {}) }, now());
     const spends = await deps.spendLogs.list(accountId, { limit: 500 });
     const incomes = await personalFinance.listIncome(accountId, { limit: 500 });
     const finance = buildFinanceSnapshot(profile, formatMoney(account.balanceMinor, account.currency), spends, incomes);
@@ -992,12 +1085,16 @@ export function createApp(deps: {
   });
 
   app.onError((err, c) => {
+    if (err instanceof LedgerError) {
+      if ([502, 503, 504].includes(err.status))
+        return c.json({ error: 'The ledger is waking up. Try again in a moment.' }, 503);
+      const status = ([400, 401, 403, 404, 409, 422, 429, 503].includes(err.status) ? err.status
+        : [502, 504].includes(err.status) ? 503 : 502) as 400 | 401 | 403 | 404 | 409 | 422 | 429 | 502 | 503;
+      return c.json({ error: err.message }, status);
+    }
     console.error(err);
     if ((err as { status?: number }).status === 429 || /quota|RESOURCE_EXHAUSTED/i.test(err.message)) {
       return c.json({ error: 'The assistant is busy right now. Try again in a moment.' }, 429);
-    }
-    if (err instanceof LedgerError && (err.status === 502 || err.status === 503 || err.status === 504)) {
-      return c.json({ error: 'The ledger is waking up. Try again in a moment.' }, 503);
     }
     return c.json({ error: 'Something went wrong. Please try again.' }, 500);
   });
@@ -1021,7 +1118,7 @@ async function accountView(
   tzOffsetMinutes = 0,
 ) {
   if (!z.string().uuid().safeParse(id).success) return null;
-  const base = await loadAccountView(ledger, id, limit);
+  const base = await loadAccountView(ledger, id, limit, now());
   if (!base) return null;
   const profile = await personalFinance.getProfile(id, base.currency, now());
   const allSpends = await spendLogs.list(id, { limit: 500 });

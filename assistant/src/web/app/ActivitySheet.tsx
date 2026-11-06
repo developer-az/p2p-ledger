@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, type PaymentTrail } from '../api.js';
+import { api, type ChainReceipt, type PaymentTrail } from '../api.js';
 import { categoryLabel } from './categories.js';
 import { declineCopy } from './copy.js';
 import { displayName, dateTimeLabel, money, shortId } from './format.js';
@@ -107,12 +107,39 @@ export function ActivitySheet({
                 {trailError ? <p className="error-text" role="alert">{trailError}</p> : null}
                 {!trail && !trailError ? <Skeleton height={90} /> : null}
                 {trail ? <Proof trail={trail} /> : null}
+                {item.transferId && !declined ? <ChainProof key={item.transferId} accountId={accountId} transferId={item.transferId} /> : null}
               </div>
             </details>
           )}
         </div>
       ) : null}
     </Sheet>
+  );
+}
+
+function ChainProof({ accountId, transferId }: { accountId: string; transferId: string }) {
+  const [proof, setProof] = useState<ChainReceipt | null>(null);
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function check() {
+    setBusy(true); setMessage('');
+    try { setProof(await api.chainReceipt(accountId, transferId)); }
+    catch (e) { setMessage((e as Error).message); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div className="stack-sm">
+      <button type="button" className="btn btn-sm" onClick={() => void check()} disabled={busy}>
+        {busy ? 'Checking…' : proof ? 'Refresh chain receipt' : 'Check chain receipt'}
+      </button>
+      {message ? <p className="muted" role="status">{message}</p> : null}
+      {proof ? <>
+        <p role="status">{proof.status === 'FINALIZED' ? 'Recorded on chain' : proof.status === 'FAILED'
+          ? 'Receipt delayed. Your ledger payment is still complete.' : 'Waiting for chain confirmation. Your ledger payment is complete.'}</p>
+        <p className="muted">This receipt records the ledger operator's attestation. It does not move cryptocurrency.</p>
+        <a className="link-btn" download={`receipt-${transferId}.json`} href={'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(proof, null, 2))}>Download verification receipt</a>
+      </> : null}
+    </div>
   );
 }
 

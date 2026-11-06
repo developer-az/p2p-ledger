@@ -423,6 +423,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
                 addMoney: () => setSheet('add'),
                 ask: () => ask(),
                 signOut: onSignOut,
+                reload,
               }}
             />
           ) : null}

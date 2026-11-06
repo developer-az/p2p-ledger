@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { databaseUrlFromEnv } from './integrity-postgres.js';
+
 import { formatMoney } from './money.js';
 
 export const SPEND_CATEGORIES = [
@@ -39,7 +39,7 @@ export interface RecordSpendInput {
 }
 
 export interface SpendLogStore {
-  record(accountId: string, input: RecordSpendInput, now?: Date): Promise<SpendLogEntry>;
+  record(accountId: string, input: RecordSpendInput, now?: Date, idempotencyKey?: string): Promise<SpendLogEntry>;
   list(accountId: string, opts?: { since?: Date; limit?: number }): Promise<SpendLogEntry[]>;
   /** Remove one manual log. Returns false when it was already gone. */
   remove(accountId: string, spendId: string): Promise<boolean>;
@@ -272,130 +272,7 @@ export class InMemorySpendLogStore implements SpendLogStore {
   }
 }
 
-const SCHEMA_SQL = `
-create table if not exists spend_logs (
-    id            uuid primary key,
-    account_id    uuid        not null,
-    amount_minor  bigint      not null check (amount_minor > 0),
-    currency      char(3)     not null default 'USD',
-    category      text        not null,
-    note          text,
-    occurred_at   timestamptz not null,
-    source        text        not null default 'manual',
-    created_at    timestamptz not null default now()
-);
-create index if not exists spend_logs_account_occurred_idx on spend_logs (account_id, occurred_at desc);
-`;
-
-export class PostgresSpendLogStore implements SpendLogStore {
-  private schemaReady = false;
-
-  constructor(private readonly connectionString: string) {}
-
-  private async client() {
-    const { default: pg } = await import('pg');
-    const ssl = /supabase|sslmode=require/i.test(this.connectionString) ? { rejectUnauthorized: false } : undefined;
-    const client = new pg.Client({ connectionString: this.connectionString, ssl });
-    await client.connect();
-    return client;
-  }
-
-  private async ensureSchema(c: import('pg').Client) {
-    if (this.schemaReady) return;
-    await c.query(SCHEMA_SQL);
-    this.schemaReady = true;
-  }
-
-  async record(accountId: string, input: RecordSpendInput, now = new Date()): Promise<SpendLogEntry> {
-    if (input.amountMinor <= 0) throw new Error('amountMinor must be positive');
-    const id = randomUUID();
-    const occurredAt = input.occurredAt ?? now.toISOString();
-    const c = await this.client();
-    try {
-      await this.ensureSchema(c);
-      await c.query(
-        `insert into spend_logs (id, account_id, amount_minor, currency, category, note, occurred_at, source, created_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-          id,
-          accountId,
-          input.amountMinor,
-          input.currency ?? 'USD',
-          input.category,
-          input.note ?? null,
-          occurredAt,
-          input.source ?? 'manual',
-          now.toISOString(),
-        ],
-      );
-    } finally {
-      await c.end();
-    }
-    return {
-      id,
-      accountId,
-      amountMinor: input.amountMinor,
-      currency: input.currency ?? 'USD',
-      category: input.category,
-      note: input.note ?? null,
-      occurredAt,
-      source: input.source ?? 'manual',
-      createdAt: now.toISOString(),
-    };
-  }
-
-  async list(accountId: string, opts?: { since?: Date; limit?: number }): Promise<SpendLogEntry[]> {
-    const limit = Math.min(opts?.limit ?? 100, 500);
-    const c = await this.client();
-    try {
-      await this.ensureSchema(c);
-      const params: unknown[] = [accountId];
-      let sql = `
-        select id, account_id, amount_minor, currency, category, note, occurred_at, source, created_at
-        from spend_logs where account_id = $1`;
-      if (opts?.since) {
-        params.push(opts.since.toISOString());
-        sql += ` and occurred_at >= $2`;
-        params.push(limit);
-        sql += ` order by occurred_at desc limit $3`;
-      } else {
-        params.push(limit);
-        sql += ` order by occurred_at desc limit $2`;
-      }
-      const res = await c.query(sql, params);
-      return res.rows.map((row: Record<string, unknown>) => ({
-        id: String(row.id),
-        accountId: String(row.account_id),
-        amountMinor: Number(row.amount_minor),
-        currency: String(row.currency),
-        category: row.category as SpendCategory,
-        note: row.note as string | null,
-        occurredAt: new Date(String(row.occurred_at)).toISOString(),
-        source: row.source as SpendSource,
-        createdAt: new Date(String(row.created_at)).toISOString(),
-      }));
-    } finally {
-      await c.end();
-    }
-  }
-
-  async remove(accountId: string, spendId: string): Promise<boolean> {
-    const c = await this.client();
-    try {
-      await this.ensureSchema(c);
-      const res = await c.query(
-        `delete from spend_logs where id = $1 and account_id = $2`,
-        [spendId, accountId],
-      );
-      return (res.rowCount ?? 0) > 0;
-    } finally {
-      await c.end();
-    }
-  }
-}
-
-export function createSpendLogStore(env: NodeJS.ProcessEnv = process.env): SpendLogStore {
-  const url = databaseUrlFromEnv(env);
-  if (url) return new PostgresSpendLogStore(url);
+// Practice-only; live persistence is routed to the Java ledger in instance.ts.
+export function createSpendLogStore(): SpendLogStore {
   return new InMemorySpendLogStore();
 }

@@ -1,0 +1,52 @@
+name: Contract and Java chain integration
+on:
+  pull_request:
+    paths: ['contracts/**', 'ledger-service/**', '.github/workflows/contracts-ci.yml']
+  push:
+    branches: [main]
+    paths: ['contracts/**', 'ledger-service/**', '.github/workflows/contracts-ci.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: npm ci --ignore-scripts
+        working-directory: contracts
+      - run: npm audit --audit-level=high
+        working-directory: contracts
+      - run: npm run build && npm test
+        working-directory: contracts
+      - run: ./mvnw -B -DskipTests package
+        working-directory: ledger-service
+      - run: npm run test:integration
+        working-directory: contracts
+  static-analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: contracts
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install slither-analyzer==0.11.3
+      - run: solc-select install 0.8.38 && solc-select use 0.8.38
+      - run: slither src/LedgerAttestation.sol --solc-remaps @openzeppelin/=node_modules/@openzeppelin/ --filter-paths node_modules --exclude-dependencies
+        working-directory: contracts

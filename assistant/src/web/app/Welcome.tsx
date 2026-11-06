@@ -37,6 +37,8 @@ export function Welcome({
   const reduce = useReducedMotion();
   const live = boot?.live ?? false;
   const persistent = boot?.identity?.persistent === true;
+  const accountAvailable = mode === 'create' ? boot?.identity?.signupAvailable !== false : boot?.identity?.signinAvailable !== false;
+  const resetAvailable = boot?.identity?.passwordResetAvailable !== false;
 
   function focusAuth(next: AuthMode) {
     setMode(next);
@@ -78,7 +80,7 @@ export function Welcome({
   }
 
   async function submitForgot() {
-    if (busy) return;
+    if (busy || !resetAvailable) return;
     const trimmedEmail = email.trim();
     if (!trimmedEmail.includes('@')) {
       setError('Enter a valid email.');
@@ -98,7 +100,7 @@ export function Welcome({
 
   async function submitAccount() {
     if (forgot) return submitForgot();
-    if (!boot || busy) return;
+    if (!boot || busy || !accountAvailable) return;
     const trimmedEmail = email.trim();
     const trimmedName = name.trim();
     if (mode === 'create' && !trimmedName) {
@@ -310,7 +312,7 @@ export function Welcome({
                   <input id="account-email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                 </label>
                 {resetSent ? <p className="w-ok" role="status">{resetSent}</p> : null}
-                <button className="w-btn w-btn-ink" type="submit" disabled={busy !== null}>
+                <button className="w-btn w-btn-ink" type="submit" disabled={busy !== null || !resetAvailable}>
                   {busy === 'auth' ? 'Sending…' : resetSent ? 'Send again' : 'Send reset link'}
                 </button>
                 <button type="button" className="w-link" onClick={() => { setForgot(false); setResetSent(null); setError(null); }}>Back to sign in</button>
@@ -335,7 +337,7 @@ export function Welcome({
                     onChange={(e) => setPassword(e.target.value)}
                   />
                 </label>
-                <button className="w-btn w-btn-ink" type="submit" disabled={!boot || busy !== null}>
+                <button className="w-btn w-btn-ink" type="submit" disabled={!boot || busy !== null || !accountAvailable}>
                   {busy === 'auth' ? 'Working…' : mode === 'create' ? 'Create account' : 'Sign in'}
                 </button>
                 {mode === 'signin' ? (
@@ -343,6 +345,7 @@ export function Welcome({
                 ) : null}
               </>
             )}
+            {(!accountAvailable || (forgot && !resetAvailable)) ? <p className="w-fine" role="status">{forgot && !resetAvailable ? 'Password reset email is not connected on this deployment. No email was sent.' : boot?.identity?.unavailableReason}</p> : null}
             {error ? <p className="w-error" role="alert">{error}</p> : null}
             <p className="w-fine">
               {persistent

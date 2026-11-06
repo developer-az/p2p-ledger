@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { AccountRef } from '../api.js';
+import { api, type AccountRef } from '../api.js';
 import { money, parseMoney } from './format.js';
 import { moneyPlan } from './money-plan.js';
 import { TrustTab } from './TrustTab.js';
@@ -14,6 +14,7 @@ export interface WalletActions {
   addMoney: () => void;
   ask: () => void;
   signOut: () => void;
+  reload?: () => Promise<void>;
 }
 
 export function WalletTab({
@@ -109,6 +110,7 @@ export function WalletTab({
               <a className="btn btn-sm" href={`/api/accounts/${encodeURIComponent(me.id)}/statement.txt`}><Icon name="download" size={16} /> Statement</a>
             </div>
           </section>
+          {!viewer.demo ? <ExpenseImport accountId={me.id} onChanged={actions.reload} /> : null}
         </div>
 
         <div className="stack">
@@ -151,5 +153,40 @@ export function WalletTab({
         </div>
       </div>
     </div>
+  );
+}
+
+function ExpenseImport({ accountId, onChanged }: { accountId: string; onChanged?: () => Promise<void> }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  async function importFile() {
+    if (!file) return;
+    setError(''); setMessage(''); setBusy(true);
+    try {
+      if (file.size > 1_000_000) throw new Error('Choose a CSV smaller than 1 MB.');
+      const result = await api.importSpends(accountId, await file.text());
+      setMessage(`Imported ${result.imported} expenses. Skipped ${result.duplicates} duplicates.`);
+      await onChanged?.();
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  }
+  return (
+    <section className="card stack-sm" aria-labelledby="import-title">
+      <div><p className="eyebrow">Your statements</p><h2 id="import-title">Import expenses</h2></div>
+      <p className="muted">Bring spending into Activity and Patterns. These logs do not move money. Requires a live wallet.</p>
+      <p className="muted">Use YYYY-MM-DD dates and positive amounts such as 12.50. Include transactionId to catch duplicates across statements.</p>
+      <a className="link-btn" download="settle-expenses.csv" href={'data:text/csv;charset=utf-8,' + encodeURIComponent('date,amount,category,note,transactionId\n2026-01-01,12.50,groceries,Weekly groceries,EXAMPLE-1\n')}>Download CSV template</a>
+      <label htmlFor="expense-csv">Expense CSV (up to 2,000 rows)</label>
+      <input id="expense-csv" type="file" accept=".csv,text/csv" disabled={busy} onChange={e => {
+        setFile(e.target.files?.[0] ?? null); setError(''); setMessage('');
+      }} />
+      <button className="btn btn-sm" type="button" disabled={!file || busy} onClick={() => void importFile()}>
+        {busy ? 'Importing…' : 'Import expenses'}
+      </button>
+      {message ? <p role="status">{message}</p> : null}
+      {error ? <p className="error-text" role="alert">{error}</p> : null}
+    </section>
   );
 }

@@ -94,3 +94,14 @@ describe('password reset', () => {
     expect(res.status).toBe(400);
   });
 });
+
+it('reports disconnected recovery and never pretends to send a reset email', async () => {
+  const mailer = new MemoryMailer();
+  Object.defineProperty(mailer, 'delivers', { value: false });
+  const { api } = app(mailer);
+  const boot = await api.request('/api/bootstrap');
+  expect((await boot.json() as { identity: { passwordResetAvailable: boolean } }).identity.passwordResetAvailable).toBe(false);
+  const response = await post(api, '/api/auth/password-reset/request', { email: 'someone@example.com' });
+  expect(response.status).toBe(503);
+  expect((await response.json() as { error: string }).error).toContain('No email was sent');
+});

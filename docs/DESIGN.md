@@ -31,6 +31,8 @@ Global picks live in `~/.agents/SKILLS-ROUTING.md` ("Motion and visual stack"). 
 
 ## Product invariants (never swap for metaphor)
 
+- Wallet's expense CSV import reuses the existing card, form, button and status styles. Activity's proof panel offers an explicit chain-receipt check and JSON download. Both show unavailable/error states without implying money moved. No new visual or animation dependencies.
+
 - Weekly **progress ring**, habit dots and pace copy on the Today card
 - Two-tap log sheet, category colors (Okabe–Ito), streak pill
 - Patterns heatmap, demo guide, sheet dismiss (pointer down/up outside panel)

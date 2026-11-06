@@ -1,6 +1,9 @@
 package io.github.developeraz.ledger;
 
 import java.time.Clock;
+import io.github.developeraz.ledger.spending.SpendingService;
+import io.github.developeraz.ledger.requests.PaymentRequestService;
+import org.springframework.aot.hint.annotation.RegisterReflectionForBinding;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -8,6 +11,7 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+@RegisterReflectionForBinding({SpendingService.Input.class, PaymentRequestService.Split.class, PaymentRequestService.Payer.class})
 @SpringBootApplication
 @ConfigurationPropertiesScan
 @EnableScheduling

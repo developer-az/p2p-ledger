@@ -1,5 +1,12 @@
 # Engineering Handoff (latest)
 
+## Session: production login, browser errors and Render rollout diagnosis (2026-11-06)
+- User supplied the email they tried. Queried production app_users and app_signup_attempts with exact case-insensitive parameterized lookup; neither an account nor a pending signup exists. No PII, password hashes or secret values printed. Temporary production environment/account lookup files deleted. No password or auth bypass requested/implemented.
+- Live bootstrap: persistent identity storage, signupAvailable=false, signinAvailable=true, reset unavailable, ledger live=true. /api/ready is 503. Render health is UP, but /v1/capabilities is 404. Thus basic ledger is up but required workflow API is still absent.
+- Clean production browser produced zero Perplexity requests, CSP errors or extension runtime errors. Repository also has no Perplexity/FKGrotesk reference. Do not broaden CSP to accommodate browser-injected resources.
+- Main ledger deployment run 42184983208 reported Deploy triggered after hook acceptance, with no verification of the deployed service. Added bounded authenticated workflow-version verification, five standalone Node regression tests, YAML validation, missing-config failure instead of successful skip, main-only production publication/deployment, and Render blueprint service-key declaration. Existing layout/auth behavior unchanged.
+- Actual signup is not repaired by these pipeline changes. Requested authenticated Render access (integration or local credential location) to inspect rollout and configure matching Java/Vercel/GitHub service keys. No Render tools/credentials currently available. No production deploy/retry triggered and no main merge of this change.
+
 ## Session: owner-approved merge of follow-up fixes (2026-11-06)
 - Owner requested merge to main if fixed. Confirmed PR #27 was already merged at 0c21dea. Created fix/account-readiness-feedback from current origin/main for the newer local message/preflight/form fixes.
 - Full local verification: 212 tests pass, 1 optional PostgreSQL test skipped locally (CI enables it), production build and whitespace checks pass. Reviewed changes: no visual/CSS changes, no credential logging, no relaxation of signup authorization or backend compatibility guards.

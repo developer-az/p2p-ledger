@@ -76,3 +76,10 @@ The BFF now requires Java `GET /v1/capabilities` to advertise `workflows: 2` bef
 The initial deploy order matters: a frontend preview cannot install Java routes into the separately hosted production ledger. A missing Spring static resource is a backend release mismatch, not an expense-validation error. Never fall back to memory to acknowledge live expenses.
 
 Credential attempts are limited per normalized email in PostgreSQL, across BFF instances. IP write limits remain a second local layer; production ingress still needs its own distributed abuse controls. PostgreSQL signup locks are transaction-scoped to support transaction poolers. Reset password/token/session updates are atomic.
+
+
+## Verify Render rollout rather than hook acceptance
+
+The deployment hook only acknowledges a request. The deployed service must separately return workflow version 2 from authenticated `/v1/capabilities`. `/actuator/health` returning UP on an older image is insufficient. GitHub deployment now requires the `LEDGER_API_KEY` secret (same value on Java and Vercel), `LEDGER_URL` repository variable and Render deploy hook. Missing configuration blocks deployment instead of reporting a successful skip. After the hook returns, bounded polling verifies workflow availability and credentials. Production publication/deployment is restricted to pushes on main.
+
+If the check times out, inspect Render's deploy events and running image reference, registry image access, boot/Flyway logs and service credentials. Do not mark rollout complete merely because curl accepted the hook. The check does not validate password-reset email; sender setup and actual inbox delivery remain separate.

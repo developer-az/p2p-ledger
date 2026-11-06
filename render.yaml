@@ -11,6 +11,8 @@ services:
     healthCheckPath: /actuator/health
     autoDeploy: false         # CI triggers deploys through the deploy hook after tests pass
     envVars:
+      - key: LEDGER_API_KEY  # same random 32+ character value on Java, the BFF and deployment verification
+        sync: false
       - key: DATABASE_URL     # Supabase session pooler, e.g. jdbc:postgresql://aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require
         sync: false
       - key: DATABASE_USERNAME

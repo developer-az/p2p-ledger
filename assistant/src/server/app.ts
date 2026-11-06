@@ -283,7 +283,7 @@ export function createApp(deps: {
         await auth.findByEmail('readiness-probe@invalid.local');
         await deps.javaWorkflows.assertReady();
         signupAvailable = true;
-      } catch { signupAvailable = false; unavailableReason = 'Account services are being updated. The sample is available while setup is completed.'; }
+      } catch { signupAvailable = false; unavailableReason = 'Account creation is unavailable. You can try signing in to an existing account or explore the sample.'; }
     } else if (production) unavailableReason = 'Account services are not connected on this deployment. The sample is available.';
     return c.json({
       live,

@@ -163,3 +163,10 @@ Configure an isolated preview PostgreSQL database via `DATABASE_URL` or `LEDGER_
 Run `npm run check:deployment -- https://YOUR_PREVIEW_HOST`. It prints availability of signup, sign-in and reset email, without using passwords or printing credentials. The command exits nonzero when signup or recovery is disconnected. Bootstrap advertises these states to the UI; a missing service disables its control and explains the sample alternative.
 
 The configured reset path is covered with a capturing test mailer (token expiration, single use, old-session revocation, changed-password login). That is not proof of real email delivery: after configuring a sender, verify an inbox and the emailed preview origin end to end.
+
+
+## Production release preflight
+
+Before deploying the BFF, load the target environment securely and run `npm run check:release` from assistant/. The command checks nonempty database, service-key, mail and origin configuration, HTTPS URLs, service-key length, and authenticated Java workflow version 2. It prints variable names, never credentials. A variable listed in Vercel can still have an empty value; metadata alone is not proof that the service is configured. This check does not send email or create accounts.
+
+Deploy Java first and require its authenticated capability endpoint to pass. Then deploy the BFF, check `/api/ready`, and verify a dedicated test account's signup/login, expense persistence, and a real inbox reset. A push to the feature branch only builds the preview; it does not upgrade Render. Environment edits only apply to new Vercel deployments.

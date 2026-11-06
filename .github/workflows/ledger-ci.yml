@@ -21,6 +21,10 @@ jobs:
           java-version: "21"
           cache: maven
       # Integration tests start real Postgres and ElasticMQ (SQS) containers via Testcontainers.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: node --test scripts/verify-deployment.test.mjs
       - run: ./mvnw -B verify
 
   jvm-image:
@@ -76,20 +80,22 @@ jobs:
         working-directory: ledger-service
         run: ./mvnw -B -Pnative -DskipTests native:compile
       - name: Smoke test the native binary
+        env:
+          LEDGER_API_KEY: ci-native-smoke-key-not-a-real-secret-0001
         working-directory: ledger-service
         run: |
           ./target/ledger-service > app.log 2>&1 &
           for i in $(seq 1 60); do curl -sf localhost:8080/actuator/health && break; sleep 1; done
           scripts/smoke.sh http://localhost:8080 || { cat app.log; exit 1; }
       - name: Log in to GHCR
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push image
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v6
         with:
           context: ledger-service
@@ -99,11 +105,24 @@ jobs:
             ghcr.io/${{ github.repository }}:latest
             ghcr.io/${{ github.repository }}:${{ github.sha }}
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+      - uses: actions/setup-node@v5
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          node-version: 22
       - name: Deploy to Render
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
-          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
+          LEDGER_URL: ${{ vars.LEDGER_URL }}
+          LEDGER_API_KEY: ${{ secrets.LEDGER_API_KEY }}
         run: |
-          if [ -z "$HOOK" ]; then echo "RENDER_DEPLOY_HOOK_URL not set; skipping deploy"; exit 0; fi
-          curl -fsS -X POST "$HOOK&imgURL=$(jq -rn --arg u "ghcr.io/${{ github.repository }}:${{ github.sha }}" '$u|@uri')" > /dev/null
-          echo "Deploy triggered"
+          if [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ] || [ -z "$LEDGER_URL" ] || [ "${#LEDGER_API_KEY}" -lt 32 ]; then
+            echo "Deployment blocked: configure Render API access, service ID, URL and matching service key."
+            exit 1
+          fi
+          payload=$(jq -cn --arg image "ghcr.io/${{ github.repository }}:${{ github.sha }}" '{imageUrl:$image}')
+          export RENDER_DEPLOY_ID=$(curl -fsS -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys"             -H "Authorization: Bearer $RENDER_API_KEY" -H 'Content-Type: application/json' --data "$payload" | jq -er .id)
+          [ -n "$RENDER_DEPLOY_ID" ] || { echo "Render returned no deployment ID"; exit 1; }
+          echo "Deploy requested; verifying the requested rollout and running service."
+          node ledger-service/scripts/verify-deployment.mjs

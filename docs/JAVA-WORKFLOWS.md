@@ -76,3 +76,17 @@ The BFF now requires Java `GET /v1/capabilities` to advertise `workflows: 2` bef
 The initial deploy order matters: a frontend preview cannot install Java routes into the separately hosted production ledger. A missing Spring static resource is a backend release mismatch, not an expense-validation error. Never fall back to memory to acknowledge live expenses.
 
 Credential attempts are limited per normalized email in PostgreSQL, across BFF instances. IP write limits remain a second local layer; production ingress still needs its own distributed abuse controls. PostgreSQL signup locks are transaction-scoped to support transaction poolers. Reset password/token/session updates are atomic.
+
+
+## Verify Render rollout rather than hook acceptance
+
+The deployment hook only acknowledges a request. The deployed service must separately return workflow version 2 from authenticated `/v1/capabilities`. `/actuator/health` returning UP on an older image is insufficient. GitHub deployment now requires the `LEDGER_API_KEY` secret (same value on Java and Vercel), `LEDGER_URL` repository variable and Render deploy hook. Missing configuration blocks deployment instead of reporting a successful skip. After the hook returns, bounded polling verifies workflow availability and credentials. Production publication/deployment is restricted to pushes on main.
+
+If the check times out, inspect Render's deploy events and running image reference, registry image access, boot/Flyway logs and service credentials. Do not mark rollout complete merely because curl accepted the hook. The check does not validate password-reset email; sender setup and actual inbox delivery remain separate.
+
+
+## Native workflow serialization and authoritative Render deployment
+
+The native image must register JSON reflection binding for the internal spending input and payment split/payer records. These records are serialized for idempotency hashes inside services rather than bound directly by controllers, so controller AOT discovery does not cover them. The native smoke test now authenticates and exercises expense write/read/replay/undo and split replay/cancellation, in addition to basic ledger tests.
+
+Deployment uses the Render API with `RENDER_API_KEY` and `RENDER_SERVICE_ID`, not the stale hook. CI waits for the exact returned deploy ID to become live, then checks authenticated workflow version 2. This avoids accepting an old but healthy version-2 service while the requested rollout fails. Configure the same `LEDGER_API_KEY` on Render, Vercel and GitHub. Secret values never belong in source or logs.

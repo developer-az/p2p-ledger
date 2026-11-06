@@ -13,7 +13,7 @@ let paymentRequests = createPaymentRequestStore();
 
 /** Shared API app for Node server, Vercel, and Vite dev middleware. */
 export function createAssistantApi() {
-  const ledgerUrl = process.env.LEDGER_URL ?? 'http://localhost:8080';
+  const ledgerUrl = process.env.LEDGER_URL?.trim() || 'http://localhost:8080';
   const timeoutMs = process.env.VERCEL === '1' ? 8_000 : 20_000;
   const liveLedger = new HttpLedgerClient(ledgerUrl, timeoutMs);
   const practice = new PracticeLedger();

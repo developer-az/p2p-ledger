@@ -1,5 +1,31 @@
 # Engineering Handoff (latest)
 
+## Session: owner-approved merge of follow-up fixes (2026-11-06)
+- Owner requested merge to main if fixed. Confirmed PR #27 was already merged at 0c21dea. Created fix/account-readiness-feedback from current origin/main for the newer local message/preflight/form fixes.
+- Full local verification: 212 tests pass, 1 optional PostgreSQL test skipped locally (CI enables it), production build and whitespace checks pass. Reviewed changes: no visual/CSS changes, no credential logging, no relaxation of signup authorization or backend compatibility guards.
+- Follow-up includes accurate unavailable/signup wording, suppression of contradictory saved-state reassurance, native field validation/busy handling, ledger URL whitespace handling, release configuration/version preflight and regression coverage. Original user .gitignore change remains excluded.
+- Merge authorization covers these verified code fixes. Production service-key and email-sender blockers remain separate; merging does not certify working signup or reset delivery.
+
+## Session: contradictory account availability messages (2026-11-06)
+- Owner reported an account-service failure alongside Saved with the ledger. Cause: Welcome showed persistence reassurance solely from identity.persistent even when signupAvailable=false.
+- The original form now hides persistence reassurance when the selected account action is unavailable, while loading, or during password recovery. Available signup uses prospective wording rather than claiming success; sign-in copy describes returning to records. Existing styles and layout unchanged.
+- Backend failure text now states account creation is unavailable rather than asserting an update is in progress. This copy correction does not configure or restore Java/account services.
+- Added real component server-render regressions for persistent storage with disabled signup and available signup. Both plus auth regressions pass (10 tests); production build passes. Changes remain uncommitted with prior owner-reviewed release work.
+
+## Session: production release verification and conservative component improvements (2026-11-06)
+- Owner asked whether committing/pushing is sufficient, requested testing before release, and authorized improvements within the restored implementation without replacing the design.
+- Read-only production checks: ledger.anthony-zhou.com/api/bootstrap returns 200 with identity.persistent=true but live=false; /api/ready is 404 on the existing release. Actual PostgreSQL connection succeeded and identity/session tables exist. No accounts, emails or ledger transactions were created during production checks.
+- Downloaded production environment temporarily for checks, never printed secrets, and deleted each temporary environment file. LEDGER_URL was actually empty despite appearing in Vercel metadata. Confirmed GitHub's LEDGER_URL variable points to https://p2p-ledger.onrender.com; that service health returns 200/UP but /v1/capabilities returns 404 (old backend).
+- Corrected production Vercel LEDGER_URL to the verified service, read back exact match, and set APP_URL to the verified production alias https://ledger.anthony-zhou.com. Used stdin without newline to avoid Windows escaped-CR corruption. No deployment or merge performed; environment edits apply to the next deployment. Matching LEDGER_API_KEY and Resend key/sender remain unconfigured and cannot be invented or set one-sided safely.
+- Added npm run check:release and regression tests: required nonempty config, database presence, HTTPS URLs without embedded credentials, key length, then authenticated Java version check. This preflight is read-only and does not imply real inbox delivery.
+- Existing Welcome form retains all layout/styles. Added required fields, password length bound, disabled fields while submitting, aria-busy, and duplicate availability-message suppression. No visual redesign. Instance normalizes whitespace/empty ledger URL for development fallback.
+- Verification: 210 tests pass, one optional PostgreSQL integration skipped locally; build passes. Browser checked original form required/invalid-email validation, idle aria-busy state, and unavailable recovery being disabled; no CSS/layout changes. Production signup/reset cannot be certified until compatible Java, matching service credentials and mail delivery are configured. Do not answer that a push alone makes these work.
+- Changes left for owner review/commit as requested. Preserve existing .gitignore change.
+
+## Session: repeated deployment account-unavailable report (2026-11-06)
+- Rechecked Vercel environment metadata: Preview still only has LEDGER_URL and GEMINI_API_KEY; LEDGER_DATABASE_URL remains Production-only. No Render/Supabase CLI, environment credentials, or local .p2p-secrets configuration was available. GitHub secrets include a Render deploy hook but cannot supply or configure database/API-key/email credentials.
+- Discovered unconnected Render and Supabase plugins via Plugin Management and suggested both as the concrete access path to provision isolated preview services. Do not bypass durable signup guards, silently copy production identities, or resume visual changes. User connection/service access is the remaining dependency. No application code changed in this turn.
+
 ## Session: owner-requested design revert (2026-11-06)
 - Owner explicitly requested reverting every design/UX change made in this conversation and retaining technical work. Restored consumer components, CSS, DESIGN.md and PRODUCT.md to 539815a (before my first design changes). Reverted bubble journey, Workbench layout, palette, navigation changes, hero removal, copy/motion changes and onboarding changes.
 - Retained only functional wiring in restored UI: SetupSheet sends rebaseCash to prevent double deductions; original Welcome honors backend account/recovery availability using its existing form/styles. No new visual treatment added.

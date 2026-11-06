@@ -300,7 +300,7 @@ export function Welcome({
             <h2 id="own-title" className="w-h2">{mode === 'create' ? <>Start clean.<br />Keep it yours.</> : <>Welcome back.<br />Pick up where you left off.</>}</h2>
             <p>One email, one wallet. The sample household never mixes with yours. You start empty — setup collects your real cash, cards, and pace, not a pretend balance.</p>
           </div>
-          <form className="w-own-form" onSubmit={(e) => { e.preventDefault(); void submitAccount(); }}>
+          <form className="w-own-form" aria-busy={busy === 'auth'} onSubmit={(e) => { e.preventDefault(); void submitAccount(); }}>
             <div className="w-auth-switch" role="tablist" aria-label="Account">
               <button type="button" role="tab" aria-selected={mode === 'signin'} onClick={() => { setMode('signin'); setForgot(false); setError(null); }}>Sign in</button>
               <button type="button" role="tab" aria-selected={mode === 'create'} onClick={() => { setMode('create'); setForgot(false); setError(null); }}>Create account</button>
@@ -309,7 +309,7 @@ export function Welcome({
               <>
                 <p className="w-fine w-forgot-intro">Enter the email on your account and we will send a link to choose a new password.</p>
                 <label className="w-field" htmlFor="account-email">Email
-                  <input id="account-email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <input id="account-email" required disabled={busy !== null} type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                 </label>
                 {resetSent ? <p className="w-ok" role="status">{resetSent}</p> : null}
                 <button className="w-btn w-btn-ink" type="submit" disabled={busy !== null || !resetAvailable}>
@@ -321,15 +321,18 @@ export function Welcome({
               <>
                 {mode === 'create' ? (
                   <label className="w-field" htmlFor="account-name">Name
-                    <input id="account-name" maxLength={40} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+                    <input id="account-name" required disabled={busy !== null} maxLength={40} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
                   </label>
                 ) : null}
                 <label className="w-field" htmlFor="account-email">Email
-                  <input id="account-email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <input id="account-email" required disabled={busy !== null} type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                 </label>
                 <label className="w-field" htmlFor="account-password">Password
                   <input
                     id="account-password"
+                    required
+                    maxLength={72}
+                    disabled={busy !== null}
                     type="password"
                     autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
                     minLength={8}
@@ -346,12 +349,14 @@ export function Welcome({
               </>
             )}
             {(!accountAvailable || (forgot && !resetAvailable)) ? <p className="w-fine" role="status">{forgot && !resetAvailable ? 'Password reset email is not connected on this deployment. No email was sent.' : boot?.identity?.unavailableReason}</p> : null}
-            {error ? <p className="w-error" role="alert">{error}</p> : null}
-            <p className="w-fine">
+            {error && error !== boot?.identity?.unavailableReason ? <p className="w-error" role="alert">{error}</p> : null}
+            {boot && accountAvailable && !forgot ? <p className="w-fine">
               {persistent
-                ? 'Saved with the ledger. Sign in with this email next time.'
+                ? mode === 'create'
+                  ? 'Your account will be saved. Use this email to sign in next time.'
+                  : 'Sign in to return to your saved records.'
                 : 'On this server the account lasts until the process restarts. A connected database keeps it.'}
-            </p>
+            </p> : null}
           </form>
         </InView>
       </section>

@@ -17,7 +17,8 @@
     "eval": "tsx --env-file-if-exists=.env.local evals/run.ts",
     "seed": "tsx scripts/seed.ts",
     "typecheck": "tsc --noEmit",
-    "check:deployment": "tsx scripts/check-deployment.ts"
+    "check:deployment": "tsx scripts/check-deployment.ts",
+    "check:release": "tsx scripts/check-release.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

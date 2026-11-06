@@ -143,7 +143,7 @@ export function SetupSheet({
                 </button>
               ))}
             </div>
-            <p className="hint">Changing cash starts a fresh snapshot from today. Your spending history stays.</p>
+            <p className="hint">You can update this any time. It stays on this account.</p>
           </div>
         ) : null}
 

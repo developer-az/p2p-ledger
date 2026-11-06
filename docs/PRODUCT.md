@@ -1,31 +1,119 @@
-# Settle
+# Product direction — Settle (consumer app) on a ledger-first core
 
-Settle is one product for recording personal spending, understanding a weekly plan, and tracking shared bills. `p2p-ledger` is the repository name. Java is the internal accounting service. `/ops` is the engineering console.
+**Settle** is the user-facing app (`/`): a calm money snapshot, two-tap spend logging, income, weekly pace, and patterns from your own history. The original terminal is the engineering console at `/ops`; P2P endpoints remain in the API for clients that need them.
 
-## Customer experience
+## The Settle experience (current)
 
-- Today starts with category bubbles. Pick a category, choose a preset or exact amount, review, and save. Recording an expense does not send a payment. Recent repeats skip to review. Failed writes preserve their idempotency key; successful logs offer undo.
-- Main navigation has Today, Activity, and Wallet. Patterns opens from Today; Ask opens from the header or Wallet.
-- Activity is the shared timeline for expenses, income, and payment records. Source and status identify what each record means.
-- Wallet holds cash, cards owed, pace, imports, and account controls. Simulated funding and the trust lab belong in the sample experience and engineering console.
-- Setup is optional. People can log immediately and add their starting numbers later. Changing current cash starts a fresh snapshot calculation; spending history stays available.
+| Surface | Job | Rules |
+|---------|-----|-------|
+| **Today** | Net position (cash − cards), what is left of the weekly pace, a habits-focused recent list, patterns peek | One glance; one next action |
+| **Activity** | Unified timeline of logged spends, income and ledger entries | Day totals; receipt on every ledger row; undo on a logged spend |
+| **Patterns** | Eight-week heatmap, 30-day categories, weekday rhythm, month projection, card-payoff planner, milestones | Only from what the person logged; never mixed with ledger totals |
+| **Ask** | Read-only questions about the wallet and habits | No money movement; tools scoped to one wallet |
+| **Wallet** | Edit cash/cards/weekly pace, logging stats, ledger balance, statement, trust lab | The ledger wallet and the personal snapshot stay separate |
 
-## Money definitions
+**Onboarding** asks three numbers once — cash, card balance, a weekly pace — in a 30-second sheet. It is editable, skippable, and never a bank login. **Logging** is amount + category with recent-repeat chips and an undo toast. A daily streak, weekly ring, and small milestones give the habit a game-like rhythm without turning money into a slot machine.
 
-Personal net position is starting cash plus logged income, minus logged spending when enabled, minus cards owed. The calculation uses records since the current snapshot. Weekly pace measures recorded expenses; it is a plan, not a bank balance.
+## Guided demo vs. personal wallet
 
-Double-entry payment balances are internal settlement accounting. Never add a personal cash estimate to simulated funding: that would create a fictitious total. Recording an expense does not debit the payment ledger. Paying a shared request uses Java's atomic request/transfer transaction and idempotency key.
+| | Guided demo | Personal wallet |
+|---|---|---|
+| Entry | **Preview a sample household** | **Create account** (email and password) |
+| Data | Seeded household + personal history for Anthony, Sam, Jordan | New ledger account, no spend logs, no demo household |
+| First money | Existing demo balances/transfers | **None — the account starts empty**; setup collects the owner's real cash, cards, and pace |
+| Guidance | Five-step card: baseline → log spend → log income → Patterns → weekly pace; **Demo** pill reopens it | Normal first-run setup; cash prefilled from the funded Settle wallet |
+| Isolation | `spend_logs`, `money_profiles` and progress keyed by demo account ids | Keyed by the new account id; demo data never enters it |
+| Persistence | Practice: memory; live: Postgres | Live: Postgres; practice: memory until restart |
 
-Funding and internal payments currently remain simulated. Apple Pay, Venmo, and bank connectivity are not integrated payment rails. Recording an external settlement is a user assertion, not provider confirmation. Real payments require provider integration and reconciliation before launch as a payments service.
+The demo is deliberately instructive: it has a believable history, a real declined payment, ledger entries, and a progress card that points at the feature each step proves. The personal wallet is deliberately clean: empty, no first peer, no demo story — the owner sets the starting point from their own numbers.
 
-## Identity and backend contract
+What actually runs, with no pretence:
 
-Production signup requires durable PostgreSQL identity storage and matching Java workflow capabilities. It cannot fall back to a practice account. Signup reserves identity/account UUIDs durably under a per-email database lock. Java account provisioning is idempotent at the reserved UUID. Interrupted registration resumes with the same credentials and IDs; identity activation follows successful provisioning.
+- Payments, deposits, declines and balances are real double-entry ledger operations (Postgres, append-only, idempotent).
+- A payment request is a row in `payment_requests`. Paying it is one ledger transfer with key `request-<id>-<declinedAttempts>`, so a double click moves money once and a retry after a decline uses a fresh key.
+- Splitting a bill creates one request per friend; shares always sum to the total.
+- The consumer app no longer exposes send/split; those ledger capabilities remain available to `/ops` and API clients, while Settle stays focused on spending habits.
+- Dollars are still simulated. Sign-in is real: email, a scrypt password hash, and an httpOnly session cookie bound to one wallet. The sample household is not an account.
 
-Passwords use scrypt. Random session tokens are stored as hashes, with HttpOnly/SameSite cookies and Secure cookies in production. Cross-site writes are rejected and API responses are not cached. Account-specific credential attempt limits are shared through PostgreSQL. Reset token consumption, password replacement, and session revocation commit together.
+# Product direction — habits + ledger-first P2P
 
-`GET /api/ready` returns 200 only when identity storage is reachable and Java advertises workflow version 2. Java capabilities and provisioning require the server-only service key. Deploy compatible Java and migrations before the BFF. See [JAVA-WORKFLOWS.md](JAVA-WORKFLOWS.md).
+## What we are building
 
-## Release boundary
+A **spending-habits** product on top of the existing ledger stack:
 
-Local tests validate simulated workflows, not enterprise or regulated payments readiness. A real payments release additionally requires verified email ownership/identity, production provider configuration, delivery and recovery monitoring, secret rotation, backup restoration drills, ingress protection, reconciliation, and operational ownership. Do not advertise bank payments before those systems are integrated and verified.
+| Layer | Role |
+|--------|------|
+| **User logs (`spend_logs`)** | What the user chooses to track — no bank link, no automatic feed |
+| **ledger-service** | Exact money: P2P transfers, deposits, fraud, double-entry |
+| **assistant `/api` + terminal** | BFF, habits UI in WATCH, CMD `log 15 groceries`, read-only LLM tools |
+
+Habit totals never mix with ledger transfers in one number — the copilot uses **`summarize_spending`** for logs and **`summarize_activity` / `peer_ledger`** for settle-ups.
+
+## Architecture (production path)
+
+| Layer | Responsibility |
+|--------|----------------|
+| **ledger-service** | System of record: accounts, transfers, deposits, **ledger_entries**, fraud rules, idempotency, outbox |
+| **assistant `/api`** | Public BFF + terminal UI; **spend_logs** table when `LEDGER_DATABASE_URL` / `DATABASE_URL` is set |
+| **assistant UI** | Terminal: **HABITS** in WATCH, BLOTTER for ledger, AUDIT/MSG, CMD |
+
+Practice mode mirrors ledger stories in-memory; **live mode** is PostgreSQL on Render. Habit logs persist in Postgres when the assistant has the same DB URL as the ledger (auto-migrated `spend_logs`).
+
+**P2P vs blockchain:** Counterparty payments are P2P; custody is centralized in Java/Postgres. See **[P2P-SOLIDITY-AND-SCALE.md](P2P-SOLIDITY-AND-SCALE.md)**.
+
+## Habits API (BFF)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/accounts?id=` | Account view includes `habits`, `patterns`, `finance` and `moneyProfile` |
+| `GET` | `/api/accounts/:id/habits` | Habits only |
+| `POST` | `/api/accounts/:id/spends` | Log spend `{ amountMinor, category, note? }` |
+| `DELETE` | `/api/accounts/:id/spends/:spendId` | Undo a manual spend log |
+| `PATCH` | `/api/accounts/:id/finance` | Cash, card balance, weekly pace, or whether new logs reduce cash |
+| `POST` | `/api/accounts/:id/incomes` | Log income `{ amountMinor, source, note? }` |
+
+`patterns` is derived server-side from the person's own logs: 56 daily buckets, 30-day vs previous-30-day categories, weekday averages, current/longest streak, calendar-week pace, month projection and biggest day. The client never has to reconstruct the story from a paginated feed.
+
+Categories: `dining`, `groceries`, `transport`, `entertainment`, `housing`, `shopping`, `health`, `other`.
+
+SQL migration: [`assistant/sql/V1__spend_logs.sql`](../assistant/sql/V1__spend_logs.sql) (also applied automatically by the BFF when using Postgres).
+
+## Welcome (pre-sign-in)
+
+- A single editorial hero with a product mock. Primary actions are **Create account** and **Sign in**. The sample household is a text link, not the front door.
+- Nav is How it works, Sign in, and Create account.
+- The mock is illustrative only; real numbers come from the account view after sign-in.
+
+## Live demo (today)
+
+1. **Seed live household** on sign-in → anthony-/sam-/jordan-* wallets with history and personal demo logs.
+2. **Create account** → email, password, and name. Opens a ledger wallet that **starts empty** (no opening deposit, no corridor), and keeps sample data out. Setup collects the owner's own cash, cards, and pace. Sign in returns the same wallet.
+3. **Practice mode** → full ledger without Java; created wallets live in memory until restart.
+4. **Log habits** → the two-tap sheet on Today, or `log 12 dining coffee` in the ops console.
+
+## Roadmap (showcase → production)
+
+1. **Contacts / owner search** — prefix query on `owner_id` in Java (today: exact match).
+2. **Transfer detail** — `GET /api/transfers/:id` in BFF + deep links from activity.
+3. **Statement pagination** — `before` cursor on entries (API already supports it).
+4. **Multi-currency** — funding accounts per currency in schema; UI currency picker.
+5. **OAuth** — email and password sessions are in place; a provider login is still later. Rate limits already apply per IP on writes.
+6. **Observability** — surface actuator health/metrics in an ops pane; outbox lag.
+7. **Habit spaces** — shared trips/roommates with optional ledger settle-up button.
+
+Run **`npm run smoke:api -- https://your-app.vercel.app`** after every deploy.
+
+## Gemini / Ask tab
+
+- Set **`GEMINI_API_KEY`** on Vercel (and locally in `.env.local`) for full LLM answers.
+- Bootstrap reports `chat.configured` — when false, Ask still works via **read-only tools** (habits + ledger).
+- **OpenRouter** — `LLM_PROVIDER=openrouter` with `OPENROUTER_API_KEY` (see [DEVELOPMENT.md](DEVELOPMENT.md)); Anthropic via `LLM_PROVIDER=anthropic`.
+
+## Why live “didn’t save”
+
+| Symptom | Cause |
+|---------|--------|
+| Refresh loses wallet | Practice mode or ledger was **offline** when you clicked create — account lived only in that server instance. |
+| Data gone after deploy | Practice is ephemeral; **live** wallets are UUIDs in PostgreSQL — use **saved wallets** or `?id=` in the URL. |
+| Habit logs missing on Vercel | Set **`LEDGER_DATABASE_URL`** (or `DATABASE_URL`) on the assistant so `spend_logs` uses Postgres; otherwise logs are in-memory per instance. |
+| Send failed | Live wallet paying a **practice** UUID (fixed) — use live seed or owner-id resolve. |

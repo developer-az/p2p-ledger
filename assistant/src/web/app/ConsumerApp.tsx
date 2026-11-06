@@ -34,8 +34,7 @@ const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'wallet', label: 'Wallet', icon: 'wallet' },
 ];
 /** Tab order drives swipe direction: left reveals the next tab, right the previous. */
-const PRIMARY_TABS = TABS.filter(t => t.id !== 'patterns' && t.id !== 'ask');
-const TAB_IDS: Tab[] = PRIMARY_TABS.map((t) => t.id);
+const TAB_IDS: Tab[] = TABS.map((t) => t.id);
 
 type Sheetname = null | 'add' | 'log' | 'income' | 'setup' | 'settle';
 
@@ -131,7 +130,7 @@ export function ConsumerApp() {
                   ? `Signed in as ${session.user.email}`
                   : 'Create an account to keep a wallet of your own.'}
             </span>
-
+            <a href="/ops">Console</a>
           </footer>
         </div>
       </ToastProvider>
@@ -152,6 +151,7 @@ function Brand({ onHome }: { onHome?: () => void }) {
         onHome();
       } : undefined}
     >
+      <Pip size={30} track={false} mood="happy" />
       <span className="brand-word">settle</span>
     </a>
   );
@@ -171,7 +171,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   const [tab, setTab] = useState<Tab>('today');
   const [demoProgress, setDemoProgress] = useState<DemoStepId[]>(() => (demo ? loadDemoProgress(demoKey) : []));
   const guideHiddenKey = `settle:demo-guide-hidden:${me.id}`;
-  const [showDemoGuide, setShowDemoGuideState] = useState(false);
+  const [showDemoGuide, setShowDemoGuideState] = useState(() => !readFlag(guideHiddenKey));
   /** Showing or hiding the quest card is remembered per sample wallet. */
   const setShowDemoGuide = useCallback((show: boolean) => {
     setShowDemoGuideState(show);
@@ -217,7 +217,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
       return;
     }
     setDemoProgress(loadDemoProgress(demoKey));
-    setShowDemoGuideState(false);
+    setShowDemoGuideState(!readFlag(guideHiddenKey));
   }, [demo, demoKey, guideHiddenKey]);
 
   // Escape closes the quest card, unless a sheet or the menu has the key first.
@@ -247,7 +247,9 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
     } catch {
       /* private mode: still show it this once */
     }
-    // Start with the useful action; the baseline is available on Today when wanted.
+    setSetupMode('onboarding');
+    setSetupStep(0);
+    setSheet('setup');
   }, [data, me.id]);
 
   useEffect(() => {
@@ -354,7 +356,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
                     <Icon name="settings" size={18} />Edit money snapshot
                   </button>
                   <a role="menuitem" href={`/api/accounts/${encodeURIComponent(me.id)}/statement.txt`}><Icon name="download" size={18} />Download statement</a>
-                  <button type="button" role="menuitem" onClick={() => { setMenu(false); go('wallet'); }}><Icon name="wallet" size={18} />Wallet settings</button>
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); go('wallet'); }}><Icon name="wallet" size={18} />Wallet & trust</button>
                   <hr />
                   <button type="button" role="menuitem" onClick={onSignOut}><Icon name="logout" size={18} />{demo ? 'Exit sample' : 'Sign out'}</button>
                 </div>
@@ -428,7 +430,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         </div>
       </main>
 
-      <FloatingDock tabs={PRIMARY_TABS} active={tab} onSelect={go} syncing={refreshing} />
+      <FloatingDock tabs={TABS} active={tab} onSelect={go} syncing={refreshing} />
 
       {tab !== 'today' ? (
         <button type="button" className="fab" onClick={() => openLog()} aria-label="Log what you spent">

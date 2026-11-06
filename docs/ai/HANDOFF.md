@@ -1,5 +1,12 @@
 # Engineering Handoff (latest)
 
+## Session: owner-requested design revert (2026-11-06)
+- Owner explicitly requested reverting every design/UX change made in this conversation and retaining technical work. Restored consumer components, CSS, DESIGN.md and PRODUCT.md to 539815a (before my first design changes). Reverted bubble journey, Workbench layout, palette, navigation changes, hero removal, copy/motion changes and onboarding changes.
+- Retained only functional wiring in restored UI: SetupSheet sends rebaseCash to prevent double deductions; original Welcome honors backend account/recovery availability using its existing form/styles. No new visual treatment added.
+- Kept all backend, Java ledger, provisioning, security, reset, clock-consistency, capability-check, CI, deployment documentation and regression-test work. Preserved owner .gitignore edit. Design/UX ownership belongs to the user; do not resume redesign work without a new explicit request.
+- Validation: 206 tests pass, 1 optional PostgreSQL integration test skipped locally; production build passes. Diff against 539815a confirms only SetupSheet.tsx and Welcome.tsx retain functional changes in the restored consumer UI.
+- Existing external blocker is unchanged: Preview has no isolated identity/backend/service-key/email setup. Do not claim working preview signup or inbox delivery until those services are configured.
+
 ## Session: surface hierarchy correction (2026-11-06)
 - Owner correctly flagged the white-on-white redesign. Inspected shared CSS and rendered screens. The .app background still referenced undefined --dot-grid, invalidating the full background declaration. Replaced it with a valid background token.
 - Added distinct sage page ground, off-white capture/account panels, forest summary/action anchors and stronger borders; removed body edge margin for the consumer app. No component or authentication behavior changed.

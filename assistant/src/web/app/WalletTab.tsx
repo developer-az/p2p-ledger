@@ -5,7 +5,7 @@ import { moneyPlan } from './money-plan.js';
 import { TrustTab } from './TrustTab.js';
 import type { WalletData } from './data.js';
 import { Icon, Skeleton } from './ui.js';
-import { CountUp } from './motion-kit.js';
+import { CountUp, TiltCard } from './motion-kit.js';
 import { Pip } from './Pip.js';
 
 export interface WalletActions {
@@ -57,7 +57,7 @@ export function WalletTab({
             </div>
             {plan.hasBaseline ? (
               <>
-                <div className="snapshot-card-hero desk-wallet-summary">
+                <TiltCard className="s-card snapshot-card-hero" max={4}>
                   <div className="s-card-top">
                     <span className="s-card-brand">settle</span>
                     <span className="s-card-private"><Icon name="lock" size={12} /> Private</span>
@@ -65,7 +65,7 @@ export function WalletTab({
                   <p className="s-card-label">Net position</p>
                   <p className="s-card-amount num"><CountUp minor={plan.netMinor ?? plan.ledgerMinor} /></p>
                   <p className="s-card-sub">Projected cash minus card balance</p>
-                </div>
+                </TiltCard>
                 <dl className="snapshot-rows">
                   <div><dt>Cash baseline</dt><dd className="num">{money(plan.cashMinor ?? 0)}</dd></div>
                   {periodIncomeMinor > 0 ? (
@@ -99,11 +99,17 @@ export function WalletTab({
             </div>
           </section>
 
-          {viewer.demo ? <section className="card" aria-labelledby="ledger-title">
-            <div className="card-head"><div><p className="eyebrow">Sample payments</p><h2 id="ledger-title">Practice balance</h2></div><span className="pill">{money(plan.ledgerMinor)}</span></div>
-            <p className="muted">Try simulated payments here. No bank money moves.</p>
-            <button type="button" className="btn btn-sm" onClick={actions.addMoney}>Add practice money</button>
-          </section> : null}
+          <section className="card" aria-labelledby="ledger-title">
+            <div className="card-head">
+              <div><p className="eyebrow">The records</p><h2 id="ledger-title">Ledger balance</h2></div>
+              <span className="pill">{money(plan.ledgerMinor)}</span>
+            </div>
+            <p className="muted">The ledger balance behind deposits and statements. It is separate from the cash snapshot you track yourself.</p>
+            <div className="row-wrap" style={{ marginTop: 14 }}>
+              <button type="button" className="btn btn-primary btn-sm" onClick={actions.addMoney}><Icon name="bank" size={16} /> Add money</button>
+              <a className="btn btn-sm" href={`/api/accounts/${encodeURIComponent(me.id)}/statement.txt`}><Icon name="download" size={16} /> Statement</a>
+            </div>
+          </section>
           {!viewer.demo ? <ExpenseImport accountId={me.id} onChanged={actions.reload} /> : null}
         </div>
 
@@ -116,7 +122,7 @@ export function WalletTab({
             <button type="button" className="btn btn-lime btn-sm" onClick={actions.ask}><Icon name="sparkle" size={16} /> Open Ask</button>
           </section>
 
-          {viewer.demo ? <section className="card trust-teaser" aria-labelledby="trust-title">
+          <section className="card trust-teaser" aria-labelledby="trust-title">
             <div className="card-head">
               <div><p className="eyebrow">The receipts</p><h2 id="trust-title">Your records are honest</h2></div>
               <Icon name="shield" />
@@ -127,7 +133,6 @@ export function WalletTab({
             </button>
           </section>
 
-          : null}
           {showTrust ? <TrustTab me={me} data={data} embedded /> : null}
 
           <section className="card">

@@ -1,11 +1,18 @@
 import { useRef, useState } from 'react';
-import { useReducedMotion } from 'motion/react';
+import { m, useReducedMotion } from 'motion/react';
 import { api, type AccountRef, type BootstrapResponse } from '../api.js';
+import { money } from './format.js';
 import type { Session } from './session.js';
+import { CountUp, EASE_OUT, InView, RevealWords, TiltCard } from './motion-kit.js';
 import { Pip } from './Pip.js';
-import { useToast } from './ui.js';
+import { Icon, useToast } from './ui.js';
 
 type AuthMode = 'signin' | 'create';
+
+const TAPE = ['Two taps to log', 'Sign in and it stays', 'Patterns from your own history', 'Ask in plain English', 'Real double-entry ledger', 'Pip is watching'];
+
+/** Deterministic 8×7 heat pattern for the illustration, so it never flickers between renders. */
+const HEAT = Array.from({ length: 56 }, (_, i) => ((i * 37 + (i % 7) * 11) % 9) % 5);
 
 export function Welcome({
   boot,
@@ -28,10 +35,13 @@ export function Welcome({
   const accountRef = useRef<HTMLElement>(null);
   const toast = useToast();
   const reduce = useReducedMotion();
+  const live = boot?.live ?? false;
+  const persistent = boot?.identity?.persistent === true;
+  const accountAvailable = mode === 'create' ? boot?.identity?.signupAvailable !== false : boot?.identity?.signinAvailable !== false;
+  const resetAvailable = boot?.identity?.passwordResetAvailable !== false;
 
   function focusAuth(next: AuthMode) {
     setMode(next);
-    setForgot(false);
     setError(null);
     accountRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
   }
@@ -70,7 +80,7 @@ export function Welcome({
   }
 
   async function submitForgot() {
-    if (busy) return;
+    if (busy || !resetAvailable) return;
     const trimmedEmail = email.trim();
     if (!trimmedEmail.includes('@')) {
       setError('Enter a valid email.');
@@ -90,7 +100,7 @@ export function Welcome({
 
   async function submitAccount() {
     if (forgot) return submitForgot();
-    if (!boot || busy) return;
+    if (!boot || busy || !accountAvailable) return;
     const trimmedEmail = email.trim();
     const trimmedName = name.trim();
     if (mode === 'create' && !trimmedName) {
@@ -125,38 +135,244 @@ export function Welcome({
     }
   }
 
-  const accountAvailable = mode === 'create' ? boot?.identity?.signupAvailable !== false : boot?.identity?.signinAvailable !== false;
-  const resetAvailable = boot?.identity?.passwordResetAvailable !== false;
-  const available = forgot ? resetAvailable : accountAvailable;
+  const rise = (delay: number) => ({
+    initial: reduce ? false : { opacity: 0, transform: 'translateY(16px)' },
+    animate: { opacity: 1, transform: 'translateY(0px)' },
+    transition: { duration: 0.7, ease: EASE_OUT, delay },
+  } as const);
+
   return (
-    <div className="welcome workbench-welcome">
-      <header className="entry-header"><a href="/" className="entry-brand"><Pip size={28} track={false} mood="calm" /> settle</a><span className="muted">A little clarity for your money.</span></header>
-      <div className="entry-layout">
-        <section className="entry-intro">
-          <p className="eyebrow">Your everyday money desk</p>
-          <h1>Less to manage.<br />More room to live.</h1>
-          <p>Keep track of what you spend, see what is left, and make shared bills easier to follow.</p>
-          <button type="button" className="btn btn-primary" onClick={() => void tryDemo()} disabled={!boot || busy !== null}>{busy === 'demo' ? 'Opening…' : 'Explore the sample'} <span aria-hidden="true">→</span></button>
-          <p className="hint">No signup. Sample money. Try a log and undo it.</p>
-          <ol className="entry-steps"><li><b>Pick</b> what you spent on.</li><li><b>Check</b> the amount.</li><li><b>Carry on.</b> Your week stays in view.</li></ol>
-          {demoError || bootError ? <p className="error-text" role="alert">{demoError || bootError}</p> : null}
-        </section>
-        <section className="entry-account" ref={accountRef} aria-labelledby="account-title">
-          <h2 id="account-title">{forgot ? 'Reset your password' : mode === 'create' ? 'Make it yours' : 'Welcome back'}</h2>
-          {!forgot ? <div className="entry-tabs" role="group" aria-label="Account"><button type="button" aria-pressed={mode === 'create'} onClick={() => focusAuth('create')}>Create account</button><button type="button" aria-pressed={mode === 'signin'} onClick={() => focusAuth('signin')}>Sign in</button></div> : null}
-          {!available ? <div className="entry-status" role="status"><strong>{forgot ? 'Email recovery is not connected' : 'Accounts are not ready here yet'}</strong><p>{forgot ? 'This deployment cannot send reset emails yet. No email has been sent.' : boot?.identity?.unavailableReason || 'The account service needs to be connected before you can sign in.'}</p><button type="button" className="link-btn" onClick={() => void tryDemo()}>Use the sample instead →</button></div> : null}
-          <form className="stack" onSubmit={e => { e.preventDefault(); if (available) void submitAccount(); }}>
-            {!forgot && mode === 'create' ? <div className="field"><label className="label" htmlFor="account-name">Name</label><input className="input" id="account-name" autoComplete="name" required value={name} disabled={!available || busy !== null} onChange={e => setName(e.target.value)} /></div> : null}
-            <div className="field"><label className="label" htmlFor="account-email">Email</label><input className="input" id="account-email" type="email" autoComplete="email" required value={email} disabled={!available || busy !== null} onChange={e => setEmail(e.target.value)} /></div>
-            {!forgot ? <div className="field"><label className="label" htmlFor="account-password">Password</label><input className="input" id="account-password" type="password" minLength={8} maxLength={72} autoComplete={mode === 'create' ? 'new-password' : 'current-password'} required value={password} disabled={!available || busy !== null} onChange={e => setPassword(e.target.value)} /></div> : null}
-            {resetSent ? <p className="notice" role="status">{resetSent}</p> : null}
-            {error ? <p className="error-text" role="alert">{error}</p> : null}
-            <button className="btn btn-primary btn-block" type="submit" disabled={!boot || !available || busy !== null}>{busy === 'auth' ? 'Working…' : forgot ? 'Send reset link' : mode === 'create' ? 'Create account' : 'Sign in'}</button>
-            <button type="button" className="link-btn" onClick={() => { setForgot(!forgot); setResetSent(null); setError(null); }}>{forgot ? 'Back to sign in' : 'Forgot password?'}</button>
+    <div className="welcome">
+      <section className="w-hero" aria-labelledby="w-title">
+        <div className="w-hero-grain" aria-hidden="true" />
+        <nav className="w-nav" aria-label="Settle">
+          <a className="w-logo" href="/" aria-label="Settle home">
+            <Pip size={30} track={false} mood="happy" />
+            <span>settle</span>
+          </a>
+          <span className="w-nav-links">
+            <a href="#how">How it works</a>
+            <button type="button" onClick={() => focusAuth('signin')}>Sign in</button>
+          </span>
+          <button type="button" className="w-nav-cta w-nav-cta-volt" onClick={() => focusAuth('create')} disabled={!boot || busy !== null}>
+            Create account
+          </button>
+        </nav>
+
+        <div className="w-hero-body">
+          <div className="w-copy">
+            <m.p className="w-status" {...rise(0.05)}>
+              <span className={`w-status-dot${live ? ' is-live' : ''}`} aria-hidden="true" />
+              {boot ? (live ? 'Ledger online' : 'Ready') : 'Connecting…'}
+              <span className="w-status-extra"><span className="w-status-sep">/</span> your own account</span>
+            </m.p>
+            <h1 id="w-title" className="w-title">
+              <RevealWords text="Your money," delay={0.1} />
+              <br />
+              <RevealWords text="minus the" delay={0.22} />{' '}
+              <span className="w-scribble">
+                <RevealWords text="mess." delay={0.34} />
+                <svg viewBox="0 0 220 60" preserveAspectRatio="none" aria-hidden="true">
+                  <m.path
+                    d="M6 38 C40 18 70 46 104 30 S170 14 214 34"
+                    initial={reduce ? false : { pathLength: 0 }}
+                    animate={{ pathLength: 1 }}
+                    transition={{ duration: 0.7, ease: EASE_OUT, delay: 0.95 }}
+                  />
+                </svg>
+              </span>
+            </h1>
+            <m.p className="w-lede" {...rise(0.5)}>
+              Log a spend in two taps. See your week in one glance. A tiny bean named Pip keeps the streak honest.
+            </m.p>
+            <m.div className="w-actions" {...rise(0.62)}>
+              <button type="button" className="w-btn w-btn-volt" onClick={() => focusAuth('create')} disabled={!boot || busy !== null}>
+                Create account
+                <span className="w-btn-arrow" aria-hidden="true">→</span>
+              </button>
+              <button type="button" className="w-btn w-btn-ghost" onClick={() => focusAuth('signin')}>Sign in</button>
+            </m.div>
+            <m.p className="w-fine" {...rise(0.72)}>
+              <button type="button" className="w-text-btn" onClick={() => void tryDemo()} disabled={!boot || busy !== null}>
+                {busy === 'demo' ? 'Opening the sample…' : 'Preview a sample household'}
+              </button>
+            </m.p>
+            {demoError ? <p className="w-error" role="alert">{demoError}</p> : null}
+            {bootError ? <p className="w-error" role="alert">{bootError}</p> : null}
+          </div>
+
+          <m.div
+            className="w-stage"
+            aria-label="A preview of the Settle card"
+            initial={reduce ? false : { opacity: 0, transform: 'translateY(40px) scale(0.96)' }}
+            animate={{ opacity: 1, transform: 'translateY(0px) scale(1)' }}
+            transition={{ duration: 1, ease: EASE_OUT, delay: 0.25 }}
+          >
+            <div className="w-pip-perch"><Pip size={92} mood="happy" /></div>
+            <TiltCard className="s-card s-card-lg">
+              <div className="s-card-top">
+                <span className="s-card-brand">settle</span>
+                <span className="s-card-chip" aria-hidden="true" />
+              </div>
+              <p className="s-card-label">Net position</p>
+              <p className="s-card-amount"><CountUp minor={284_750} /></p>
+              <div className="s-card-foot">
+                <div>
+                  <p className="s-card-label">Left this week</p>
+                  <p className="s-card-mid">{money(12_850)} <span>of {money(45_000)}</span></p>
+                </div>
+                <MiniRing value={0.72} />
+              </div>
+              <ol className="s-card-dots" aria-hidden="true">
+                {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <li key={i} className={i < 6 ? 'is-on' : ''}>{d}</li>)}
+              </ol>
+            </TiltCard>
+            <m.div className="w-float w-float-a" {...rise(1.1)}>
+              <span aria-hidden="true">☕</span><strong>Coffee</strong><em>−$4.50</em>
+            </m.div>
+            <m.div className="w-float w-float-b" {...rise(1.25)}>
+              <span aria-hidden="true">🔥</span><strong>13-day streak</strong>
+            </m.div>
+          </m.div>
+        </div>
+
+        <div className="w-tape" aria-hidden="true">
+          <div className="w-tape-track">
+            {[0, 1].map((n) => (
+              <span key={n}>{TAPE.map((t) => <span key={t}>{t}<i>✺</i></span>)}</span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="w-section" id="how" aria-labelledby="how-title">
+        <InView>
+          <p className="w-kicker">How it works</p>
+          <h2 id="how-title" className="w-h2">Less app. More awareness.</h2>
+        </InView>
+        <div className="w-bento">
+          <InView as="article" className="w-tile" delay={0}>
+            <span className="w-tile-n">01</span>
+            <h3>Three numbers, once.</h3>
+            <p>Cash, card balance, a weekly pace. Thirty seconds, no bank connection.</p>
+            <div className="w-mini w-mini-setup" aria-hidden="true">
+              <span><small>Cash</small>$3,200</span>
+              <span><small>Cards</small>$450</span>
+              <span className="is-pace"><small>Pace</small>$450/wk</span>
+            </div>
+          </InView>
+          <InView as="article" className="w-tile" delay={0.08}>
+            <span className="w-tile-n">02</span>
+            <h3>Two taps to log.</h3>
+            <p>Amount, category, done. Pip hops when you keep the streak alive.</p>
+            <div className="w-mini w-mini-log" aria-hidden="true">
+              <strong>$4.50</strong>
+              <span className="chips-row"><i className="is-on">☕ Dining</i><i>🛒 Groceries</i><i>🚌 Transit</i></span>
+            </div>
+          </InView>
+          <InView as="article" className="w-tile" delay={0.16}>
+            <span className="w-tile-n">03</span>
+            <h3>Patterns, not guesswork.</h3>
+            <p>Eight weeks of your own logs as a heatmap. Spot the Friday problem.</p>
+            <div className="w-mini w-mini-heat" aria-hidden="true">
+              {HEAT.map((h, i) => <i key={i} className={`h${h}`} />)}
+            </div>
+          </InView>
+          <InView as="article" className="w-tile w-tile-wide w-tile-dark" delay={0.24}>
+            <span className="w-tile-n">04</span>
+            <h3>Ask in plain English.</h3>
+            <p>Read-only answers grounded in your records. It can look, it can’t move money.</p>
+            <div className="w-ask" aria-hidden="true">
+              <div className="w-ask-q"><Icon name="sparkle" size={15} />Can I afford a $60 night out this week?</div>
+              <div className="w-ask-a">
+                Yes. You have <b>$128.50</b> left of your weekly pace and you usually spend <b>$22</b> on Saturdays.
+                <span className="w-cite">1</span><span className="w-cite">2</span>
+              </div>
+            </div>
+          </InView>
+        </div>
+      </section>
+
+      <section className="w-section w-own" id="own-wallet" ref={accountRef} aria-labelledby="own-title">
+        <InView className="w-own-card">
+          <div className="w-own-copy">
+            <p className="w-kicker">Your account</p>
+            <h2 id="own-title" className="w-h2">{mode === 'create' ? <>Start clean.<br />Keep it yours.</> : <>Welcome back.<br />Pick up where you left off.</>}</h2>
+            <p>One email, one wallet. The sample household never mixes with yours. You start empty — setup collects your real cash, cards, and pace, not a pretend balance.</p>
+          </div>
+          <form className="w-own-form" onSubmit={(e) => { e.preventDefault(); void submitAccount(); }}>
+            <div className="w-auth-switch" role="tablist" aria-label="Account">
+              <button type="button" role="tab" aria-selected={mode === 'signin'} onClick={() => { setMode('signin'); setForgot(false); setError(null); }}>Sign in</button>
+              <button type="button" role="tab" aria-selected={mode === 'create'} onClick={() => { setMode('create'); setForgot(false); setError(null); }}>Create account</button>
+            </div>
+            {forgot ? (
+              <>
+                <p className="w-fine w-forgot-intro">Enter the email on your account and we will send a link to choose a new password.</p>
+                <label className="w-field" htmlFor="account-email">Email
+                  <input id="account-email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                </label>
+                {resetSent ? <p className="w-ok" role="status">{resetSent}</p> : null}
+                <button className="w-btn w-btn-ink" type="submit" disabled={busy !== null || !resetAvailable}>
+                  {busy === 'auth' ? 'Sending…' : resetSent ? 'Send again' : 'Send reset link'}
+                </button>
+                <button type="button" className="w-link" onClick={() => { setForgot(false); setResetSent(null); setError(null); }}>Back to sign in</button>
+              </>
+            ) : (
+              <>
+                {mode === 'create' ? (
+                  <label className="w-field" htmlFor="account-name">Name
+                    <input id="account-name" maxLength={40} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+                  </label>
+                ) : null}
+                <label className="w-field" htmlFor="account-email">Email
+                  <input id="account-email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                </label>
+                <label className="w-field" htmlFor="account-password">Password
+                  <input
+                    id="account-password"
+                    type="password"
+                    autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
+                    minLength={8}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </label>
+                <button className="w-btn w-btn-ink" type="submit" disabled={!boot || busy !== null || !accountAvailable}>
+                  {busy === 'auth' ? 'Working…' : mode === 'create' ? 'Create account' : 'Sign in'}
+                </button>
+                {mode === 'signin' ? (
+                  <button type="button" className="w-link" onClick={() => { setForgot(true); setResetSent(null); setError(null); }}>Forgot password?</button>
+                ) : null}
+              </>
+            )}
+            {(!accountAvailable || (forgot && !resetAvailable)) ? <p className="w-fine" role="status">{forgot && !resetAvailable ? 'Password reset email is not connected on this deployment. No email was sent.' : boot?.identity?.unavailableReason}</p> : null}
+            {error ? <p className="w-error" role="alert">{error}</p> : null}
+            <p className="w-fine">
+              {persistent
+                ? 'Saved with the ledger. Sign in with this email next time.'
+                : 'On this server the account lasts until the process restarts. A connected database keeps it.'}
+            </p>
           </form>
-          <p className="hint entry-privacy">Your own records stay separate from the sample. Settle does not connect to your bank.</p>
-        </section>
-      </div>
+        </InView>
+      </section>
     </div>
+  );
+}
+
+function MiniRing({ value }: { value: number }) {
+  const r = 22;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg className="s-ring" viewBox="0 0 56 56" width="56" height="56" aria-hidden="true">
+      <circle cx="28" cy="28" r={r} className="s-ring-track" />
+      <m.circle
+        cx="28" cy="28" r={r} className="s-ring-value"
+        strokeDasharray={c}
+        initial={{ strokeDashoffset: c }}
+        animate={{ strokeDashoffset: c * (1 - Math.min(1, value)) }}
+        transition={{ duration: 1.2, ease: EASE_OUT, delay: 0.6 }}
+      />
+      <text x="28" y="32" textAnchor="middle">{Math.round(value * 100)}%</text>
+    </svg>
   );
 }

@@ -5,6 +5,7 @@ import { money } from './format.js';
 import type { Session } from './session.js';
 import { CountUp, EASE_OUT, InView, RevealWords, TiltCard } from './motion-kit.js';
 import { Pip } from './Pip.js';
+import { GoogleButton } from './GoogleButton.js';
 import { Icon, useToast } from './ui.js';
 
 type AuthMode = 'signin' | 'create';
@@ -28,7 +29,11 @@ export function Welcome({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState<'demo' | 'auth' | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => {
+    const code = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('authError');
+    return code === 'link-required' ? 'Sign in with your existing password first, then connect Google from your account.'
+      : code === 'google' ? 'Google sign-in could not finish. Please try again.' : null;
+  });
   const [forgot, setForgot] = useState(false);
   const [resetSent, setResetSent] = useState<string | null>(null);
   const [demoError, setDemoError] = useState<string | null>(null);
@@ -319,6 +324,10 @@ export function Welcome({
               </>
             ) : (
               <>
+                {boot?.identity?.googleAvailable ? <>
+                  <GoogleButton href="/google-signin" disabled={busy !== null} />
+                  <div className="auth-divider"><span>or continue with email</span></div>
+                </> : null}
                 {mode === 'create' ? (
                   <label className="w-field" htmlFor="account-name">Name
                     <input id="account-name" required disabled={busy !== null} maxLength={40} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />

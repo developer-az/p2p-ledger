@@ -75,6 +75,22 @@ export function ConsumerApp() {
   const [session, setSession] = useState<Session | null>(() => loadSession());
   const [bootReady, setBootReady] = useState(false);
 
+  // A sleeping ledger can fail the initial readiness probe. Refresh the
+  // capabilities after it wakes so the form does not stay disabled.
+  useEffect(() => {
+    if (!boot?.identity || boot.identity.signupAvailable) return;
+    let cancelled = false;
+    const timers = [5_000, 20_000, 45_000].map((delay) => window.setTimeout(() => {
+      void api.bootstrap().then((next) => {
+        if (!cancelled) setBoot(next);
+      }).catch(() => undefined);
+    }, delay));
+    return () => {
+      cancelled = true;
+      timers.forEach(window.clearTimeout);
+    };
+  }, [boot?.identity?.signupAvailable]);
+
   useEffect(() => {
     document.documentElement.classList.add('settle-smooth-scroll');
     const minSplash = new Promise<void>((resolve) => { window.setTimeout(resolve, 720); });
@@ -100,10 +116,12 @@ export function ConsumerApp() {
   }, []);
 
   useEffect(() => {
-    if (loadSession()) return;
+    const oauthComplete = new URLSearchParams(window.location.search).get('authComplete') === 'google';
+    if (loadSession() && !oauthComplete) return;
     void api.authSession().then((body) => {
       if (!body.user || !body.account) return;
       start({ account: body.account, household: [], demo: false, user: body.user });
+      if (oauthComplete) window.history.replaceState(null, '', '/');
     }).catch(() => undefined);
   }, [start]);
 
@@ -130,7 +148,10 @@ export function ConsumerApp() {
                   ? `Signed in as ${session.user.email}`
                   : 'Create an account to keep a wallet of your own.'}
             </span>
+            {session?.user && boot?.identity?.googleAvailable ? <a href="/account-access">Account access</a> : null}
             <a href="/ops">Console</a>
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
           </footer>
         </div>
       </ToastProvider>

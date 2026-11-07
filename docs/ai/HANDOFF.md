@@ -1,5 +1,13 @@
 # Engineering Handoff (latest)
 
+## Operational result: production accounts restored; verified recovery sender deployed (2026-11-06)
+- PR #29 merged at 0a47e5161c6ef41109dd5e3e4adbfd382b56b5a7. Main CI run 42271204464 passed and deployed the native image to the correct Render service; authenticated workflow version 2 verified.
+- Owner supplied the Cloudflare token. Added only the four Resend DNS records after conflict checks. All exact public DNS values match; existing root/www/ledger records are unchanged. Resend reports anthony-zhou.com and all four records verified; open/click tracking disabled.
+- Created a sending-only credential restricted to the verified domain. Domain-management request returns 401 restricted_api_key (expected restriction, not an invalid credential). Installed it as Vercel Production RESEND_API_KEY and configured MAIL_FROM to Settle <no-reply@anthony-zhou.com>. Management credentials remain outside the repository and were not deployed.
+- Redeployed existing production release through Vercel. Public deployment check reports Signup, Sign in, and Reset email AVAILABLE. All 15 production login/ledger checks passed again, including persisted login, wrong-password rejection, expense save/replay/reload/undo, unchanged ledger funds, logout/session revocation. Verification account remains unfunded and expense removed. No UI/design changes.
+- Actual recovery inbox delivery remains unverified. Asked owner permission to send one reset verification email to their known Gmail; answer pending at this checkpoint. Do not claim delivery based on bootstrap availability or generic reset HTTP202. Do not change owner password or create an owner account silently. No real email sent in this phase.
+- Private credentials remain under ~/.p2p-secrets, never committed or printed. Ignored .verify scripts/evidence hold operational metadata only. Preserve owner's existing .gitignore modification.
+
 ## Session: authenticated Render repair and native workflow failure (2026-11-06)
 - Owner saved a Render API key at the agreed private path, authorizing service repair. Authenticated service srv-db5d8dg473hc73ao3nbg and found its last live deployment was October 16; later CI hook calls had not deployed it. Render had no service key.
 - Confirmed Render and Vercel target the same PostgreSQL account store using credential comparisons and account fingerprint checks (361 accounts, Flyway V1). No credentials/PII printed. Diagnostic JDBC-to-Node adaptation initially rejected pooler login until credentials were embedded correctly for the Node driver; this was not a database credential defect. No database target/credentials changed.
@@ -200,3 +208,75 @@
 - Auth review: signup opens a Java account before identity insertion; partial failures/racing signup can orphan accounts. Provisioning needs durable idempotency/reconciliation. Existing scrypt/session/reset code does not establish enterprise readiness.
 - Remaining requested scope: coherent Settle balance/activity model, simpler onboarding, identity provisioning redesign, verified-email/provider/passkey strategy, distributed abuse controls, operational readiness and real payment-provider integration. Existing funding remains simulated. Do not represent the current change as a complete product rebuild or production approval.
 - Verification: typecheck passed; full app test/build results recorded in session output. Browser validation remains outstanding.
+
+## Session: signup cold-start recovery (2026-11-07)
+- Live bootstrap initially reported persistent identity with signup disabled; readiness returned 503 while Render health was UP. After warming, bootstrap reported all account actions available. Render deployment and configured environment names checked read-only.
+- ConsumerApp now refreshes unavailable signup capabilities at 5, 20 and 45 seconds, with cleanup on recovery/unmount, so an initial cold-start failure can recover without reloading. No deployment performed; local typecheck passed.
+
+
+## Session: signup recovery deployed (2026-11-07)
+- User authorized production deployment. Production build passed. Installed Vercel CLI 41 was rejected by upload API; used npx vercel@latest (65.12.1) successfully.
+- Deployment dpl_57S6RsDTKH73knjd4xmuj9j2qrNF is READY and aliased to https://ledger.anthony-zhou.com. Live bootstrap HTTP 200 confirms persistent identity and signup/signin/password reset available. No account or email created. Source changes remain uncommitted; preserve owner .gitignore changes.
+
+
+## Session: border fix live; Google auth preparation (2026-11-07)
+- Removed browser default consumer body margin and undefined --dot-grid background layer. Build passed; deployed dpl_AHggYiBjV1WAdy27pPHm4tgsxcvn. Live browser confirmed margin 0px, app left 0 and width 1280 matching viewport.
+- User requested Google authentication and privacy/legal considerations, then confirmed no OAuth client exists. Added jose-based OIDC flow, signed state/nonce/PKCE, Google JWT validation, stable-subject mapping, explicit session-bound existing-account linking, minimal identity scopes, UI and focused tests. 13 targeted tests and build passed before final enable-flag change; targeted tests repeated after flag.
+- Google work remains LOCAL and disabled behind GOOGLE_AUTH_ENABLED plus credentials. No Google Cloud client/consent configuration available. Setup and outstanding privacy/terms, disconnect/deletion UX and real-provider validation are documented in docs/ai/GOOGLE-AUTH-SETUP.md. Do not claim legal compliance or live Google sign-in. No real Google sign-in attempted. Existing owner changes preserved.
+
+
+## Session: Google Cloud project created (2026-11-07)
+- Owner now has a Google Cloud project. Provided current Google Auth Platform branding/audience/client setup instructions, exact production callback, and private credential storage path. OAuth client credentials remain pending; Google auth stays disabled and local.
+
+
+- Opened private Google client secret text file in Notepad at owner's request; contents not read or printed.
+
+
+- Owner confirmed Google secret saved; checked only nonempty status and whether OAuth JSON/client-ID file is available, without displaying credentials. Client ID still needed if plain secret only.
+
+
+- Rechecked Google secret file after owner saved: nonempty status verified without printing contents. Client ID remains needed unless supplied separately.
+
+
+## Session: Google credentials configured (2026-11-07)
+- Owner supplied OAuth client ID; private secret file nonempty. Saved ID privately and configured GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in linked Vercel Production via stdin with credential output suppressed. Explicit GOOGLE_AUTH_ENABLED=false configured; no deployment or live Google sign-in attempted.
+- Remaining work: privacy/terms with actual operator/contact and retention decisions; disconnect/deletion controls and provider validation. Need operator legal name/support email and intended geography/age audience to avoid inventing policy representations.
+
+
+## Session: operator and audience clarification (2026-11-07)
+- Owner provided public support Az040205@gmail.com and US-only audience. Operator legal name pending. Owner asked recommended age for budgeting/subscription/savings/financial-help app; explained operator and recommended an initial 18+ audience, with COPPA distinction and no assertion that age gate alone establishes compliance.
+
+
+## Session: business and recruiting strategy (2026-11-07)
+- Owner accepted initial 18+ audience. Asked whether to form company for Settle, Stencil and racket form, and how to improve 2027 SWE/analyst recruiting credibility. Recommended truthful independent product studio/founder-engineer positioning, one flagship with real user evidence, and considering home-state single-member LLC based on actual risk/cost rather than title. Reviewed SBA/IRS primary business-structure sources. Need operating state and legal operator name before specific formation/policy changes; no company formed or external profile changed.
+
+
+- Owner confirmed Maryland. Checked Maryland SDAT formation/annual-report sources; discussed base LLC filing cost, annual reporting and resident agent, with staged recommendation tied to actual launch risk and recruiting priorities. No formation authorized or filed.
+
+
+## Session: Google completion in progress (2026-11-07)
+- Fixed origin validation, required JWT claims, authenticated link-start requirement, deterministic private signup reservation credential for ledger-outage retries, and OAuth callback reconciliation of stale local sessions.
+- Added transactional Google disconnect/session revocation with password verification and an account-access UI; deletion/data requests use owner-provided support email with ownership verification. Added state/origin/link regressions. Targeted prior 13 tests and build passed; expanded Google regressions run separately.
+- Operator legal name requested asynchronously and still pending. Policies and eligibility enforcement remain unfinished; production Google flag remains false. No new deployment yet. Do not present completed Google login or legal readiness.
+
+
+## Session: Google sign-in deployed (2026-11-07)
+- Owner confirmed legal operator Anthony Zhou. Published privacy/terms at /privacy and /terms with support email, U.S./18+ audience, data/provider disclosures and manual verified deletion/access request channel. Google entry requires eligibility/terms confirmation; this is self-attestation, not age verification.
+- Enabled GOOGLE_AUTH_ENABLED in Vercel Production and deployed dpl_Cx8w51w7AhXWVZ7NFtChWMiLdJ3u to ledger.anthony-zhou.com. Build and 19 targeted tests passed. Live start endpoint returns 302 to accounts.google.com with exact callback and Secure cookie; browser confirms eligibility button disabled until checked and zero page margin.
+- Real Google authentication/token exchange remains unverified and needs owner account interaction. Google console branding/privacy/terms URLs and audience publishing status must be set by owner if not already configured. No real user account created in this deployment verification. Source changes remain uncommitted.
+
+
+## Session: post-setup live check (2026-11-07)
+- Owner said done after Google branding/sign-in instructions; asked whether this includes completed Google sign-in or branding only. Read-only production checks: bootstrap HTTP 200, googleAvailable=true, signupAvailable=true; privacy and terms HTTP 200. End-to-end account login remains unconfirmed pending owner's clarification. No credentials or user records inspected.
+
+
+## Session: auth polish deployed (2026-11-07)
+- Owner confirmed real Google signup created their new account successfully. Requested professional auth UI and Google button.
+- Added shared GoogleButton with multicolor G, dedicated responsive Google confirmation screen, busy/disabled states and policy/support links. Refined email auth panel from lime to neutral surface, clearer tab controls, bordered inputs, spacing and dark-mode text tokens. Kept backend flow.
+- Build and 11 focused Google/welcome tests pass. Deployed dpl_7SmV5YbrgrfpzCiVjErp5df2UPTf to production. Browser screenshots reviewed at 390x844 and 1440x1000; no mobile horizontal overflow; consent keeps button disabled initially. Screenshots .verify/auth-mobile.png and auth-desktop.png. No new dependencies; JS gzip about +1.04KB and CSS +0.56KB versus prior release.
+
+
+- Git status confirmation: Google auth and auth polish are deployed through Vercel CLI but remain uncommitted/unpushed. Current branch fix/verify-render-rollout at 5fa2be5 matches cached upstream (0 ahead/0 behind). No git commit or push performed in response to status question.
+
+## Session: commit and push (2026-11-07)
+- User authorized committing/pushing deployed Google sign-in, auth polish and related recovery/border changes. Full assistant suite: 221 passed, 1 optional test skipped. Prior production build passed. Staging only assistant source/dependency/test changes and project docs; owner .gitignore change remains local. Private secrets and verification artifacts excluded. Pushing existing fix/verify-render-rollout branch without merging main.

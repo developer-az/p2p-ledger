@@ -80,11 +80,48 @@
   }
 }
 
+html:has(.app), html:has(.app-preloader) { background: #f4f3ee; }
+body:has(.app), body:has(.app-preloader) { margin: 0; }
+@media (prefers-color-scheme: dark) {
+  html:has(.app), html:has(.app-preloader) { background: #0b0b0c; }
+}
 .app, .app * { box-sizing: border-box; }
+.app.auth-page { display: flex; flex-direction: column; min-height: 100svh; background: var(--bg); }
+.app .auth-header, .app .auth-footer { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 28px clamp(20px, 5vw, 72px); }
+.app .auth-header > a:last-child { font-size: 14px; color: var(--muted); text-underline-offset: 4px; }
+.app .auth-main { flex: 1; width: 100%; padding: 40px 20px 64px; }
+.app .auth-panel { max-width: 480px; margin: 0 auto; padding: 40px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 20px; }
+.app .auth-eyebrow { display: block; font: 11px var(--mono); letter-spacing: .12em; color: var(--muted); margin-bottom: 20px; }
+.app .auth-panel h1 { font-family: var(--display); font-size: clamp(30px, 4vw, 38px); font-weight: 500; letter-spacing: -.035em; line-height: 1.12; }
+.app .auth-intro { margin-top: 16px; color: var(--muted); line-height: 1.65; font-size: 15px; }
+.app .auth-permissions { display: flex; gap: 14px; padding: 20px 0; margin: 24px 0; border-block: 1px solid var(--line); }
+.app .auth-permissions > span { font-size: 22px; }
+.app .auth-permissions strong { font-size: 14px; font-weight: 600; }
+.app .auth-permissions p { margin-top: 6px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.app .auth-consent { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 24px; font-size: 13px; line-height: 1.65; cursor: pointer; }
+.app .auth-consent input { flex: 0 0 18px; width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--pen); }
+.app .auth-consent a, .app .auth-help a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.app .google-auth-button { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 48px; padding: 12px 16px; border: 1px solid #747775; border-radius: 8px; background: #fff; color: #1f1f1f; font: 500 14px Arial, sans-serif; text-decoration: none; cursor: pointer; }
+.app .google-auth-button svg { flex-shrink: 0; }
+.app .google-auth-button:hover:not(:disabled) { background: #f2f2f2; }
+.app .google-auth-button:disabled { opacity: .5; cursor: not-allowed; }
+.app .google-auth-button:focus-visible { outline: 3px solid #4285f4; outline-offset: 3px; }
+.app .auth-footnote { margin-top: 16px; color: var(--muted); font-size: 12px; text-align: center; line-height: 1.6; }
+.app .auth-help { text-align: center; margin: 24px auto 0; font-size: 13px; color: var(--muted); }
+.app .auth-footer { font-size: 12px; color: var(--muted); }
+.app .auth-footer nav { display: flex; gap: 24px; }
+.app .auth-footer a { color: var(--muted); text-underline-offset: 3px; }
+.app .auth-divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; margin: 8px 0; }
+.app .auth-divider::before, .app .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--line-strong); }
+@media (max-width: 540px) {
+  .app .auth-header { padding: 22px 20px; }
+  .app .auth-main { padding: 16px 16px 40px; }
+  .app .auth-panel { padding: 28px 24px; border-radius: 16px; }
+  .app .auth-footer { padding: 20px; flex-wrap: wrap; gap: 16px; }
+}
 .app {
   min-height: 100vh;
   background:
-    var(--dot-grid) 0 0 / 18px 18px,
     radial-gradient(900px 420px at 12% -8%, color-mix(in srgb, var(--pen) 10%, transparent), transparent 55%),
     var(--bg);
   color: var(--ink);
@@ -1189,24 +1226,24 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .w-own { padding-bottom: clamp(64px, 9vw, 120px); }
 .app .w-own-card {
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 420px); gap: 40px; align-items: center;
-  padding: clamp(28px, 5vw, 56px); border-radius: 32px; background: var(--lime); color: #0e0e10;
+  padding: clamp(24px, 5vw, 56px); border: 1px solid var(--line-strong); border-radius: 24px; background: var(--surface); color: var(--ink);
 }
-.app .w-own-card .w-kicker { color: rgb(14 14 16 / 60%); }
-.app .w-own-copy > p:last-child { margin-top: 16px; max-width: 44ch; color: rgb(14 14 16 / 72%); }
-.app .w-own-form { display: grid; gap: 12px; }
-.app .w-auth-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 999px; background: rgb(14 14 16 / 10%); }
-.app .w-auth-switch button { min-height: 36px; border: 0; border-radius: 999px; background: transparent; font-weight: 650; color: rgb(14 14 16 / 68%); }
-.app .w-auth-switch button[aria-selected="true"] { background: #0e0e10; color: #f4f3ee; }
+.app .w-own-card .w-kicker { color: var(--muted); }
+.app .w-own-copy > p:last-child { margin-top: 16px; max-width: 38ch; color: var(--muted); line-height: 1.7; }
+.app .w-own-form { display: grid; gap: 16px; }
+.app .w-auth-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 10px; background: var(--surface-2); }
+.app .w-auth-switch button { min-height: 44px; border: 0; border-radius: 7px; background: transparent; font-weight: 600; color: var(--muted); }
+.app .w-auth-switch button[aria-selected="true"] { background: var(--ink); color: var(--bg); }
 .app .w-field { display: grid; gap: 6px; font: 500 0.74rem var(--mono); text-transform: uppercase; letter-spacing: 0.06em; }
 .app .w-field input {
-  min-height: 48px; border: 0; border-radius: 14px; background: #0e0e10; color: #f4f3ee;
+  min-height: 48px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink);
   padding: 0 16px; font: 400 1rem var(--font); letter-spacing: 0; text-transform: none;
 }
 .app .w-field input:focus { outline: 3px solid rgb(14 14 16 / 22%); outline-offset: 1px; }
 .app .w-btn-ink { background: #0e0e10; color: #f4f3ee; width: 100%; justify-content: center; }
 .app .w-btn-ink:hover:not(:disabled) { background: #242428; }
-.app .w-own .w-fine { color: rgb(14 14 16 / 62%); margin-top: 0; }
-.app .w-own .w-error { color: #7a1c14; margin-top: 0; }
+.app .w-own .w-fine { color: var(--muted); margin-top: 0; }
+.app .w-own .w-error { color: var(--bad); margin-top: 0; }
 
 /* ---------- Preloader ---------- */
 

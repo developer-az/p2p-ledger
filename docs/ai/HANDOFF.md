@@ -297,3 +297,7 @@
 
 ## Session: commit and push (2026-11-07)
 - User authorized committing/pushing deployed Google sign-in, auth polish and related recovery/border changes. Full assistant suite: 221 passed, 1 optional test skipped. Prior production build passed. Staging only assistant source/dependency/test changes and project docs; owner .gitignore change remains local. Private secrets and verification artifacts excluded. Pushing existing fix/verify-render-rollout branch without merging main.
+
+## Session: preview PR publication (2026-11-08)
+- User authorized a new branch and PR for Vercel previews. Created codex/google-auth-contrast-preview from verified merge b813a95, retaining the Google restoration, contrast fixes and save guards. Publishing against main; no production deployment or main merge. Owner .gitignore change remains excluded.
+

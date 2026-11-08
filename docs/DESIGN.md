@@ -6,12 +6,13 @@ Anchored to [PRODUCT.md](./PRODUCT.md). **Operate** surfaces use standard app ch
 
 | Token / element | Rule |
 |-----------------|------|
-| Ground | Pale sky `#f3f7fc` with a light-blue band at the top of every screen (`--sky-top` to `--sky-mid`) and two soft cloud highlights. Dark mode is a night sky (`#0b1020`). |
-| Surfaces | White cards, a soft sky-tinted float shadow (`--shadow`), radius 22px. |
+| Ground | One sky behind every screen: `SkyBackdrop` (in `AuthSky.tsx`) is a fixed layer with the sky gradient (`--sky-top` to `--sky-low`), a sun glow and two depths of slowly drifting clouds. The welcome hero and the sign-in scene fade into it at their edges; the footer stands on the cloud floor. Dark mode is a night sky with a few stars. |
+| Surfaces | White cloud-glass cards (near-opaque white, lit top edge, sky-tinted float shadow), radius 22px. No `backdrop-filter` on cards: the clouds behind them move. |
+| Dusk | The one dark material is an evening-sky blue (`--dusk`, `--dusk-flat`): the Settle card (with a few stars), the Ask card, ink stat tiles, the welcome Ask tile, toasts, the dock and its "+" ring. Nothing on the page is black. |
 | Ink | `#111726`. Primary buttons are ink. |
 | Volt (the only accent) | Lime `#c8f53b`, Pip's colour, used as a **fill** with ink text (dock "+", active tab, ring, habit dots). Never lime text on a light ground. |
 | Type | **Bricolage Grotesque** (display), **Geist** (UI), **Geist Mono** (labels, eyebrows, sub-amounts). |
-| Hero object | The **Settle card**: dark Apple Wallet-style card (`.s-card`) that tilts toward the pointer (`TiltCard`). Used on Welcome and as the Today hero; it stays dark on the light sky on purpose. |
+| Hero object | The **Settle card**: an evening-sky Apple Wallet-style card (`.s-card`) that tilts toward the pointer (`TiltCard`). Used on Welcome and as the Today hero. |
 | Character | **Pip** (`Pip.tsx`): a lime bean with a sprout, stubby hands and feet. Eyes follow the pointer or a `lookAt` point; the sprout leans against the gaze on a soft spring. Blinks (sometimes twice), fidgets every 7 to 13 s when idle (hop with squash and stretch, glance, sprout shake, wave), leans and blushes when hovered, hops with arms up on `cheer`. `shy` puts both hands over its eyes (password fields), `peek` lowers one. Mood still comes only from real numbers (`pipMood`). Logo-sized Pips pass `idle={false}`. |
 | Adding | **One way in.** The dock has a raised lime "+" in the middle on every tab (no other add buttons). It opens `AddSheet`: type an amount, then tap what it was; the tap saves. "I spent / I got paid" swaps category tiles for income sources. Recent spends are one-tap repeats with Undo on the toast. Notes are behind "+ Add a note". Splitting a bill is a link to Settle Up. |
 | Fewer controls | The dock holds Today, Activity, "+", Patterns, Ask. Wallet lives in the account menu. No top-bar Ask, no floating add button, no quick-action row; the Today ask bar suggests a question in its placeholder instead of chip buttons. |

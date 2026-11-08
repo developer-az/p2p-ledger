@@ -21,6 +21,7 @@ import { Avatar, Confetti, ErrorNotice, Icon, ToastProvider, type IconName } fro
 import { FloatingDock, useSwipeNav } from './dock.js';
 import { AppPreloader } from './Preloader.js';
 import { Welcome } from './Welcome.js';
+import { SkyBackdrop } from './AuthSky.js';
 import { Pip } from './Pip.js';
 
 /** Animation features load in their own chunk; `strict` rejects a stray full `motion.*` import. */
@@ -114,6 +115,7 @@ export function ConsumerApp() {
       <ToastProvider>
         <AppPreloader visible={!bootReady} />
         <div className={`app${bootReady ? ' app-ready' : ''}`}>
+          <SkyBackdrop />
           <a className="skip" href="#main">Skip to content</a>
           {session && boot ? (
             <Signed boot={boot} session={session} onSwitch={start} onSignOut={signOut} />

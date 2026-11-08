@@ -109,3 +109,22 @@ export const AuthSky = forwardRef<HTMLElement, { id?: string; labelledBy: string
     );
   },
 );
+
+/**
+ * The sky every screen sits on: fixed behind the page, so the welcome page,
+ * Today, Activity and the rest share one continuous daylight with clouds
+ * drifting slowly behind the cards. Transforms only, so it never repaints.
+ */
+export function SkyBackdrop() {
+  return (
+    <div className="sky-backdrop" aria-hidden="true">
+      <div className="sky-layer sky-bd-far">
+        <Cloud className="b1" tone="b" /><Cloud className="b2" tone="b" /><Cloud className="b3" tone="b" />
+      </div>
+      <div className="sky-layer sky-bd-near">
+        <Cloud className="b4" /><Cloud className="b5" /><Cloud className="b6" />
+      </div>
+    </div>
+  );
+}
+

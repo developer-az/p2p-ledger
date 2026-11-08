@@ -37,8 +37,15 @@
   /* Shadows are tinted with the sky, so cards float rather than sit. */
   --shadow: 0 1px 2px rgb(40 70 120 / 5%), 0 10px 26px -14px rgb(40 70 120 / 18%);
   --shadow-lg: 0 34px 64px -22px rgb(30 55 100 / 32%), 0 10px 22px -10px rgb(30 55 100 / 14%);
-  --sky-top: #cfe5ff;
-  --sky-mid: #e7f1fd;
+  --sky-top: #bcd9fb;
+  --sky-mid: #dcebfc;
+  --sky-low: #eef5fd;
+  --cloud: #ffffff;
+  /* Evening sky: the one dark material, for the Settle card, toasts, the
+     dock and the few panels that should stand out. */
+  --dusk: radial-gradient(120% 90% at 100% 0%, rgb(200 245 59 / 13%), transparent 52%), radial-gradient(90% 70% at 0% 100%, rgb(120 160 255 / 22%), transparent 60%), linear-gradient(160deg, #22406f 0%, #172d55 50%, #0f1f40 100%);
+  --dusk-flat: #172b52;
+  --dusk-ink: #f4f6fb;
   --radius: 22px;
   --radius-sm: 12px;
   --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -57,7 +64,9 @@
     --surface-2: #19223a;
     --surface-3: #232d47;
     --sky-top: #16224a;
-    --sky-mid: #0f1730;
+    --sky-mid: #101a36;
+    --sky-low: #0b1020;
+    --cloud: rgb(255 255 255 / 7%);
     --ink: #f2f1ec;
     --ink-2: #dedcd5;
     --muted: #a3a29b;
@@ -89,13 +98,10 @@
 .app, .app * { box-sizing: border-box; }
 .app {
   min-height: 100vh;
-  /* Daylight: a pale sky at the top of every screen, with two soft cloud
-     banks, settling into the page colour below the fold. */
-  background:
-    radial-gradient(520px 160px at 18% 40px, rgb(255 255 255 / 70%), transparent 70%),
-    radial-gradient(640px 180px at 86% 110px, rgb(255 255 255 / 55%), transparent 70%),
-    linear-gradient(180deg, var(--sky-top) 0, var(--sky-mid) 300px, var(--bg) 640px) no-repeat,
-    var(--bg);
+  /* Daylight everywhere: SkyBackdrop draws a fixed sky with drifting
+     clouds behind every screen; this is the same sky as a fallback. */
+  isolation: isolate;
+  background: linear-gradient(180deg, var(--sky-top), var(--sky-mid) 45%, var(--sky-low)) fixed, var(--sky-low);
   color: var(--ink);
   font-family: var(--font);
   font-size: 16px;
@@ -521,7 +527,7 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .stat-tile { display: grid; gap: 6px; padding: 16px 18px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
 .app .stat-tile .stat-label { font: 500 0.68rem/1.2 var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
 .app .stat-tile strong { font-family: var(--display); font-weight: 650; font-size: clamp(1.5rem, 3.4vw, 2.1rem); letter-spacing: -0.035em; line-height: 1; }
-.app .stat-tile-ink { background: #0e0e10; border-color: #0e0e10; color: #f4f3ee; }
+.app .stat-tile-ink { background: var(--dusk); border-color: transparent; color: var(--dusk-ink); }
 .app .stat-tile-ink .stat-label { color: rgb(244 243 238 / 55%); }
 .app .feed-in .list > li { animation: row-in 420ms var(--ease-out) both; }
 .app .feed-in .list > li:nth-child(2) { animation-delay: 30ms; }
@@ -596,7 +602,7 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 /* ---------- Sheets ---------- */
 
 .app-sheet { border: 0; padding: 0; background: transparent; max-width: none; max-height: none; width: 100%; height: 100%; color: inherit; overflow: visible; }
-.app-sheet::backdrop { background: rgb(8 8 10 / 58%); backdrop-filter: blur(6px); }
+.app-sheet::backdrop { background: rgb(28 52 96 / 38%); backdrop-filter: blur(6px); }
 .app-sheet-wrap { display: grid; place-items: center; width: 100%; height: 100%; padding: 18px; }
 .app-sheet-panel {
   width: min(540px, 100%); max-height: min(92vh, 820px); overflow: auto; border-radius: var(--radius); box-shadow: var(--shadow-lg);
@@ -849,12 +855,12 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .pill { font-family: var(--mono); font-weight: 500; letter-spacing: 0.01em; }
 .app .ring-onDark .ring-value { stroke: var(--lime); }
 .app .ring-bad .ring-value { stroke: #ff8a80; }
-.app .toast { border-radius: 16px; background: #0e0e10; color: #f4f3ee; }
-.app .toast-good { background: #0e0e10; color: #f4f3ee; box-shadow: inset 3px 0 0 var(--lime), var(--shadow-lg); }
-.app .toast-bad { background: #0e0e10; color: #f4f3ee; box-shadow: inset 3px 0 0 #ff6b6b, var(--shadow-lg); }
+.app .toast { border-radius: 16px; background: var(--dusk-flat); color: var(--dusk-ink); }
+.app .toast-good { background: var(--dusk-flat); color: var(--dusk-ink); box-shadow: inset 3px 0 0 var(--lime), var(--shadow-lg); }
+.app .toast-bad { background: var(--dusk-flat); color: var(--dusk-ink); box-shadow: inset 3px 0 0 #ff6b6b, var(--shadow-lg); }
 .app .skeleton { border-radius: var(--radius); }
 .app .story { background: transparent; border-left-width: 2px; border-radius: var(--radius-sm); }
-.app .ask-card { background: #0e0e10; color: #f4f3ee; border: 0; box-shadow: none; }
+.app .ask-card { background: var(--dusk); color: var(--dusk-ink); border: 0; box-shadow: var(--shadow); }
 .app-sheet-panel { border-radius: 24px; }
 
 /* ---------- Pip ---------- */
@@ -894,15 +900,14 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .s-card {
   position: relative; overflow: hidden; isolation: isolate;
   border-radius: 28px; padding: 26px 28px 22px;
-  color: #f4f3ee;
-  background:
-    radial-gradient(110% 80% at 100% 0%, rgb(200 245 59 / 14%), transparent 55%),
-    linear-gradient(160deg, #1d1d21 0%, #0c0c0e 62%);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%), inset 0 0 0 1px rgb(255 255 255 / 6%), var(--shadow-lg);
+  color: var(--dusk-ink);
+  background: var(--dusk);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 14%), inset 0 0 0 1px rgb(255 255 255 / 8%), var(--shadow-lg);
 }
 .app .s-card::before {
-  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0.22; mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* A few stars in the evening sky. */
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: 0.55;
+  background-image: radial-gradient(1.2px 1.2px at 18% 22%, #fff, transparent), radial-gradient(1px 1px at 62% 14%, #fff, transparent), radial-gradient(1.4px 1.4px at 84% 38%, #fff, transparent), radial-gradient(1px 1px at 36% 64%, #fff, transparent), radial-gradient(1.2px 1.2px at 72% 78%, #fff, transparent);
 }
 .app .s-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 26px; }
 .app .s-card-brand { font-family: var(--display); font-weight: 750; font-size: 1.2rem; letter-spacing: -0.055em; font-stretch: 85%; }
@@ -991,7 +996,7 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
   min-height: min(100svh, 940px); display: flex; flex-direction: column;
   /* Daytime: clear blue at the top, hazy toward the horizon, fading into the
      page so the "how it works" section sits on the same light. */
-  background: linear-gradient(180deg, #a9cef8 0%, #c9e1fb 38%, #e6f1fd 72%, var(--bg) 100%);
+  background: linear-gradient(180deg, #a9cef8 0%, #c2ddfa 40%, rgb(220 235 252 / 0) 100%);
   color: #111726;
 }
 .app .w-hero::after {
@@ -1109,7 +1114,7 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .w-tile p { color: var(--muted); font-size: 0.95rem; max-width: 34ch; }
 .app .w-tile-wide { grid-column: 1 / -1; min-height: 0; display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); grid-template-rows: auto auto 1fr; column-gap: 48px; align-content: start; }
 .app .w-tile-wide .w-ask { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
-.app .w-tile-dark { background: #0e0e10; color: #f4f3ee; border-color: #0e0e10; }
+.app .w-tile-dark { background: var(--dusk); color: var(--dusk-ink); border-color: transparent; }
 .app .w-tile-dark p { color: rgb(244 243 238 / 62%); }
 .app .w-tile-dark .w-tile-n { color: rgb(244 243 238 / 45%); }
 .app .w-mini { margin-top: auto; padding-top: 22px; }
@@ -1156,7 +1161,7 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 html.settle-smooth-scroll { scroll-behavior: smooth; }
 .app-preloader {
   position: fixed; inset: 0; z-index: 200; display: grid; place-items: center;
-  background: var(--bg); color: var(--ink); font-family: var(--font);
+  background: linear-gradient(180deg, var(--sky-top), var(--sky-mid) 45%, var(--sky-low)); color: var(--ink); font-family: var(--font);
   transition: opacity 420ms var(--ease-out), visibility 420ms ease;
 }
 .app-preloader.is-out { opacity: 0; visibility: hidden; pointer-events: none; }
@@ -1270,11 +1275,11 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
 
 /* The dock: ink glass with one raised lime "+" in the middle. The "+" turns
    into an "×" while the add sheet is open, on a spring. */
-.app .float-dock-inner { background: rgb(17 23 38 / 86%); gap: 4px; padding: 6px; }
+.app .float-dock-inner { background: rgb(23 43 82 / 88%); gap: 4px; padding: 6px; box-shadow: 0 20px 40px -14px rgb(23 43 82 / 55%), inset 0 0 0 1px rgb(255 255 255 / 10%); }
 .app .dock-add {
   display: grid; place-items: center; width: 56px; height: 56px; margin: -18px 6px -2px;
   border: 0; border-radius: 50%; background: var(--lime); color: #111726;
-  box-shadow: 0 0 0 5px rgb(17 23 38 / 86%), 0 14px 24px -8px rgb(120 170 20 / 55%);
+  box-shadow: 0 0 0 5px rgb(23 43 82 / 88%), 0 14px 24px -8px rgb(120 170 20 / 55%);
   transition: transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease;
 }
 .app .dock-add svg { transition: transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1); }
@@ -1357,8 +1362,8 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
   /* A morning sky: deep blue overhead, pale at the horizon, warmed by a
      blush of peach where the sun is. */
   background:
-    radial-gradient(60% 46% at 72% 30%, rgb(255 236 210 / 75%), transparent 70%),
-    linear-gradient(180deg, #8fbdf7 0%, #b9d8fb 30%, #dcebfc 55%, #fbe9ee 78%, #fff4e8 100%);
+    radial-gradient(60% 46% at 72% 34%, rgb(255 236 210 / 70%), transparent 70%),
+    linear-gradient(180deg, rgb(220 235 252 / 0) 0%, #b9d8fb 22%, #cfe4fc 48%, #f6e9f1 76%, #fdf8f4 92%, #ffffff 100%);
   color: #111726;
 }
 .app .sky-sun {
@@ -1486,3 +1491,42 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
   .app .sky-cloud, .app .sky-pip-float, .app .sky-sun, .app .sky-twinkles i, .app .sky-card { animation: none !important; }
 }
+
+/* ---------- Shared sky behind every screen ---------- */
+.app .sky-backdrop {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden;
+  background:
+    radial-gradient(40% 32% at 78% 8%, rgb(255 250 236 / 70%), transparent 70%),
+    linear-gradient(180deg, var(--sky-top), var(--sky-mid) 45%, var(--sky-low));
+}
+.app .sky-bd-far { opacity: 0.65; }
+.app .sky-bd-near { opacity: 0.9; }
+.app .sky-backdrop .sky-cloud-a, .app .sky-backdrop .sky-cloud-b { fill: var(--cloud); }
+.app .sky-bd-far .b1 { width: 200px; left: 4%; top: 12%; --t: 160s; --d: 120px; }
+.app .sky-bd-far .b2 { width: 160px; left: 48%; top: 6%; --t: 190s; --d: 140px; }
+.app .sky-bd-far .b3 { width: 220px; right: 6%; top: 34%; --t: 170s; --d: 100px; }
+.app .sky-bd-near .b4 { width: 360px; left: -6%; top: 58%; --t: 120s; --d: 140px; }
+.app .sky-bd-near .b5 { width: 300px; right: -4%; top: 72%; --t: 110s; --d: 110px; }
+.app .sky-bd-near .b6 { width: 280px; left: 38%; top: 86%; --t: 130s; --d: 160px; }
+@media (prefers-color-scheme: dark) {
+  .app .sky-backdrop {
+    background:
+      radial-gradient(1px 1px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 46% 9%, #fff, transparent),
+      radial-gradient(1.4px 1.4px at 80% 22%, #fff, transparent), radial-gradient(1px 1px at 66% 40%, #fff, transparent),
+      linear-gradient(180deg, var(--sky-top), var(--sky-mid) 45%, var(--sky-low));
+  }
+}
+
+/* Cards are white cloud-glass over the sky: nearly opaque, with a lit top
+   edge. No backdrop-filter: the clouds behind them move, and a blurred card
+   would be redrawn on every frame. */
+.app .card { background: linear-gradient(180deg, rgb(255 255 255 / 96%), rgb(255 255 255 / 90%)); border-color: rgb(255 255 255 / 90%); box-shadow: inset 0 1px 0 #fff, var(--shadow); }
+@media (prefers-color-scheme: dark) {
+  .app .card { background: linear-gradient(180deg, rgb(27 38 64 / 94%), rgb(19 27 46 / 92%)); border-color: rgb(255 255 255 / 6%); box-shadow: var(--shadow); }
+}
+
+/* The footer stands on the cloud floor at the bottom of the page. */
+.app .footer { border-top: 0; max-width: none; padding-left: max(24px, calc((100vw - 1180px) / 2 + 24px)); padding-right: max(24px, calc((100vw - 1180px) / 2 + 24px)); }
+.app .main-welcome + .footer { background: #ffffff; }
+@media (prefers-color-scheme: dark) { .app .main-welcome + .footer { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .app .sky-backdrop .sky-cloud { animation: none; } }

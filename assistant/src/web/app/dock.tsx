@@ -76,6 +76,8 @@ export function FloatingDock<T extends string>({
   onSelect,
   syncing = false,
   label = 'Main',
+  onAdd,
+  addOpen = false,
 }: {
   tabs: readonly DockTab<T>[];
   active: T;
@@ -83,26 +85,43 @@ export function FloatingDock<T extends string>({
   /** Shows the pulse on the dock itself when a write is in flight. */
   syncing?: boolean;
   label?: string;
+  /** The one way to add anything: a raised "+" in the middle of the dock. */
+  onAdd?: () => void;
+  addOpen?: boolean;
 }) {
+  const half = Math.ceil(tabs.length / 2);
+  const item = (tab: DockTab<T>) => {
+    const current = tab.id === active;
+    return (
+      <button
+        key={tab.id}
+        type="button"
+        className="dock-item"
+        aria-current={current ? 'page' : undefined}
+        onClick={() => onSelect(tab.id)}
+      >
+        <span className="dock-icon" aria-hidden="true"><Icon name={tab.icon} size={19} /></span>
+        <span className="dock-label">{tab.label}</span>
+        {current && syncing ? <span className="dock-pulse" aria-hidden="true" /> : null}
+      </button>
+    );
+  };
   return (
     <nav className="float-dock" aria-label={label}>
       <div className="float-dock-inner">
-        {tabs.map((tab) => {
-          const current = tab.id === active;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              className="dock-item"
-              aria-current={current ? 'page' : undefined}
-              onClick={() => onSelect(tab.id)}
-            >
-              <span className="dock-icon" aria-hidden="true"><Icon name={tab.icon} size={19} /></span>
-              <span className="dock-label">{tab.label}</span>
-              {current && syncing ? <span className="dock-pulse" aria-hidden="true" /> : null}
-            </button>
-          );
-        })}
+        {tabs.slice(0, onAdd ? half : tabs.length).map(item)}
+        {onAdd ? (
+          <button
+            type="button"
+            className={`dock-add${addOpen ? ' is-open' : ''}`}
+            onClick={onAdd}
+            aria-label="Add a spend or money in"
+            aria-expanded={addOpen}
+          >
+            <Icon name="plus" size={24} />
+          </button>
+        ) : null}
+        {onAdd ? tabs.slice(half).map(item) : null}
       </div>
     </nav>
   );

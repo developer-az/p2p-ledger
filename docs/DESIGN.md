@@ -2,20 +2,20 @@
 
 Anchored to [PRODUCT.md](./PRODUCT.md). **Operate** surfaces use standard app chrome; the visual world only changes type, palette, density, and one signature move (Impeccable `mode-operate`).
 
-## Visual world: "Pocket" (ink, paper, one volt accent)
+## Visual world: "Sky" (daylight, white glass, ink, one volt accent)
 
 | Token / element | Rule |
 |-----------------|------|
-| Ground | Paper `#f4f3ee` (light) / `#0b0b0c` (dark). No textures on app screens. |
-| Surfaces | White cards, 1px hairline, no drop shadow (Notion calm). Radius 20px. |
-| Ink | `#0e0e10`. Primary buttons are ink (Apple Pay black). |
-| Volt (the only accent) | Lime `#c8f53b`, used as a **fill** with ink text (dock active tab, Log spend, habit dots, ring, Pip). Never lime text on paper. |
-| Type | **Bricolage Grotesque** (display, condensed via `font-stretch`), **Geist** (UI), **Geist Mono** (labels, eyebrows, sub-amounts). |
-| Hero object | The **Settle card**: dark Apple Wallet-style card (`.s-card`) that tilts toward the pointer (`TiltCard`) with a moving sheen and grain. Used on Welcome and as the Today hero. |
-| Character | **Pip** (`Pip.tsx`): a lime bean whose eyes follow the cursor and who blinks. Mood comes from real numbers (`pipMood`): happy on a 3+ day streak, sleepy when nothing is logged today, worried when over pace, party after a log. One Pip per screen. |
-| Motion | `motion` (Framer Motion) for the hero: word-by-word blur reveal, card count-up, scroll reveals, springs on tilt and eyes. Ease `cubic-bezier(0.23,1,0.32,1)`. Buttons scale to 0.97 on press. `prefers-reduced-motion` turns off the tilt, reveals, breathing and the tape. |
-| Inner tabs | Activity: ink + paper stat strip (`CountUp`), ink-filled filter pill, rows rise in when the filter changes. Wallet: the Settle card shows the net position, with a hairline list of the numbers behind it underneath. Pip sits on the Ask card. Ask: Pip in the header hops once when an answer lands; chat turns rise in. |
-| Welcome | Dark full-bleed hero, condensed headline with "mess." crossed out, tilting card + Pip, a lime tape marquee, then a bento "how it works" built from real UI fragments (no stock photos), then a lime account card: Sign in / Create account, email and password. |
+| Ground | Pale sky `#f3f7fc` with a light-blue band at the top of every screen (`--sky-top` to `--sky-mid`) and two soft cloud highlights. Dark mode is a night sky (`#0b1020`). |
+| Surfaces | White cards, a soft sky-tinted float shadow (`--shadow`), radius 22px. |
+| Ink | `#111726`. Primary buttons are ink. |
+| Volt (the only accent) | Lime `#c8f53b`, Pip's colour, used as a **fill** with ink text (dock "+", active tab, ring, habit dots). Never lime text on a light ground. |
+| Type | **Bricolage Grotesque** (display), **Geist** (UI), **Geist Mono** (labels, eyebrows, sub-amounts). |
+| Hero object | The **Settle card**: dark Apple Wallet-style card (`.s-card`) that tilts toward the pointer (`TiltCard`). Used on Welcome and as the Today hero; it stays dark on the light sky on purpose. |
+| Character | **Pip** (`Pip.tsx`): a lime bean with a sprout, stubby hands and feet. Eyes follow the pointer or a `lookAt` point; the sprout leans against the gaze on a soft spring. Blinks (sometimes twice), fidgets every 7 to 13 s when idle (hop with squash and stretch, glance, sprout shake, wave), leans and blushes when hovered, hops with arms up on `cheer`. `shy` puts both hands over its eyes (password fields), `peek` lowers one. Mood still comes only from real numbers (`pipMood`). Logo-sized Pips pass `idle={false}`. |
+| Adding | **One way in.** The dock has a raised lime "+" in the middle on every tab (no other add buttons). It opens `AddSheet`: type an amount, then tap what it was; the tap saves. "I spent / I got paid" swaps category tiles for income sources. Recent spends are one-tap repeats with Undo on the toast. Notes are behind "+ Add a note". Splitting a bill is a link to Settle Up. |
+| Fewer controls | The dock holds Today, Activity, "+", Patterns, Ask. Wallet lives in the account menu. No top-bar Ask, no floating add button, no quick-action row; the Today ask bar suggests a question in its placeholder instead of chip buttons. |
+| Welcome | A daytime sky hero with drifting clouds, the tilting card and Pip; "how it works" bento; then the account section **above the clouds** (`AuthSky.tsx`): a morning sky, three depths of drifting cloud, a sun, twinkles, Pip riding its own cloud, and a frosted-glass card (the one place `backdrop-filter` is used). Fields use floating labels; the password has Show/Hide. Pip reads along the field being typed in, covers its eyes on the password, peeks when it is shown, and hops when a valid email is entered. |
 
 ## Motion stack budget (this repo)
 
@@ -27,14 +27,14 @@ Global picks live in `~/.agents/SKILLS-ROUTING.md` ("Motion and visual stack"). 
 | Rive | Candidate | Only to replace hand-built Pip if Pip needs more states than eyes/blink/jump. Must keep `pipMood` as the source of mood. |
 | GSAP + Lenis | Welcome only, if ever | A scroll-told Welcome. Never on Today, Activity, Wallet, Ask, or sheets (Lenis breaks sheet scroll and text selection). |
 | React Three Fiber | Not planned | A 3D Settle card would duplicate `TiltCard`. Lazy-load with a static fallback if a future Welcome needs it. |
-| Aceternity / Magic UI / React Bits | Reference only | Copy a pattern, restyle to Pocket tokens (ink, paper, volt). No glow borders, purple, or glassmorphism. |
+| Aceternity / Magic UI / React Bits | Reference only | Copy a pattern, restyle to Sky tokens (ink, white glass, volt). No glow borders or purple. Frosted glass only on the sign-in scene. |
 
 ## Product invariants (never swap for metaphor)
 
 - Wallet's expense CSV import reuses the existing card, form, button and status styles. Activity's proof panel offers an explicit chain-receipt check and JSON download. Both show unavailable/error states without implying money moved. No new visual or animation dependencies.
 
 - Weekly **progress ring**, habit dots and pace copy on the Today card
-- Two-tap log sheet, category colors (Okabe–Ito), streak pill
+- Two-tap logging (amount, then the category tap saves), category colors (Okabe–Ito), streak pill
 - Patterns heatmap, demo guide, sheet dismiss (pointer down/up outside panel)
 - Ask is read-only; the Today ask bar only routes the question to the Ask tab
 

@@ -164,7 +164,13 @@ export function Sheet({
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
+    if (open && !dialog.open) {
+      dialog.showModal();
+      // showModal() focuses the first focusable element (the Close button);
+      // React renders autoFocus as a focus() call, not the attribute the
+      // dialog looks for. A field marked data-autofocus takes the cursor.
+      dialog.querySelector<HTMLElement>('[data-autofocus]')?.focus();
+    }
     if (!open && dialog.open) dialog.close();
   }, [open]);
   if (!open) return null;

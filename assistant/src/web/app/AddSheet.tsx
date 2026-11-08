@@ -74,6 +74,7 @@ export function AddSheet({
   const [pending, setPending] = useState<SpendCategory | IncomeSource | null>(null);
   const [nudge, setNudge] = useState(0);
   const amountRef = useRef<HTMLInputElement>(null);
+  const saving = useRef(false);
   const pendingSpend = useRef<{ body: string; key: string } | null>(null);
   const minor = dollarsToMinor(text);
 
@@ -102,6 +103,8 @@ export function AddSheet({
   }, [recent]);
 
   async function saveSpend(amountMinor: number, category: SpendCategory, noteText?: string) {
+    if (saving.current) return;
+    saving.current = true;
     setBusy(category);
     setError(null);
     try {
@@ -148,11 +151,14 @@ export function AddSheet({
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      saving.current = false;
       setBusy(null);
     }
   }
 
   async function saveIncome(amountMinor: number, source: IncomeSource) {
+    if (saving.current) return;
+    saving.current = true;
     setBusy(source);
     setError(null);
     try {
@@ -170,6 +176,7 @@ export function AddSheet({
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      saving.current = false;
       setBusy(null);
     }
   }
@@ -200,7 +207,7 @@ export function AddSheet({
   }
 
   const switchMode = (next: AddMode) => {
-    if (next === mode) return;
+    if (saving.current || next === mode) return;
     setMode(next);
     setPending(null);
     setError(null);
@@ -216,7 +223,7 @@ export function AddSheet({
       title={mode === 'spent' ? 'Add a spend' : 'Add money in'}
       subtitle="Type it, tap it, done."
       size="wide"
-      onClose={onClose}
+      onClose={() => { if (!saving.current) onClose(); }}
     >
       <form
         className={`add-form is-${mode}`}
@@ -226,8 +233,8 @@ export function AddSheet({
           <Pip size={58} mood={minor === null ? 'calm' : 'happy'} idle={false} className="add-pip" />
           <div className="add-switch" role="radiogroup" aria-label="What happened">
             <span className="add-switch-thumb" aria-hidden="true" />
-            <button type="button" role="radio" aria-checked={mode === 'spent'} onClick={() => switchMode('spent')}>I spent</button>
-            <button type="button" role="radio" aria-checked={mode === 'got'} onClick={() => switchMode('got')}>I got paid</button>
+            <button type="button" role="radio" disabled={busy !== null} aria-checked={mode === 'spent'} onClick={() => switchMode('spent')}>I spent</button>
+            <button type="button" role="radio" disabled={busy !== null} aria-checked={mode === 'got'} onClick={() => switchMode('got')}>I got paid</button>
           </div>
         </div>
 
@@ -241,6 +248,7 @@ export function AddSheet({
           <span aria-hidden="true">{mode === 'got' ? '+$' : '$'}</span>
           <input
             ref={amountRef}
+            disabled={busy !== null}
             data-autofocus
             inputMode="decimal"
             autoComplete="off"
@@ -300,6 +308,7 @@ export function AddSheet({
         {noteOpen ? (
           <input
             className="input add-note"
+            disabled={busy !== null}
             maxLength={120}
             autoFocus
             placeholder={mode === 'spent' ? 'Coffee with Sam' : 'October paycheck'}
@@ -308,14 +317,14 @@ export function AddSheet({
             onChange={(e) => setNote(e.target.value)}
           />
         ) : (
-          <button type="button" className="add-note-toggle" onClick={() => setNoteOpen(true)}>+ Add a note</button>
+          <button type="button" className="add-note-toggle" disabled={busy !== null} onClick={() => setNoteOpen(true)}>+ Add a note</button>
         )}
 
         {error ? <p className="error-text" role="alert">{error}</p> : null}
 
         <div className="add-foot">
           <span>Only you see this. It never moves money.</span>
-          {onSplit ? <button type="button" className="link-btn" onClick={onSplit}>Splitting a bill? →</button> : null}
+          {onSplit ? <button type="button" className="link-btn" disabled={busy !== null} onClick={onSplit}>Splitting a bill? →</button> : null}
         </div>
         {/* Enter in the amount field saves with the tile picked earlier. */}
         <button type="submit" className="sr-only" tabIndex={-1}>Save</button>

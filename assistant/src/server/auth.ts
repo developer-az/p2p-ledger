@@ -24,6 +24,9 @@ export interface AuthRecord {
 }
 
 export interface AuthStore {
+  unlinkGoogle(userId: string): Promise<void>;
+  findByGoogleSubject(subject: string): Promise<AuthRecord | null>;
+  linkGoogleSubject(subject: string, userId: string): Promise<void>;
   /** True when accounts survive a process restart (Postgres). */
   readonly persistent: boolean;
   allowAuthAttempt(bucket: string, now: Date, limit?: number): Promise<boolean>;
@@ -91,6 +94,18 @@ export function dummyPasswordHash(): Promise<string> {
 }
 
 export class InMemoryAuthStore implements AuthStore {
+  async unlinkGoogle(userId: string): Promise<void> {
+    for (const [subject, id] of this.googleSubjects) if (id === userId) this.googleSubjects.delete(subject);
+    await this.deleteSessionsForUser(userId);
+  }
+  private readonly googleSubjects = new Map<string, string>();
+  async findByGoogleSubject(subject: string): Promise<AuthRecord | null> {
+    return this.byId.get(this.googleSubjects.get(subject) ?? '') ?? null;
+  }
+  async linkGoogleSubject(subject: string, userId: string): Promise<void> {
+    if (this.googleSubjects.has(subject) || [...this.googleSubjects.values()].includes(userId)) throw new Error('Already linked');
+    this.googleSubjects.set(subject, userId);
+  }
   readonly persistent = false;
   private readonly byEmail = new Map<string, AuthRecord>();
   private readonly byId = new Map<string, AuthRecord>();
@@ -234,9 +249,35 @@ create table if not exists app_password_resets (
     created_at timestamptz not null default now()
 );
 create index if not exists app_password_resets_user_idx on app_password_resets (user_id);
+create table if not exists app_google_identities (
+  subject text primary key, user_id uuid unique not null references app_users(id) on delete cascade
+);
 `;
 
 export class PostgresAuthStore implements AuthStore {
+  async unlinkGoogle(userId: string): Promise<void> {
+    await this.run(async c => {
+      await c.query('begin');
+      try {
+        await c.query('delete from app_google_identities where user_id=$1', [userId]);
+        await c.query('delete from app_sessions where user_id=$1', [userId]);
+        await c.query('commit');
+      } catch (error) { await c.query('rollback'); throw error; }
+    });
+  }
+  async findByGoogleSubject(subject: string): Promise<AuthRecord | null> {
+    return this.run(async c => {
+      await c.query('create table if not exists app_google_identities (subject text primary key, user_id uuid unique not null references app_users(id) on delete cascade)');
+      const result = await c.query('select u.* from app_users u join app_google_identities g on g.user_id=u.id where g.subject=$1', [subject]);
+      return result.rows[0] ? this.row(result.rows[0]) : null;
+    });
+  }
+  async linkGoogleSubject(subject: string, userId: string): Promise<void> {
+    await this.run(async c => {
+      await c.query('create table if not exists app_google_identities (subject text primary key, user_id uuid unique not null references app_users(id) on delete cascade)');
+      await c.query('insert into app_google_identities(subject,user_id) values($1,$2)', [subject, userId]);
+    });
+  }
   readonly persistent = true;
   private schemaReady = false;
 

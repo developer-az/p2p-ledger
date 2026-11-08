@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { googleConfig, installGoogleAuth } from './google-auth.js';
 import type { JavaWorkflows } from './java-workflows.js';
 import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
@@ -302,6 +303,7 @@ export function createApp(deps: {
       chat,
       identity: {
         persistent: auth.persistent, signupAvailable,
+        googleAvailable: auth.persistent && !!googleConfig(),
         signinAvailable: !production || auth.persistent,
         passwordResetAvailable: mailer.delivers && (!production || auth.persistent),
         unavailableReason,
@@ -323,6 +325,15 @@ export function createApp(deps: {
       secure: secure || process.env.NODE_ENV === 'production',
     });
   };
+
+  installGoogleAuth(app, auth, issueSession, async (email, displayName, password) => {
+    if (!deps.javaWorkflows || !auth.persistent) throw new Error('Account services unavailable');
+    return auth.provision({ email, displayName, password }, async reserved => {
+      await deps.javaWorkflows!.assertReady();
+      await deps.javaWorkflows!.request('PUT', `/v1/accounts/${reserved.accountId}/provision`,
+        { ownerId: reserved.ownerId, currency: 'USD' });
+    });
+  });
 
   app.post('/auth/register', async (c) => {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
@@ -393,6 +404,18 @@ export function createApp(deps: {
       user: { email: user.email, displayName: user.displayName },
       account: { id: user.accountId, owner: user.ownerId },
     });
+  });
+
+  app.post('/auth/google/disconnect', async c => {
+    const user = await sessionUser(c);
+    if (!user) return c.json({ error: 'Sign in first.' }, 401);
+    if (!await auth.allowAuthAttempt('disconnect:' + user.id, now(), 5)) return c.json({ error: 'Try again later.' }, 429);
+    const body = await c.req.json().catch(() => null);
+    if (typeof body?.password !== 'string' || body.password.length > 72 || !await verifyPassword(body.password, user.passwordHash))
+      return c.json({ error: 'Enter your password. If you joined with Google, use Forgot password to set one first.' }, 400);
+    await auth.unlinkGoogle(user.id);
+    deleteCookie(c, SESSION_COOKIE, { path: '/' });
+    return c.json({ ok: true });
   });
 
   app.post('/auth/logout', async (c) => {

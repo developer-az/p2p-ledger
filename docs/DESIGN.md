@@ -52,3 +52,7 @@ Global picks live in `~/.agents/SKILLS-ROUTING.md` ("Motion and visual stack"). 
 - Unattended roll → café punch card + `punch-card.css` on monochrome `app.css` + removed photos = half redesign.
 - `frontend-design` “pick extreme” without a pinned contract = template shopping.
 - Bullet-journal and AURA layers were stacked as override sheets on top of each other. Pocket replaced the token block and the whole override tail in one pass; keep one layer.
+
+- Authentication (2026-11-07): neutral bordered account panel, 48px inputs and Google action, shared multicolor Google mark; dedicated /google-signin confirmation screen with eligibility, permissions explanation and policy/support links. Existing marketing layout retained.
+
+- Contrast (2026-11-08): daytime Welcome hero and auth scene own light foreground/surface tokens in either OS theme; app screens retain night mode. Secondary text and dark-card labels must remain readable; dock active foreground/background change together. Google entry uses the shared branded button inside the Sky form.

@@ -13,30 +13,33 @@ import { Home } from './Home.js';
 import { InsightsTab } from './InsightsTab.js';
 import { clearSession, loadSession, saveSession, type Session } from './session.js';
 import { SetupSheet } from './SetupSheet.js';
-import { AddMoneySheet, IncomeSheet, LogSpendSheet } from './SimpleSheets.js';
+import { AddMoneySheet } from './SimpleSheets.js';
+import { AddSheet } from './AddSheet.js';
 import { NeedsYouCard, SettleUpSheet } from './SettleUp.js';
 import { WalletTab } from './WalletTab.js';
 import { Avatar, Confetti, ErrorNotice, Icon, ToastProvider, type IconName } from './ui.js';
 import { FloatingDock, useSwipeNav } from './dock.js';
 import { AppPreloader } from './Preloader.js';
 import { Welcome } from './Welcome.js';
+import { SkyBackdrop } from './AuthSky.js';
 import { Pip } from './Pip.js';
 
 /** Animation features load in their own chunk; `strict` rejects a stray full `motion.*` import. */
 const loadMotion = () => import('./motion-features.js').then((mod) => mod.default);
 
 type Tab = 'today' | 'activity' | 'patterns' | 'ask' | 'wallet';
+/** The dock: four places and one "+" in the middle. Wallet lives in the account menu. */
 const TABS: { id: Tab; label: string; icon: IconName }[] = [
   { id: 'today', label: 'Today', icon: 'home' },
   { id: 'activity', label: 'Activity', icon: 'list' },
   { id: 'patterns', label: 'Patterns', icon: 'chart' },
   { id: 'ask', label: 'Ask', icon: 'sparkle' },
-  { id: 'wallet', label: 'Wallet', icon: 'wallet' },
 ];
+const TAB_TITLES: Record<Tab, string> = { today: 'Today', activity: 'Activity', patterns: 'Patterns', ask: 'Ask', wallet: 'Wallet' };
 /** Tab order drives swipe direction: left reveals the next tab, right the previous. */
 const TAB_IDS: Tab[] = TABS.map((t) => t.id);
 
-type Sheetname = null | 'add' | 'log' | 'income' | 'setup' | 'settle';
+type Sheetname = null | 'add' | 'log' | 'setup' | 'settle';
 
 const DEMO_STEPS: DemoStepId[] = ['baseline', 'log', 'income', 'patterns', 'pace'];
 
@@ -130,6 +133,7 @@ export function ConsumerApp() {
       <ToastProvider>
         <AppPreloader visible={!bootReady} />
         <div className={`app${bootReady ? ' app-ready' : ''}`}>
+          <SkyBackdrop />
           <a className="skip" href="#main">Skip to content</a>
           {session && boot ? (
             <Signed boot={boot} session={session} onSwitch={start} onSignOut={signOut} />
@@ -172,7 +176,7 @@ function Brand({ onHome }: { onHome?: () => void }) {
         onHome();
       } : undefined}
     >
-      <Pip size={30} track={false} mood="happy" />
+      <Pip size={30} track={false} idle={false} mood="happy" />
       <span className="brand-word">settle</span>
     </a>
   );
@@ -203,6 +207,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   const [setupStep, setSetupStep] = useState<0 | 1 | 2>(0);
   const [item, setItem] = useState<FeedItem | null>(null);
   const [logPreset, setLogPreset] = useState<{ category?: SpendCategory; amountMinor?: number }>({});
+  const [addMode, setAddMode] = useState<'spent' | 'got'>('spent');
   const [settleMode, setSettleMode] = useState<'ask' | 'settle'>('ask');
   const [askSeed, setAskSeed] = useState<string | null>(null);
   const [burst, setBurst] = useState(0);
@@ -274,8 +279,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   }, [data, me.id]);
 
   useEffect(() => {
-    const label = TABS.find((x) => x.id === tab)?.label ?? 'Today';
-    document.title = `${label} · Settle`;
+    document.title = `${TAB_TITLES[tab]} · Settle`;
   }, [tab]);
 
   const go = (t: Tab) => {
@@ -294,6 +298,12 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
 
   const openLog = (preset: { category?: SpendCategory; amountMinor?: number } = {}) => {
     setLogPreset(preset);
+    setAddMode('spent');
+    setSheet('log');
+  };
+  const openIncome = () => {
+    setLogPreset({});
+    setAddMode('got');
     setSheet('log');
   };
 
@@ -315,7 +325,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         openLog();
         break;
       case 'income':
-        setSheet('income');
+        openIncome();
         break;
       case 'patterns':
         go('patterns');
@@ -352,9 +362,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
           <span className="spacer" />
           <div className="top-actions">
             {refreshing ? <span className="sync-pill" role="status" aria-label="Updating your wallet"><span className="sync-dot" /></span> : null}
-            <button type="button" className="top-ask" onClick={() => ask()} title="Ask about your money">
-              <Icon name="sparkle" size={16} /><span>Ask</span>
-            </button>
             <div className="menu-wrap" ref={menuRef}>
               <button type="button" className="wallet-chip" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
                 <Avatar owner={me.owner} small />{who}
@@ -406,7 +413,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
               actions={{
                 addMoney: () => setSheet('add'),
                 logSpend: openLog,
-                logIncome: () => setSheet('income'),
+                logIncome: openIncome,
                 settleUp: () => openSettle('ask'),
                 ask,
                 openItem: openFeedItem,
@@ -440,7 +447,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
               viewer={{ email: session.user?.email, demo }}
               actions={{
                 setup: () => { setSetupMode(data?.view.moneyProfile?.walletCashMinor == null ? 'onboarding' : 'edit'); setSetupStep(0); setSheet('setup'); },
-                logIncome: () => setSheet('income'),
+                logIncome: openIncome,
                 addMoney: () => setSheet('add'),
                 ask: () => ask(),
                 signOut: onSignOut,
@@ -451,26 +458,22 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         </div>
       </main>
 
-      <FloatingDock tabs={TABS} active={tab} onSelect={go} syncing={refreshing} />
-
-      {tab !== 'today' ? (
-        <button type="button" className="fab" onClick={() => openLog()} aria-label="Log what you spent">
-          <Icon name="plus" size={24} /><span>I spent $</span>
-        </button>
-      ) : null}
+      <FloatingDock tabs={TABS} active={tab} onSelect={go} syncing={refreshing} onAdd={() => openLog()} addOpen={sheet === 'log'} />
 
       <AddMoneySheet open={sheet === 'add'} onClose={closeSheet} me={me} onChanged={reload} />
-      <IncomeSheet open={sheet === 'income'} onClose={closeSheet} me={me} onChanged={reload} walletRun={walletRun} onLogged={() => markDemo('income')} />
-      <LogSpendSheet
+      <AddSheet
         open={sheet === 'log'}
         onClose={closeSheet}
         me={me}
         recent={data?.view.spendEntries ?? []}
+        initialMode={addMode}
         initialCategory={logPreset.category}
         initialAmount={logPreset.amountMinor}
         onChanged={reload}
         walletRun={walletRun}
-        onLogged={() => { celebrate(); markDemo('log'); }}
+        onSpent={() => { celebrate(); markDemo('log'); }}
+        onIncome={() => { celebrate(); markDemo('income'); }}
+        onSplit={() => openSettle('ask')}
       />
       <SetupSheet
         open={sheet === 'setup'}

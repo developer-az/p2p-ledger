@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import type { AccountRef, SpendCategory } from '../api.js';
 import { categoryMeta } from './categories.js';
 import { buildFeed, type FeedItem } from './feed.js';
@@ -50,11 +50,11 @@ export function Home({ me, name, data, actions, guide, cheer = 0 }: { me: Accoun
   return (
     <div className="home stagger-in">
       <header className="hello">
-        <Pip mood={mood} cheer={cheer} size={76} onTap={() => actions.logSpend()} />
+        <Pip mood={mood} cheer={cheer} size={92} greet onTap={() => actions.logSpend()} />
         <div className="hello-copy">
           <p className="eyebrow">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</p>
           <h1>Hi, {name ?? displayName(me.owner)}.</h1>
-          <p className="pip-says" aria-live="polite">{pipLine(mood, plan)}</p>
+          <p className="pip-says" aria-live="polite"><span>{pipLine(mood, plan)}</span></p>
         </div>
         <div className="hello-badges">
           <span className="streak-pill" title="Consecutive days with a logged spend">
@@ -62,27 +62,12 @@ export function Home({ me, name, data, actions, guide, cheer = 0 }: { me: Accoun
             <strong>{plan.streakDays}</strong>
             <span>{plan.streakDays === 1 ? 'day' : 'days'}</span>
           </span>
-          <button type="button" className="icon-btn" onClick={actions.seeWallet} aria-label="Wallet settings" title="Wallet settings">
-            <Icon name="settings" size={20} />
-          </button>
         </div>
       </header>
 
       {guide}
 
       {plan.hasBaseline ? <MoneyHero plan={plan} dots={dots} weekChange={weekChange} actions={actions} /> : <SetupHero actions={actions} />}
-
-      <section className="quick-row" aria-label="Quick actions">
-        <button type="button" className="quick quick-primary" onClick={() => actions.logSpend()}>
-          <Icon name="plus" size={18} /><span>Log spend</span>
-        </button>
-        <button type="button" className="quick" onClick={actions.logIncome}>
-          <Icon name="income" size={18} /><span>Income</span>
-        </button>
-        <button type="button" className="quick" onClick={actions.settleUp}>
-          <Icon name="swap" size={18} /><span>Split</span>
-        </button>
-      </section>
 
       <AskBar onAsk={actions.ask} />
 
@@ -124,7 +109,7 @@ function pipLine(mood: PipMood, plan: ReturnType<typeof moneyPlan>): string {
         ? 'Something looks off. Check your pace?'
         : `${money(plan.weekSpentMinor - plan.budgetMinor)} past your pace. A lighter day fixes it.`;
     case 'sleepy':
-      return 'Nothing logged today. Tap me to log the first thing.';
+      return 'Nothing logged yet today. Tap me, or the + below, to add the first thing.';
     case 'happy':
       return plan.weekLeftMinor === null
         ? `${plan.streakDays}-day streak. Keep it going.`
@@ -134,17 +119,29 @@ function pipLine(mood: PipMood, plan: ReturnType<typeof moneyPlan>): string {
   }
 }
 
+/** Example questions the ask bar cycles through as its placeholder. */
+const ASK_IDEAS = [
+  'Where did most of my money go this month?',
+  'Can I afford a $60 night out this week?',
+  'Which day of the week do I spend the most?',
+  'How am I doing against my weekly pace?',
+];
+
 function AskBar({ onAsk }: { onAsk: (question?: string) => void }) {
   const [q, setQ] = useState('');
+  const [idea, setIdea] = useState(0);
+  // The placeholder suggests a question every few seconds instead of a row of
+  // chip buttons; submitting an empty bar asks the one on show.
+  useEffect(() => {
+    if (q) return undefined;
+    const id = window.setInterval(() => setIdea((i) => (i + 1) % ASK_IDEAS.length), 4200);
+    return () => window.clearInterval(id);
+  }, [q]);
   return (
-    <form className="ask-bar" role="search" onSubmit={(e) => { e.preventDefault(); onAsk(q.trim() || undefined); }}>
+    <form className="ask-bar" role="search" onSubmit={(e) => { e.preventDefault(); onAsk(q.trim() || ASK_IDEAS[idea]); }}>
       <Icon name="sparkle" size={18} />
       <label htmlFor="ask-bar" className="sr-only">Ask about your money</label>
-      <input id="ask-bar" placeholder="Ask anything about your money…" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
-      <div className="ask-bar-chips">
-        <button type="button" onClick={() => onAsk('Where did most of my money go this month?')}>Where did it go?</button>
-        <button type="button" onClick={() => onAsk('Can I afford a $60 night out this week?')}>Can I afford it?</button>
-      </div>
+      <input id="ask-bar" placeholder={ASK_IDEAS[idea]} value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
       <button type="submit" className="ask-bar-go" aria-label="Ask">↑</button>
     </form>
   );

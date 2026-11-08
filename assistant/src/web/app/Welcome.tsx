@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { m, useReducedMotion } from 'motion/react';
 import { api, type AccountRef, type BootstrapResponse } from '../api.js';
 import { money } from './format.js';
@@ -6,6 +6,7 @@ import type { Session } from './session.js';
 import { CountUp, EASE_OUT, InView, RevealWords, TiltCard } from './motion-kit.js';
 import { Pip } from './Pip.js';
 import { GoogleButton } from './GoogleButton.js';
+import { AuthSky, Cloud } from './AuthSky.js';
 import { Icon, useToast } from './ui.js';
 
 type AuthMode = 'signin' | 'create';
@@ -35,6 +36,7 @@ export function Welcome({
       : code === 'google' ? 'Google sign-in could not finish. Please try again.' : null;
   });
   const [forgot, setForgot] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [resetSent, setResetSent] = useState<string | null>(null);
   const [demoError, setDemoError] = useState<string | null>(null);
   const accountRef = useRef<HTMLElement>(null);
@@ -149,10 +151,14 @@ export function Welcome({
   return (
     <div className="welcome">
       <section className="w-hero" aria-labelledby="w-title">
-        <div className="w-hero-grain" aria-hidden="true" />
+        {/* A daytime sky the page climbs out of: the sign-in scene at the
+            bottom of the page is the same sky, above the clouds. */}
+        <div className="sky-layer w-clouds" aria-hidden="true">
+          <Cloud className="h1" tone="b" /><Cloud className="h2" /><Cloud className="h3" tone="b" /><Cloud className="h4" />
+        </div>
         <nav className="w-nav" aria-label="Settle">
           <a className="w-logo" href="/" aria-label="Settle home">
-            <Pip size={30} track={false} mood="happy" />
+            <Pip size={30} track={false} idle={false} mood="happy" />
             <span>settle</span>
           </a>
           <span className="w-nav-links">
@@ -213,7 +219,7 @@ export function Welcome({
             animate={{ opacity: 1, transform: 'translateY(0px) scale(1)' }}
             transition={{ duration: 1, ease: EASE_OUT, delay: 0.25 }}
           >
-            <div className="w-pip-perch"><Pip size={92} mood="happy" /></div>
+            <div className="w-pip-perch"><Pip size={96} mood="happy" greet /></div>
             <TiltCard className="s-card s-card-lg">
               <div className="s-card-top">
                 <span className="s-card-brand">settle</span>
@@ -298,77 +304,92 @@ export function Welcome({
         </div>
       </section>
 
-      <section className="w-section w-own" id="own-wallet" ref={accountRef} aria-labelledby="own-title">
-        <InView className="w-own-card">
-          <div className="w-own-copy">
-            <p className="w-kicker">Your account</p>
-            <h2 id="own-title" className="w-h2">{mode === 'create' ? <>Start clean.<br />Keep it yours.</> : <>Welcome back.<br />Pick up where you left off.</>}</h2>
-            <p>One email, one wallet. The sample household never mixes with yours. You start empty — setup collects your real cash, cards, and pace, not a pretend balance.</p>
-          </div>
-          <form className="w-own-form" aria-busy={busy === 'auth'} onSubmit={(e) => { e.preventDefault(); void submitAccount(); }}>
-            <div className="w-auth-switch" role="tablist" aria-label="Account">
-              <button type="button" role="tab" aria-selected={mode === 'signin'} onClick={() => { setMode('signin'); setForgot(false); setError(null); }}>Sign in</button>
+      <AuthSky id="own-wallet" ref={accountRef} labelledBy="own-title">
+        <div className="sky-card-head">
+          <p className="w-kicker">{mode === 'create' ? 'Your account' : 'Welcome back'}</p>
+          <h2 id="own-title" className="sky-title">{forgot ? 'Let’s get you back in.' : mode === 'create' ? 'Make yourself at home.' : 'Good to see you again.'}</h2>
+          <p className="sky-lede">{mode === 'create'
+            ? 'One email, one wallet. You start empty, and the sample household never mixes with yours.'
+            : 'Sign in and pick up right where you left off.'}</p>
+        </div>
+        <form className="sky-form" aria-busy={busy === 'auth'} onSubmit={(e) => { e.preventDefault(); void submitAccount(); }}>
+          {!forgot ? (
+            <div className={`sky-switch is-${mode}`} role="tablist" aria-label="Account">
+              <span className="sky-switch-thumb" aria-hidden="true" />
               <button type="button" role="tab" aria-selected={mode === 'create'} onClick={() => { setMode('create'); setForgot(false); setError(null); }}>Create account</button>
+              <button type="button" role="tab" aria-selected={mode === 'signin'} onClick={() => { setMode('signin'); setForgot(false); setError(null); }}>Sign in</button>
             </div>
-            {forgot ? (
-              <>
-                <p className="w-fine w-forgot-intro">Enter the email on your account and we will send a link to choose a new password.</p>
-                <label className="w-field" htmlFor="account-email">Email
-                  <input id="account-email" required disabled={busy !== null} type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-                </label>
-                {resetSent ? <p className="w-ok" role="status">{resetSent}</p> : null}
-                <button className="w-btn w-btn-ink" type="submit" disabled={busy !== null || !resetAvailable}>
-                  {busy === 'auth' ? 'Sending…' : resetSent ? 'Send again' : 'Send reset link'}
+          ) : null}
+          {forgot ? (
+            <>
+              <p className="w-fine w-forgot-intro">Enter the email on your account and we will send a link to choose a new password.</p>
+              <SkyField id="account-email" label="Email" value={email}>
+                <input id="account-email" required disabled={busy !== null} type="email" autoComplete="email" inputMode="email" placeholder=" " value={email} onChange={(e) => setEmail(e.target.value)} />
+              </SkyField>
+              {resetSent ? <p className="w-ok" role="status">{resetSent}</p> : null}
+              <button className="sky-go" type="submit" disabled={busy !== null || !resetAvailable}>
+                {busy === 'auth' ? 'Sending…' : resetSent ? 'Send again' : 'Send reset link'}
+              </button>
+              <button type="button" className="w-link" onClick={() => { setForgot(false); setResetSent(null); setError(null); }}>Back to sign in</button>
+            </>
+          ) : (
+            <>
+              {boot?.identity?.googleAvailable ? <>
+                <GoogleButton href="/google-signin" disabled={busy !== null} />
+                <div className="auth-divider"><span>or continue with email</span></div>
+              </> : null}
+              {mode === 'create' ? (
+                <SkyField id="account-name" label="What should Pip call you?" value={name}>
+                  <input id="account-name" required disabled={busy !== null} maxLength={40} autoComplete="name" placeholder=" " value={name} onChange={(e) => setName(e.target.value)} />
+                </SkyField>
+              ) : null}
+              <SkyField id="account-email" label="Email" value={email}>
+                <input id="account-email" required disabled={busy !== null} type="email" autoComplete="email" inputMode="email" placeholder=" " value={email} onChange={(e) => setEmail(e.target.value)} />
+              </SkyField>
+              <SkyField id="account-password" label={mode === 'create' ? 'Password, 8+ characters' : 'Password'} value={password}>
+                <input
+                  id="account-password"
+                  required
+                  maxLength={72}
+                  disabled={busy !== null}
+                  type={showPassword ? 'text' : 'password'}
+                  data-secret="true"
+                  autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
+                  minLength={8}
+                  placeholder=" "
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="sky-eye"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
                 </button>
-                <button type="button" className="w-link" onClick={() => { setForgot(false); setResetSent(null); setError(null); }}>Back to sign in</button>
-              </>
-            ) : (
-              <>
-                {boot?.identity?.googleAvailable ? <>
-                  <GoogleButton href="/google-signin" disabled={busy !== null} />
-                  <div className="auth-divider"><span>or continue with email</span></div>
-                </> : null}
-                {mode === 'create' ? (
-                  <label className="w-field" htmlFor="account-name">Name
-                    <input id="account-name" required disabled={busy !== null} maxLength={40} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
-                  </label>
-                ) : null}
-                <label className="w-field" htmlFor="account-email">Email
-                  <input id="account-email" required disabled={busy !== null} type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-                </label>
-                <label className="w-field" htmlFor="account-password">Password
-                  <input
-                    id="account-password"
-                    required
-                    maxLength={72}
-                    disabled={busy !== null}
-                    type="password"
-                    autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
-                    minLength={8}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </label>
-                <button className="w-btn w-btn-ink" type="submit" disabled={!boot || busy !== null || !accountAvailable}>
-                  {busy === 'auth' ? 'Working…' : mode === 'create' ? 'Create account' : 'Sign in'}
-                </button>
-                {mode === 'signin' ? (
-                  <button type="button" className="w-link" onClick={() => { setForgot(true); setResetSent(null); setError(null); }}>Forgot password?</button>
-                ) : null}
-              </>
-            )}
-            {(!accountAvailable || (forgot && !resetAvailable)) ? <p className="w-fine" role="status">{forgot && !resetAvailable ? 'Password reset email is not connected on this deployment. No email was sent.' : boot?.identity?.unavailableReason}</p> : null}
-            {error && error !== boot?.identity?.unavailableReason ? <p className="w-error" role="alert">{error}</p> : null}
-            {boot && accountAvailable && !forgot ? <p className="w-fine">
-              {persistent
-                ? mode === 'create'
-                  ? 'Your account will be saved. Use this email to sign in next time.'
-                  : 'Sign in to return to your saved records.'
-                : 'On this server the account lasts until the process restarts. A connected database keeps it.'}
-            </p> : null}
-          </form>
-        </InView>
-      </section>
+              </SkyField>
+              <button className="sky-go" type="submit" disabled={!boot || busy !== null || !accountAvailable}>
+                <span>{busy === 'auth' ? 'One moment…' : mode === 'create' ? 'Create account' : 'Sign in'}</span>
+                {busy === 'auth' ? null : <span className="sky-go-arrow" aria-hidden="true">→</span>}
+              </button>
+              {mode === 'signin' ? (
+                <button type="button" className="w-link" onClick={() => { setForgot(true); setResetSent(null); setError(null); }}>Forgot password?</button>
+              ) : null}
+            </>
+          )}
+          {(!accountAvailable || (forgot && !resetAvailable)) ? <p className="w-fine" role="status">{forgot && !resetAvailable ? 'Password reset email is not connected on this deployment. No email was sent.' : boot?.identity?.unavailableReason}</p> : null}
+          {error && error !== boot?.identity?.unavailableReason ? <p className="w-error" role="alert">{error}</p> : null}
+          {boot && accountAvailable && !forgot ? <p className="w-fine">
+            {persistent
+              ? mode === 'create'
+                ? 'Your account will be saved. Use this email to sign in next time.'
+                : 'Sign in to return to your saved records.'
+              : 'On this server the account lasts until the process restarts. A connected database keeps it.'}
+          </p> : null}
+        </form>
+      </AuthSky>
     </div>
   );
 }
@@ -388,5 +409,15 @@ function MiniRing({ value }: { value: number }) {
       />
       <text x="28" y="32" textAnchor="middle">{Math.round(value * 100)}%</text>
     </svg>
+  );
+}
+
+/** A field whose label rests inside it and floats up once it has focus or a value. */
+function SkyField({ id, label, value, children }: { id: string; label: string; value: string; children: ReactNode }) {
+  return (
+    <div className={`sky-field${value ? ' has-value' : ''}`}>
+      {children}
+      <label htmlFor={id}>{label}</label>
+    </div>
   );
 }

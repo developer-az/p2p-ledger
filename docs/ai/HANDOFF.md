@@ -1,5 +1,32 @@
 # Engineering Handoff (latest)
 
+## Session: theme toggle (step 1) + pattern insight maths (step 2), coder sandboxed (2026-11-09)
+- Step 1 (theme toggle): `theme.ts` + `test/theme.test.ts` (Pi), dark CSS blocks also keyed on `data-theme` (Pi), top-bar `.theme-toggle` button and pre-paint `public/theme-init.js` (Codex, escalated after two Pi hangs). The pre-paint script is a same-origin file because the CSP is `script-src 'self'`.
+- Step 2 (insight maths): `src/web/app/pattern-insights.ts` (`cumulativeMonth`, `rollingAverage`, `categoryMovers`, `peakWeekday`, `buildActions`). Tests were written first by Pi in a separate brief (2a) and frozen by hash. The implementation (2b) passed them without touching them.
+- Evidence: host `tsc --noEmit` exit 0; `vitest run test/pattern-insights.test.ts test/spending-patterns.test.ts test/money-insights.test.ts test/theme.test.ts` 50/50 passed. Baseline before step 2 was 27/27 (no pre-existing failures).
+- Change control: on 2026-11-09 the coder moved into Docker (`pi-sandbox:1.4.0` from `~/.claude/pi-sandbox/`, Pi 1.4.0, model slug `isoquant/deepseek-v4.1-flash-1017-fast`, `--thinking high`, stdin closed). Volumes `pi-nm-p2p-ledger-assistant` / `pi-nm-p2p-ledger-contracts` hold Linux node_modules. Regression check: the same survey brief ran sandboxed (18s, then 25s with volumes; tsc + vitest green in the container) and on the host (20s); host node_modules, lockfiles and git status were unchanged.
+- Coder run log (duration, outcome):
+  - Pi, step 1 full brief: ~15 min, hung (killed by timeout, no changes).
+  - Pi, 1a (theme.ts + tests): a few min, done.
+  - Pi, 1b (CSS), first run: ~9 min, hung (stopped).
+  - Pi, 1b (CSS), rerun: 8 min, hung after the edit was done (timeout exit 124).
+  - Pi, 1c (button + script): 7 min, hung (no changes); escalated.
+  - Codex, 1c: done.
+  - Codex, CSP fix, first run: 7 min, hung on open stdin.
+  - Codex, CSP fix, rerun with `</dev/null`: done, then hit the usage limit.
+  - Pi sandboxed, 2a (tests): 84s, done.
+  - Pi sandboxed, 2b (impl): 27s, done.
+  - The hangs stopped once stdin was closed on every invocation.
+- INTERIM review (2026-11-09, step 2 diff, GLM-5.3-Flash `isoquant/glm-5.3-flash` via sandboxed Pi, 26s): VERDICT: PASS, 3 low findings, all dismissed in the verify stage (a `window` parameter that shadows the DOM global; an undocumented `Math.max(1, window)` clamp; no zero-spend `rollingAverage` test, though the maths covers it). The scope gate showed no files changed and the frozen test hash was intact. Orchestrator found one issue the reviewer missed: action copy says "last month", but the data is the previous 30 days (`spendPrev30dMinor`, category `prevTotalMinor`). Waiting on the user. This interim review does NOT satisfy the review gate.
+- Wording fix (before step 3): the action copy now says "the previous 30 days" instead of "last month" (rising category, month pace, and the already-over case), matching the data (`spendPrev30dMinor`, `prevTotalMinor`). Tests were updated first and re-frozen (Pi, 14s), then the code (Pi, 17s); 23/23.
+- Step 3 (charts): `chart-geometry.ts` (niceMax/scaleX/scaleY/linePath/areaPath), with tests written first and frozen (Pi 24s), then the code (Pi 24s). `pattern-charts.tsx` `MonthPaceChart` (cumulative area + line, dashed projection to month end, previous-30-days reference, today dot) goes in the "This month" card; `DailyTrendChart` (30 daily bars, 7-day average line, focusable days with a live readout) is a new "Day by day" card (Pi 33s). Fix round 1 (Pi 49s), after a browser check showed: near-invisible bars, the trend chart ~430px tall on desktop, no visible active bar on $0 days, ISO dates in labels.
+- Step 3 evidence: host tsc 0; pattern-insights + chart-geometry 51/51. Browser check (verify-settle, practice mode, `.verify/evidence/20261109-151634/`): both charts render at 390 and 1024px in light and dark, the toggle cycles System/Light/Dark, `scrollWidth === clientWidth` at both widths, keyboard focus on a day updates the readout, and the console shows 0 errors.
+- Step 4: `CategoryMoversChart` (diverging up/down bars, "What changed") replaces the donut in "Where it went"; peak-weekday highlight + hint; calendar legend shows $0 and the max day; new "Try this week" card (`buildActions`, up to 3 with "Save ~$X"). Pi: 4a 40s, 4b 34s (Pi caught a conditional-hook problem in my brief and moved the early return below the hook).
+- Guard rules (found in the browser: suggestions told the demo user to "save" $1,450 of rent): `buildActions` skips housing and categories with no previous-30-day baseline; skips the weekday and month-pace suggestions when one day makes up at least half of that weekday's total or the month's spend so far. All test-first and frozen (Pi 28s+45s, 17s+23s).
+- INTERIM review (GLM-5.3-Flash, whole task, 74s): VERDICT: PASS with 1 medium + 4 low findings, all verified real and fixed. The trend chart became a single `role="slider"` (arrow/Home/End keys, pointer scrub) instead of 30 tiny tab stops; selection is stored by date; one shared `habitPeak()` for the weekday card and suggestions (tests first); matching minus glyph; keep-in-sync comments for theme-init.js. Pi: F1 64s, F2 12s, F3 37s. INTERIM delta re-review (GLM, 13s): VERDICT: PASS, 1 info note dismissed (hover scrubs the readout, as intended). The scope gate showed no files changed on every review run.
+- Final local gates: tsc 0; full suite 407 passed / 1 skipped; vite build OK. Browser evidence: `.verify/evidence/step4/` and `20261109-154943/`.
+- Open: Codex usage limit resets 2026-11-10 11:07; the real Codex review is pending and the PR stays unmerged until it passes. Steps 1-4 are delivered to PR #31. Steps 3–5 not started. Not committed.
+
 ## Session: review gate for the Settle Up work, two fixes (2026-11-09)
 - Ran PLAN.md step 4. The full Codex review (high) returned FAIL. Two findings were fixed, both coded by Pi:
   - High: the pay route answers 200 when a transfer is REJECTED, and the UI showed "Paid" and removed the card. Added exported `assertPaid()` in `SettleUp.tsx`: success only when `request.status === 'PAID'`, otherwise it throws with `declineExplanation`, then `rejectionReason`, then a default message. `PayRequestResult.transfer` is now optional in `api.ts`, because a repeated pay on an already-paid demo request returns only `{ request }`. Added 4 tests in `test/settle-up.test.ts`.

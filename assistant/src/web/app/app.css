@@ -57,7 +57,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  .app, .app-preloader {
+  :root:not([data-theme="light"]) .app, :root:not([data-theme="light"]) .app-preloader {
     --bg: #0b1020;
     --bg-2: #10172a;
     --surface: #131b2e;
@@ -94,12 +94,49 @@
     color-scheme: dark;
   }
 }
+:root[data-theme="dark"] .app, :root[data-theme="dark"] .app-preloader {
+  --bg: #0b1020;
+  --bg-2: #10172a;
+  --surface: #131b2e;
+  --surface-2: #19223a;
+  --surface-3: #232d47;
+  --sky-top: #16224a;
+  --sky-mid: #101a36;
+  --sky-low: #0b1020;
+  --cloud: rgb(255 255 255 / 7%);
+  --ink: #f2f1ec;
+  --ink-2: #dedcd5;
+  --muted: #a3a29b;
+  --faint: #a4aec2;
+  --line: #212b44;
+  --line-strong: #34405f;
+  --pen: #f2f1ec;
+  --pen-hover: #ffffff;
+  --pen-soft: #1b1b1e;
+  --accent-ink: #0b0b0c;
+  --accent-soft: #1b1b1e;
+  --coral: #ff6b6b;
+  --coral-soft: #2a1416;
+  --good: #4ade80;
+  --good-soft: #12261a;
+  --bad: #ff6b6b;
+  --bad-soft: #2a1416;
+  --warn: #fbbf24;
+  --warn-soft: #2a210f;
+  --violet: #a3a29b;
+  --violet-soft: #1b1b1e;
+  --metal: #3a3a3f;
+  --shadow: 0 1px 0 rgb(255 255 255 / 3%) inset;
+  --shadow-lg: 0 30px 60px -20px rgb(0 0 0 / 70%);
+  color-scheme: dark;
+}
 
 html:has(.app), html:has(.app-preloader) { background: #f4f3ee; }
 body:has(.app), body:has(.app-preloader) { margin: 0; }
 @media (prefers-color-scheme: dark) {
-  html:has(.app), html:has(.app-preloader) { background: #0b0b0c; }
+  html:not([data-theme="light"]):has(.app), html:not([data-theme="light"]):has(.app-preloader) { background: #0b0b0c; }
 }
+html[data-theme="dark"]:has(.app), html[data-theme="dark"]:has(.app-preloader) { background: #0b0b0c; }
 .app, .app * { box-sizing: border-box; }
 .app.auth-page { display: flex; flex-direction: column; min-height: 100svh; background: var(--bg); }
 .app .auth-header, .app .auth-footer { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 28px clamp(20px, 5vw, 72px); }
@@ -199,6 +236,13 @@ body:has(.app), body:has(.app-preloader) { margin: 0; }
 .app .sync-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; font-size: 0.9rem; }
 .app .sync-banner .link-btn { white-space: nowrap; }
 .app .menu-wrap { position: relative; }
+.app .theme-toggle {
+  display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.app .theme-toggle:hover { background: var(--surface-2); }
+.app .theme-toggle:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .app .wallet-chip {
   display: inline-flex; align-items: center; gap: 9px; min-height: 40px;
   border: 1px solid var(--line-strong);
@@ -231,6 +275,7 @@ body:has(.app), body:has(.app-preloader) { margin: 0; }
   .app .topbar-inner { height: 62px; padding-inline: 16px; gap: 12px; }
   /* Every topbar control is a full 44px target once the bar is the main nav. */
   .app .topbar .demo-pill, .app .topbar .wallet-chip { min-height: 44px; }
+  .app .topbar .theme-toggle { width: 44px; height: 44px; }
   .app .bottom-nav {
     display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 28;
     background: color-mix(in srgb, var(--surface) 92%, transparent);
@@ -490,6 +535,35 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .month-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .app .month-grid > div { display: grid; gap: 3px; padding: 12px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--line); }
 .app .month-grid strong { font-size: 1.15rem; letter-spacing: -0.02em; }
+
+/* Pattern charts */
+.app .pchart { margin: 14px 0 4px; }
+.app .pchart svg { display: block; overflow: visible; }
+.app .pchart svg:not(.pchart-svg-trend) { max-height: 260px; }
+.app .pchart-svg-trend { height: 160px; }
+@media (min-width: 640px) { .app .pchart-svg-trend { height: 200px; } }
+.app .pchart-area { fill: var(--lime); opacity: 0.28; }
+.app .pchart-line { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.app .pchart-proj { stroke: var(--muted); stroke-width: 2; stroke-dasharray: 5 5; }
+.app .pchart-ref { stroke: var(--line-strong); stroke-width: 1.5; stroke-dasharray: 2 4; }
+.app .pchart-dot { fill: var(--ink); stroke: var(--surface); stroke-width: 2; }
+.app .pchart-base { stroke: var(--line); }
+.app .pchart-axis, .app .pchart-label { fill: var(--muted); font-size: 10px; }
+.app .pchart-bar { fill: var(--muted); opacity: 0.35; }
+.app .pchart-bar-active { fill: var(--ink); opacity: 1; }
+.app .pchart-avg { fill: none; stroke: var(--coral); stroke-width: 2; stroke-linejoin: round; }
+.app .pchart-scrub { touch-action: pan-y; cursor: pointer; border-radius: 12px; }
+.app .pchart-scrub:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+.app .pchart figcaption { margin-top: 8px; color: var(--muted); font-size: 0.88rem; }
+.app .pchart figcaption strong { color: var(--ink); }
+.app .pchart-readout { margin: 0 0 6px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.app .try-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: try; }
+.app .try-item { counter-increment: try; display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: 12px; padding: 14px; border-radius: 16px; background: var(--surface-2); border: 1px solid var(--line); }
+.app .try-item::before { content: counter(try); display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--lime); color: var(--accent-ink); font-weight: 750; font-size: 0.85rem; }
+.app .try-copy h3 { margin: 0 0 4px; font-size: 1rem; }
+.app .try-copy p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.app .try-save { align-self: center; white-space: nowrap; padding: 6px 10px; border-radius: 999px; background: color-mix(in srgb, var(--good) 16%, var(--surface)); color: var(--ink); font-weight: 700; font-size: 0.85rem; }
+@media (max-width: 480px) { .app .try-item { grid-template-columns: auto 1fr; } .app .try-save { grid-column: 2; justify-self: start; } }
 .app .month-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; font-size: 0.85rem; }
 
 .app .heat-legend { display: flex; align-items: center; gap: 5px; font-size: 0.72rem; color: var(--faint); }
@@ -538,6 +612,21 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .weekday-track { width: 100%; height: 100%; border-radius: 9px; background: var(--surface-2); display: flex; align-items: flex-end; overflow: hidden; }
 .app .weekday-track > span { display: block; width: 100%; border-radius: 9px; background: linear-gradient(180deg, var(--lime), color-mix(in srgb, var(--lime) 60%, var(--accent))); transition: height 500ms cubic-bezier(.2,.7,.2,1); }
 .app .weekday-label { font-size: 0.7rem; font-weight: 650; color: var(--muted); }
+
+.app .movers-title { margin: 4px 0 10px; font-size: 0.95rem; }
+.app .movers { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 8px; }
+.app .mover { display: grid; grid-template-columns: minmax(90px, 1fr) 2fr auto; align-items: center; gap: 10px; font-size: 0.88rem; }
+.app .mover-name { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app .mover-track { position: relative; height: 10px; border-radius: 999px; background: var(--surface-2); display: flex; }
+.app .mover-track::before { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--line-strong); }
+.app .mover-bar { display: block; height: 100%; border-radius: 999px; }
+.app .mover.is-up .mover-bar { margin-left: 50%; background: var(--coral); }
+.app .mover.is-down .mover-bar { margin-left: auto; margin-right: 50%; background: var(--good); }
+.app .mover-value { font-weight: 650; white-space: nowrap; }
+.app .mover.is-up .mover-value { color: var(--coral); }
+.app .mover.is-down .mover-value { color: var(--good); }
+.app .weekday-bar.is-peak .weekday-track span { background: var(--coral); }
+.app .weekday-bar.is-peak .weekday-label { color: var(--ink); font-weight: 750; }
 
 .app .story-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .app .story { position: relative; border-radius: 18px; padding: 16px; background: var(--surface-2); border: 1px solid var(--line); }
@@ -2085,12 +2174,18 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
 .app .sky-bd-near .b5 { width: 300px; right: -4%; top: 72%; --t: 110s; --d: 110px; }
 .app .sky-bd-near .b6 { width: 280px; left: 38%; top: 86%; --t: 130s; --d: 160px; }
 @media (prefers-color-scheme: dark) {
-  .app .sky-backdrop {
+  :root:not([data-theme="light"]) .app .sky-backdrop {
     background:
       radial-gradient(1px 1px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 46% 9%, #fff, transparent),
       radial-gradient(1.4px 1.4px at 80% 22%, #fff, transparent), radial-gradient(1px 1px at 66% 40%, #fff, transparent),
       linear-gradient(180deg, var(--sky-top), var(--sky-mid) 45%, var(--sky-low));
   }
+}
+:root[data-theme="dark"] .app .sky-backdrop {
+  background:
+    radial-gradient(1px 1px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 46% 9%, #fff, transparent),
+    radial-gradient(1.4px 1.4px at 80% 22%, #fff, transparent), radial-gradient(1px 1px at 66% 40%, #fff, transparent),
+    linear-gradient(180deg, var(--sky-top), var(--sky-mid) 45%, var(--sky-low));
 }
 
 /* Cards are white cloud-glass over the sky: nearly opaque, with a lit top
@@ -2098,8 +2193,9 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
    would be redrawn on every frame. */
 .app .card { background: linear-gradient(180deg, rgb(255 255 255 / 96%), rgb(255 255 255 / 90%)); border-color: rgb(255 255 255 / 90%); box-shadow: inset 0 1px 0 #fff, var(--shadow); }
 @media (prefers-color-scheme: dark) {
-  .app .card { background: linear-gradient(180deg, rgb(27 38 64 / 94%), rgb(19 27 46 / 92%)); border-color: rgb(255 255 255 / 6%); box-shadow: var(--shadow); }
+  :root:not([data-theme="light"]) .app .card { background: linear-gradient(180deg, rgb(27 38 64 / 94%), rgb(19 27 46 / 92%)); border-color: rgb(255 255 255 / 6%); box-shadow: var(--shadow); }
 }
+:root[data-theme="dark"] .app .card { background: linear-gradient(180deg, rgb(27 38 64 / 94%), rgb(19 27 46 / 92%)); border-color: rgb(255 255 255 / 6%); box-shadow: var(--shadow); }
 
 /* The #account anchor above the sign-in sky scrolls clear of the sticky header. */
 .app .sky-anchor { display: block; height: 0; scroll-margin-top: 88px; }

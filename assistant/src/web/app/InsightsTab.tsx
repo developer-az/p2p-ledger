@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { categoryMeta } from './categories.js';
-import { money, percent } from './format.js';
+import { money } from './format.js';
 import { milestones, nextMilestone } from './milestones.js';
 import { moneyPlan, moneyStory, monthsToClear } from './money-plan.js';
+import { CategoryMoversChart, DailyTrendChart, MonthPaceChart } from './pattern-charts.js';
+import { buildActions, habitPeak } from './pattern-insights.js';
 import { Icon, ProgressRing, Skeleton } from './ui.js';
 import type { WalletData } from './data.js';
 
@@ -25,15 +27,18 @@ export function InsightsTab({
 }) {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [weeklyPayment, setWeeklyPayment] = useState(5_000);
-  if (!data) return <Skeleton height={420} />;
+  const plan = data ? moneyPlan(data.view) : null;
+  const patterns = plan?.patterns ?? null;
+  const actions = useMemo(() => (patterns ? buildActions(patterns) : []), [patterns]);
+  if (!data || !plan) return <Skeleton height={420} />;
 
-  const plan = moneyPlan(data.view);
-  const patterns = plan.patterns;
   const stories = moneyStory(plan);
   const badges = milestones(plan, data.view.summary);
   const next = nextMilestone(badges);
   const hasLogs = (patterns?.categories.length ?? 0) > 0;
   const selected = patterns?.days.find((d) => d.date === selectedDay) ?? null;
+  const peak = patterns ? habitPeak(patterns) : null;
+  const heatMax = Math.max(0, ...(patterns?.days ?? []).map((d) => d.spendMinor));
 
   return (
     <div className="patterns">
@@ -106,6 +111,9 @@ export function InsightsTab({
                 <div><span className="stat-label">Logged in</span><strong className="num">{money(patterns?.month.incomeMinor ?? 0)}</strong></div>
                 <div><span className="stat-label">Heading toward</span><strong className="num">{money(patterns?.month.projectedSpendMinor ?? 0)}</strong></div>
               </div>
+              {patterns ? (
+                <MonthPaceChart days={patterns.days} month={patterns.month} previous30Minor={patterns.totals.spendPrev30dMinor} />
+              ) : null}
               <div className="month-line">
                 <span className="muted">Day {patterns?.month.dayOfMonth} of {patterns?.month.daysInMonth}</span>
                 <span className="pill">{patterns?.totals.activeDays30d ?? 0} active days</span>
@@ -119,7 +127,7 @@ export function InsightsTab({
                 <p className="eyebrow">Eight weeks</p>
                 <h2 id="heat-title">A calendar of your spending</h2>
               </div>
-              <div className="heat-legend" aria-hidden="true"><span>less</span><i /><i /><i /><i /><span>more</span></div>
+              <div className="heat-legend" aria-hidden="true"><span>$0</span><i /><i /><i /><i /><span>{money(heatMax)}</span></div>
             </div>
             <div className="heat-body">
               <Heatmap days={patterns?.days ?? []} onSelect={setSelectedDay} selected={selectedDay} />
@@ -152,12 +160,22 @@ export function InsightsTab({
             </div>
           </section>
 
+          {patterns ? (
+            <section className="card trend-card" aria-labelledby="trend-title">
+              <div className="card-head">
+                <div><p className="eyebrow">Last 30 days</p><h2 id="trend-title">Day by day</h2></div>
+              </div>
+              <DailyTrendChart days={patterns.days} />
+            </section>
+          ) : null}
+
           <div className="patterns-mid">
             <section className="card cat-card" aria-labelledby="cat-title">
               <div className="card-head">
                 <div><p className="eyebrow">Last 30 days</p><h2 id="cat-title">Where it went</h2></div>
               </div>
-              <CategoryDonut categories={patterns?.categories ?? []} total={patterns?.totals.spend30dMinor ?? 0} />
+              <h3 className="movers-title">What changed</h3>
+              <CategoryMoversChart categories={patterns?.categories ?? []} />
               <ul className="cat-list">
                 {(patterns?.categories ?? []).slice(0, 6).map((c) => (
                   <li key={c.category}>
@@ -179,10 +197,30 @@ export function InsightsTab({
               <div className="card-head">
                 <div><p className="eyebrow">Eight-week average</p><h2 id="weekday-title">Your week has a shape</h2></div>
               </div>
-              <WeekdayBars weekdays={patterns?.weekdays ?? []} />
-              <p className="hint">Bars show average logged spend per day of the week.</p>
+              <WeekdayBars weekdays={patterns?.weekdays ?? []} peakWeekday={peak ? peak.weekday : null} />
+              <p className="hint">
+                {peak
+                  ? `${peak.label}s run ${peak.multiple}x your other days (${money(peak.averageMinor)} vs ${money(peak.othersAverageMinor)}).`
+                  : 'Bars show average logged spend per day of the week.'}
+              </p>
             </section>
           </div>
+
+          {actions.length > 0 ? (
+            <section className="card try-card" aria-labelledby="try-title">
+              <div className="card-head">
+                <div><p className="eyebrow">Based on your last 30 days</p><h2 id="try-title">Try this week</h2></div>
+              </div>
+              <ol className="try-list">
+                {actions.map((a) => (
+                  <li className="try-item" key={a.id}>
+                    <div className="try-copy"><h3>{a.title}</h3><p>{a.detail}</p></div>
+                    <span className="try-save num">Save ~{money(a.savingsMinor)}</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ) : null}
 
           <section className="card story-card" aria-labelledby="story-title">
             <div className="card-head">
@@ -291,35 +329,13 @@ function Heatmap({ days, onSelect, selected }: {
   );
 }
 
-function CategoryDonut({ categories, total }: { categories: { category: string; totalMinor: number; sharePct: number }[]; total: number }) {
-  let cursor = 0;
-  const stops = categories.map((c) => {
-    const start = cursor;
-    cursor += c.sharePct;
-    return `${categoryMeta(c.category).color} ${start}% ${cursor}%`;
-  });
-  if (cursor < 100) stops.push(`var(--surface-2) ${cursor}% 100%`);
-  const top = categories[0];
-  return (
-    <div className="donut-wrap">
-      <div className="donut donut-lg" style={{ background: `conic-gradient(${stops.join(', ')})` }} role="img" aria-label={`${top ? `${categoryMeta(top.category).label} is ${top.sharePct}% of logged spend` : 'No logged spend'}`}>
-        <span>{money(total)}</span>
-      </div>
-      <div className="donut-caption">
-        <strong>{top ? categoryMeta(top.category).label : 'Nothing logged'}</strong>
-        <span>{top ? `${percent(top.totalMinor, total)}% of the last 30 days` : 'Log a spend to begin'}</span>
-      </div>
-    </div>
-  );
-}
-
-function WeekdayBars({ weekdays }: { weekdays: { weekday: number; label: string; averageMinor: number }[] }) {
+function WeekdayBars({ weekdays, peakWeekday }: { weekdays: { weekday: number; label: string; averageMinor: number }[]; peakWeekday: number | null }) {
   const ordered = WEEKDAY_ORDER.map((day) => weekdays.find((w) => w.weekday === day)).filter((w): w is { weekday: number; label: string; averageMinor: number } => Boolean(w));
   const max = Math.max(1, ...ordered.map((d) => d.averageMinor));
   return (
     <div className="weekday-bars">
       {ordered.map((day) => (
-        <div key={day.weekday} className="weekday-bar">
+        <div key={day.weekday} className={`weekday-bar${day.weekday === peakWeekday ? ' is-peak' : ''}`}>
           <span className="weekday-value">{day.averageMinor > 0 ? money(day.averageMinor) : '—'}</span>
           <span className="weekday-track"><span style={{ height: `${Math.max(4, (day.averageMinor / max) * 100)}%` }} /></span>
           <span className="weekday-label">{day.label.slice(0, 3)}</span>

@@ -19,9 +19,41 @@ export function normalizeOpenRouterModel(model: string): string {
   return OPENROUTER_MODEL_ALIASES[trimmed] ?? trimmed;
 }
 
+/**
+ * Tried in order when the configured slug 404s (retired model, no endpoint under our data policy).
+ * Override with OPENROUTER_FALLBACK_MODELS (comma-separated slugs).
+ */
+export const OPENROUTER_FALLBACK_MODELS: readonly string[] = [
+  'google/gemini-2.5-flash-lite',
+  'google/gemini-2.5-flash',
+  'openai/gpt-4o-mini',
+  'meta-llama/llama-3.3-70b-instruct',
+];
+
+/** Walking more than the configured slug plus two fallbacks only multiplies quota use. */
+export const MAX_OPENROUTER_CANDIDATES = 3;
+
+/** Configured slug first, then the env list (or the built-in defaults), de-duplicated, capped at 3. */
+export function openRouterModelCandidates(
+  configured: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  const fromEnv = (env.OPENROUTER_FALLBACK_MODELS ?? '')
+    .split(',')
+    .map((slug) => slug.trim())
+    .filter((slug) => slug.length > 0);
+  const fallbacks = fromEnv.length > 0 ? fromEnv : OPENROUTER_FALLBACK_MODELS;
+
+  const candidates: string[] = [];
+  for (const slug of [configured, ...fallbacks]) {
+    const normalized = normalizeOpenRouterModel(slug);
+    if (normalized && !candidates.includes(normalized)) candidates.push(normalized);
+  }
+  return candidates.slice(0, MAX_OPENROUTER_CANDIDATES);
+}
+
 /** When the configured slug 404s, try this once before failing. */
 export function openRouterFallbackModel(configured: string): string {
-  const normalized = normalizeOpenRouterModel(configured);
-  if (normalized === DEFAULT_OPENROUTER_MODEL) return DEFAULT_OPENROUTER_MODEL;
-  return DEFAULT_OPENROUTER_MODEL;
+  const candidates = openRouterModelCandidates(configured);
+  return candidates[1] ?? candidates[0] ?? DEFAULT_OPENROUTER_MODEL;
 }

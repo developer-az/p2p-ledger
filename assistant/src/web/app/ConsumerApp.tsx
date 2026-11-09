@@ -22,7 +22,10 @@ import { FloatingDock, useSwipeNav } from './dock.js';
 import { AppPreloader } from './Preloader.js';
 import { Welcome } from './Welcome.js';
 import { SkyBackdrop } from './AuthSky.js';
-import { Pip } from './Pip.js';
+import { Mascot } from './Mascot.js';
+import { READINESS_POLL_CAP_MS, readinessPollDelays, runReadinessPoll } from './readiness-poll.js';
+import { SiteFooter } from './SiteFooter.js';
+import { applyTheme, nextTheme, readTheme, saveTheme, themeLabel, type ThemePref } from './theme.js';
 
 /** Animation features load in their own chunk; `strict` rejects a stray full `motion.*` import. */
 const loadMotion = () => import('./motion-features.js').then((mod) => mod.default);
@@ -78,24 +81,31 @@ export function ConsumerApp() {
   const [session, setSession] = useState<Session | null>(() => loadSession());
   const [bootReady, setBootReady] = useState(false);
 
-  // A sleeping ledger can fail the initial readiness probe. Refresh the
-  // capabilities after it wakes so the form does not stay disabled.
+  // A sleeping ledger can fail the initial readiness probe. Poll the capabilities
+  // after it wakes so the form does not stay disabled until a reload. Only worth
+  // polling when accounts are persistent: a deployment without them never opens
+  // sign-up, no matter how long we wait.
   useEffect(() => {
-    if (!boot?.identity || boot.identity.signupAvailable) return;
-    let cancelled = false;
-    const timers = [5_000, 20_000, 45_000].map((delay) => window.setTimeout(() => {
-      void api.bootstrap().then((next) => {
-        if (!cancelled) setBoot(next);
-      }).catch(() => undefined);
-    }, delay));
-    return () => {
-      cancelled = true;
-      timers.forEach(window.clearTimeout);
-    };
-  }, [boot?.identity?.signupAvailable]);
+    if (!boot?.identity?.persistent || boot.identity.signupAvailable) return;
+    // Stops after ~5 minutes of wall clock (not five minutes of gaps), bounds each
+    // probe, and re-arms instead of probing while the tab is hidden.
+    return runReadinessPoll({
+      probe: (signal) => api.bootstrap({ signal }).then((next) => ({
+        ready: next.identity?.signupAvailable === true,
+        boot: next,
+      })),
+      onResult: (result) => setBoot(result.boot),
+      delays: readinessPollDelays(),
+      capMs: READINESS_POLL_CAP_MS,
+      isHidden: () => document.visibilityState === 'hidden',
+    });
+  }, [boot?.identity?.persistent, boot?.identity?.signupAvailable]);
 
   useEffect(() => {
     document.documentElement.classList.add('settle-smooth-scroll');
+    // Start the sleeping Render ledger booting while the landing page renders.
+    // Not awaited: a wake takes 30-60s and nothing here may block the preloader.
+    void api.wake();
     const minSplash = new Promise<void>((resolve) => { window.setTimeout(resolve, 720); });
     void Promise.all([
       api.bootstrap().then(setBoot).catch((e: Error) => setBootError(e.message)),
@@ -144,19 +154,7 @@ export function ConsumerApp() {
               </main>
             </>
           )}
-          <footer className="footer">
-            <span>
-              {session?.demo
-                ? 'Sample household. This is not your account.'
-                : session?.user
-                  ? `Signed in as ${session.user.email}`
-                  : 'Create an account to keep a wallet of your own.'}
-            </span>
-            {session?.user && boot?.identity?.googleAvailable ? <a href="/account-access">Account access</a> : null}
-            <a href="/ops">Console</a>
-            <a href="/privacy">Privacy</a>
-            <a href="/terms">Terms</a>
-          </footer>
+          <SiteFooter variant={session && boot ? 'compact' : 'full'} boot={boot} session={session} />
         </div>
       </ToastProvider>
     </LazyMotion>
@@ -176,7 +174,7 @@ function Brand({ onHome }: { onHome?: () => void }) {
         onHome();
       } : undefined}
     >
-      <Pip size={30} track={false} idle={false} mood="happy" />
+      <Mascot size={28} track={false} idle={false} mood="happy" />
       <span className="brand-word">settle</span>
     </a>
   );
@@ -212,7 +210,13 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   const [askSeed, setAskSeed] = useState<string | null>(null);
   const [burst, setBurst] = useState(0);
   const [menu, setMenu] = useState(false);
+  const [theme, setTheme] = useState<ThemePref>(() => readTheme());
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Re-apply the saved theme if the pre-paint script did not run.
+    applyTheme(theme);
+  }, []);
 
   useEffect(() => {
     if (!menu) return;
@@ -362,6 +366,22 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
           <span className="spacer" />
           <div className="top-actions">
             {refreshing ? <span className="sync-pill" role="status" aria-label="Updating your wallet"><span className="sync-dot" /></span> : null}
+            <button type="button" className="theme-toggle" aria-label={themeLabel(theme)} title={themeLabel(theme)} onClick={() => {
+              const next = nextTheme(theme);
+              saveTheme(next);
+              applyTheme(next);
+              setTheme(next);
+            }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                {theme === 'light' ? (
+                  <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></>
+                ) : theme === 'dark' ? (
+                  <path d="M20.5 14.1A8.5 8.5 0 0 1 9.9 3.5 8.5 8.5 0 1 0 20.5 14.1Z" />
+                ) : (
+                  <><circle cx="12" cy="12" r="9" /><path d="M12 3a9 9 0 0 0 0 18Z" fill="currentColor" stroke="none" /></>
+                )}
+              </svg>
+            </button>
             <div className="menu-wrap" ref={menuRef}>
               <button type="button" className="wallet-chip" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
                 <Avatar owner={me.owner} small />{who}

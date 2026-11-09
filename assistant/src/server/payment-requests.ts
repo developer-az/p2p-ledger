@@ -35,6 +35,11 @@ export interface PaymentRequest {
 }
 
 export interface NewPaymentRequest {
+  /**
+   * Optional caller-supplied id. Seeded practice rows use fixed ids so every
+   * serverless instance agrees on the same request key; live asks omit it.
+   */
+  id?: string;
   requesterAccountId: string;
   payerAccountId: string;
   amountMinor: number;
@@ -67,7 +72,7 @@ export class InMemoryPaymentRequestStore implements PaymentRequestStore {
 
   async create(input: NewPaymentRequest, now = new Date()): Promise<PaymentRequest> {
     const row: PaymentRequest = {
-      id: randomUUID(),
+      id: input.id ?? randomUUID(),
       requesterAccountId: input.requesterAccountId,
       payerAccountId: input.payerAccountId,
       amountMinor: input.amountMinor,

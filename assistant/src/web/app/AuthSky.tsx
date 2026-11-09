@@ -1,12 +1,12 @@
 import { forwardRef, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { Pip } from './Pip.js';
+import { Mascot } from './Mascot.js';
 
 /**
  * The sign-in and create-account scene: a morning sky above the clouds. Three
  * banks of cloud drift at different speeds (far ones slower), the sun sits
- * behind the card, and Pip floats on a cloud of its own beside the form.
+ * behind the card, and Settle floats on a cloud of its own beside the form.
  *
- * Pip follows the form: it reads along the field you are typing in, covers
+ * Settle follows the form: it reads along the field you are typing in, covers
  * its eyes while you type a password, and peeks if you choose to show it.
  * Everything here is decoration around `children` (the form), so the form
  * keeps its own logic and labels.
@@ -93,10 +93,10 @@ export const AuthSky = forwardRef<HTMLElement, { id?: string; labelledBy: string
         </div>
 
         <div className="sky-stage">
-          <div className="sky-pip" aria-hidden="true">
-            <div className="sky-pip-float">
-              <Pip size={118} mood="happy" greet lookAt={lookAt} shy={shy} peek={peek} cheer={cheer} />
-              <Cloud className="sky-pip-cloud" />
+          <div className="sky-mascot" aria-hidden="true">
+            <div className="sky-mascot-float">
+              <Mascot size={118} mood="happy" greet lookAt={lookAt} shy={shy} peek={peek} cheer={cheer} />
+              <Cloud className="sky-mascot-cloud" />
             </div>
           </div>
           <div ref={formRef} className="sky-card">{children}</div>

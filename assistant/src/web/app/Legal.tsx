@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import './app.css';
+import { SiteFooter } from './SiteFooter.js';
 
 export function Legal({ page }: { page: 'privacy' | 'terms' | 'google-signin' }) {
   const [accepted, setAccepted] = useState(false);
@@ -37,5 +38,7 @@ export function Legal({ page }: { page: 'privacy' | 'terms' | 'google-signin' })
       </>}
     </>}
     <p><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/account-access">Account access and data requests</a></p>
-  </main></div>;
+  </main>
+  <SiteFooter variant="full" boot={null} session={null} />
+</div>;
 }

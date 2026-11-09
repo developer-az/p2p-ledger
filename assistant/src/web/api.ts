@@ -343,7 +343,8 @@ export interface PaymentRequestView {
 
 export interface PayRequestResult {
   request: PaymentRequestView;
-  transfer: {
+  /** Absent when a repeated tap on an already-paid request is a no-op. */
+  transfer?: {
     id: string;
     status: 'COMPLETED' | 'REJECTED';
     rejectionReason: string | null;
@@ -408,6 +409,39 @@ function idempotencyKey(): string {
   return crypto.randomUUID();
 }
 
+/**
+ * Backoff for a waking ledger. A Render free-tier wake takes 30-60s, so the
+ * client rides it out instead of showing an error on the first 503. Sum is
+ * 39.5s, inside the minute a cold start needs.
+ */
+export function wakeRetryDelays(): number[] {
+  return [1_500, 3_000, 5_000, 8_000, 10_000, 12_000];
+}
+
+/**
+ * True when repeating the request cannot double-apply a side effect: reads
+ * (GET/HEAD) always, writes only when the caller pinned an Idempotency-Key.
+ * A 504 on a write may mean the write landed, so an unkeyed POST must not be
+ * silently re-sent (register, login, password reset).
+ */
+export function isRetrySafe(init?: RequestInit): boolean {
+  return isRetrySafeHeaders(init?.method ?? 'GET', new Headers(init?.headers));
+}
+
+/** The decision itself, taken from the exact method and header set that is sent. */
+function isRetrySafeHeaders(method: string, headers: Headers): boolean {
+  const verb = method.toUpperCase();
+  if (verb === 'GET' || verb === 'HEAD') return true;
+  /* Same normalization call() sends with, so detection and sending agree for
+     plain objects, tuple arrays and Headers instances alike. */
+  return headers.has('Idempotency-Key');
+}
+
+/** Swappable so tests do not actually wait out the backoff. */
+export const wakeTiming = {
+  sleep: (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms); }),
+};
+
 /** Parse "$12.50" or "12.5" into minor units. */
 export function dollarsToMinor(input: string): number | null {
   const cleaned = input.trim().replace(/[$,\s]/g, '');
@@ -417,16 +451,44 @@ export function dollarsToMinor(input: string): number | null {
   return Math.round(n * 100);
 }
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(path, { ...init, cache: 'no-store', headers: { 'Content-Type': 'application/json', ...init?.headers } });
-  } catch {
-    throw new Error(API_DOWN);
+export async function call<T>(path: string, init?: RequestInit): Promise<T> {
+  const delays = wakeRetryDelays();
+  /* Built once, before the loop: spreading a Headers instance or a tuple array
+     into an object would drop its entries, losing the Idempotency-Key that
+     isRetrySafe() saw. Every attempt sends this same header set. */
+  const headers = new Headers(init?.headers);
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  /* Decided once from the outgoing snapshot: the caller's init.headers is theirs
+     to mutate, and a key added mid-flight never reached this request. */
+  const retrySafe = isRetrySafeHeaders(init?.method ?? 'GET', headers);
+  for (let attempt = 0; ; attempt += 1) {
+    let res: Response;
+    try {
+      res = await fetch(path, { ...init, cache: 'no-store', headers });
+    } catch (error) {
+      /* An aborted caller (a cancelled readiness probe) must see its own abort,
+         not a retry: the request was dropped on purpose. */
+      if (isAbortError(error)) throw error;
+      throw new Error(API_DOWN);
+    }
+    const body = await res.json().catch(() => ({})) as { error?: string; code?: string };
+    if (res.ok) return body as T;
+    /* Only a waking ledger is retried, and only when replaying the request is
+       safe. Same init on every attempt, so an Idempotency-Key sent by the
+       caller still covers the retried write. */
+    const waking = res.status === 503 && /waking up/i.test(body.error ?? '') && retrySafe;
+    const delay = delays[attempt];
+    if (waking && delay !== undefined && !init?.signal?.aborted) {
+      await wakeTiming.sleep(delay);
+      continue;
+    }
+    throw new Error(requestError(res.status, path, body));
   }
-  const body = await res.json().catch(() => ({})) as { error?: string; code?: string };
-  if (!res.ok) throw new Error(requestError(res.status, path, body));
-  return body as T;
+}
+
+/** fetch rejects with a DOMException named AbortError when its signal fires. */
+function isAbortError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError';
 }
 
 export interface StoppedPayment {
@@ -438,7 +500,11 @@ export interface StoppedPayment {
 }
 
 export const api = {
-  bootstrap: () => call<BootstrapResponse>('/api/bootstrap'),
+  /** Fires the ledger awake. Fire-and-forget: a cold start is not an error. */
+  wake: () => call<{ awake: boolean }>('/api/wake').catch(() => ({ awake: false })),
+  /** Pass the caller's signal through so a cancelled readiness probe stops its fetch. */
+  bootstrap: (opts?: { signal?: AbortSignal }) =>
+    call<BootstrapResponse>('/api/bootstrap', opts?.signal ? { signal: opts.signal } : undefined),
   authSession: () => call<{ user: AuthUser | null; account?: AccountRef }>('/api/auth/session'),
   register: (body: { email: string; password: string; displayName: string }) =>
     call<AuthResult>('/api/auth/register', { method: 'POST', body: JSON.stringify(body) }),
@@ -592,7 +658,7 @@ export const api = {
       toolCalls: ToolCall[];
       provider: string;
       model: string;
-      route?: 'gemini' | 'anthropic' | 'ledger-fallback';
+      route?: 'gemini' | 'openrouter' | 'anthropic' | 'ledger-fallback';
       fallbackReason?: string;
       /** True when the answer came from the LLM guard cache (no model call). */
       cached?: boolean;

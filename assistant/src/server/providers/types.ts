@@ -19,6 +19,8 @@ export interface AgentRequest {
   tools: ToolSpec[];
   execute: (name: string, args: unknown) => Promise<unknown>;
   maxSteps: number;
+  /** Absolute deadline for the entire assistant call, including retries and tool turns. */
+  deadlineAt?: number;
 }
 
 export interface AgentResult {
@@ -37,6 +39,22 @@ export interface LlmProvider {
   readonly name: string;
   readonly model: string;
   run(request: AgentRequest): Promise<AgentResult>;
+}
+
+export function deadlineError(): Error & { status: number } {
+  return Object.assign(new Error('Assistant deadline exceeded'), { status: 504 });
+}
+
+/** Leave one second for the caller to handle the response or move to its fallback. */
+export function attemptTimeoutMs(deadlineAt: number | undefined, normalMs: number): number {
+  if (deadlineAt === undefined) return normalMs;
+  const remaining = deadlineAt - Date.now() - 1_000;
+  if (remaining <= 0) throw deadlineError();
+  return Math.min(normalMs, remaining);
+}
+
+export function canRetryAfter(deadlineAt: number | undefined, delayMs: number): boolean {
+  return deadlineAt === undefined || deadlineAt - Date.now() > delayMs + 2_000;
 }
 
 export async function timedExecute(req: AgentRequest, calls: ToolCallRecord[], tool: string, args: unknown) {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, type BootstrapResponse, type ToolCall, type Turn } from '../api.js';
 import { useDebouncedCallback, useOnceGuard } from './debounce.js';
 import { Icon } from './ui.js';
-import { Pip } from './Pip.js';
+import { Mascot } from './Mascot.js';
 
 const TOOL_WORDS: Record<string, string> = {
   get_account_overview: 'your balance',
@@ -15,6 +15,7 @@ const TOOL_WORDS: Record<string, string> = {
   list_spends: 'what you logged',
   summarize_spending: 'your spending summary',
   weekly_spending_story: 'this week against last week',
+  get_weekly_pace: 'your weekly pace',
 };
 
 const SUGGESTIONS = [
@@ -44,7 +45,7 @@ export function AskTab({
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** Bumped when an answer lands so Pip hops once. */
+  /** Bumped when an answer lands so Settle hops once. */
   const [answered, setAnswered] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -93,7 +94,7 @@ export function AskTab({
           checked,
           note:
             r.route === 'ledger-fallback'
-              ? 'Answered straight from your records.'
+              ? 'The AI model was unavailable, so this answer came straight from your records.'
               : r.cached
                 ? 'Repeated question — served from the guard cache, no model call.'
                 : undefined,
@@ -112,7 +113,7 @@ export function AskTab({
   return (
     <div className="ask-page">
       <header className="patterns-head ask-head">
-        <Pip size={64} mood="calm" cheer={answered} className="ask-pip" />
+        <Mascot size={64} mood="calm" cheer={answered} className="ask-mascot" />
         <div>
           <p className="eyebrow">Ask</p>
           <h1>A conversation with your records.</h1>
@@ -144,7 +145,11 @@ export function AskTab({
           ) : null}
           {messages.map((m, i) => (
             <div key={i} className={`chat-turn chat-${m.role}`}>
-              {m.role === 'assistant' ? <span className="chat-avatar" aria-hidden="true">✦</span> : null}
+              {m.role === 'assistant' ? (
+                <span className="chat-avatar" aria-hidden="true">
+                  <Mascot still size={30} mood="calm" />
+                </span>
+              ) : null}
               <div>
                 <div className={`bubble ${m.role === 'user' ? 'bubble-user' : 'bubble-ai'}`}>{m.text}</div>
                 {m.role === 'assistant' && ((m.checked && m.checked.length > 0) || m.note) ? (
@@ -157,9 +162,9 @@ export function AskTab({
           ))}
           {busy ? (
             <div className="chat-status" role="status">
-              <span className="marque marque-sm" aria-hidden="true">S</span>
+              <Mascot size={22} track={false} idle={false} mood="happy" />
               <span className="chat-status-bars" aria-hidden="true"><i /><i /><i /></span>
-              <span>The archive is reading your records…</span>
+              <span>Settle is reading your records…</span>
             </div>
           ) : null}
           <div ref={endRef} />

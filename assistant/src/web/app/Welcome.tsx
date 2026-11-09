@@ -1,17 +1,17 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { m, useReducedMotion } from 'motion/react';
 import { api, type AccountRef, type BootstrapResponse } from '../api.js';
 import { money } from './format.js';
 import type { Session } from './session.js';
 import { CountUp, EASE_OUT, InView, RevealWords, TiltCard } from './motion-kit.js';
-import { Pip } from './Pip.js';
+import { Mascot } from './Mascot.js';
 import { GoogleButton } from './GoogleButton.js';
 import { AuthSky, Cloud } from './AuthSky.js';
 import { Icon, useToast } from './ui.js';
 
 type AuthMode = 'signin' | 'create';
 
-const TAPE = ['Two taps to log', 'Sign in and it stays', 'Patterns from your own history', 'Ask in plain English', 'Real double-entry ledger', 'Pip is watching'];
+const TAPE = ['Two taps to log', 'Sign in and it stays', 'Patterns from your own history', 'Ask in plain English', 'Real double-entry ledger', 'Settle keeps watch'];
 
 /** Deterministic 8×7 heat pattern for the illustration, so it never flickers between renders. */
 const HEAT = Array.from({ length: 56 }, (_, i) => ((i * 37 + (i % 7) * 11) % 9) % 5);
@@ -40,6 +40,13 @@ export function Welcome({
   const [resetSent, setResetSent] = useState<string | null>(null);
   const [demoError, setDemoError] = useState<string | null>(null);
   const accountRef = useRef<HTMLElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  const howRef = useRef<HTMLElement>(null);
+  const askRef = useRef<HTMLDivElement>(null);
+  const trustRef = useRef<HTMLElement>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const toast = useToast();
   const reduce = useReducedMotion();
   const live = boot?.live ?? false;
@@ -47,11 +54,75 @@ export function Welcome({
   const accountAvailable = mode === 'create' ? boot?.identity?.signupAvailable !== false : boot?.identity?.signinAvailable !== false;
   const resetAvailable = boot?.identity?.passwordResetAvailable !== false;
 
-  function focusAuth(next: AuthMode) {
+  function focusAuth(next: AuthMode, focusField = false) {
     setMode(next);
     setError(null);
     accountRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    if (!focusField) return;
+    // The field for the new mode may not be mounted yet; wait for the render.
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const id = next === 'create' && !forgot ? 'account-name' : 'account-email';
+        document.getElementById(id)?.focus({ preventScroll: true });
+      });
+    });
   }
+
+  /**
+   * Menu links close the panel, scroll to the section and put focus there.
+   * Without this, focus stayed on the link inside the now-hidden panel.
+   */
+  function goToSection(id: 'how' | 'ask' | 'trust') {
+    setMenuOpen(false);
+    const target = { how: howRef, ask: askRef, trust: trustRef }[id].current;
+    if (!target) return;
+    target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    target.focus({ preventScroll: true });
+    window.history.replaceState(null, '', `#${id}`);
+  }
+
+  // The header starts as bare sky and turns to glass once the page moves.
+  // rAF-throttled, passive, and it only writes when the boolean flips.
+  useEffect(() => {
+    let frame = 0;
+    const read = () => {
+      frame = 0;
+      setScrolled(window.scrollY > 12);
+    };
+    const onScroll = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(read);
+    };
+    read();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  // Escape and outside clicks close the mobile menu. Pointer events, not
+  // clicks, so the panel closes even when the press lands on a non-focusable
+  // area of the page.
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setMenuOpen(false);
+      menuBtnRef.current?.focus();
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (target && headerRef.current?.contains(target)) return;
+      setMenuOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [menuOpen]);
 
   async function tryDemo() {
     if (!boot) return;
@@ -150,25 +221,74 @@ export function Welcome({
 
   return (
     <div className="welcome">
+      {/* Sits above the hero rather than inside it, so it can stick: it rests
+          as bare sky and turns to glass once the page scrolls. */}
+      <header className={`w-header${scrolled ? ' is-scrolled' : ''}`} ref={headerRef}>
+        <div className="w-header-inner">
+          <a className="w-logo" href="/" aria-label="Settle home">
+            <Mascot size={30} track={false} idle={false} mood="happy" />
+            <span>settle</span>
+          </a>
+          <nav className="w-nav-links" aria-label="Settle">
+            <a href="#how">How it works</a>
+            <a href="#ask">Ask</a>
+            <a href="#trust">Security</a>
+          </nav>
+          <div className="w-header-actions">
+            <button type="button" className="w-nav-signin" onClick={() => focusAuth('signin')}>Sign in</button>
+            <button type="button" className="w-nav-cta w-nav-cta-volt" onClick={() => focusAuth('create')} disabled={!boot || busy !== null}>
+              Create account
+            </button>
+            <button
+              ref={menuBtnRef}
+              type="button"
+              className={`w-menu-btn${menuOpen ? ' is-open' : ''}`}
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={menuOpen}
+              aria-controls="w-mobile-menu"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <span className="w-menu-icon" aria-hidden="true"><i /><i /><i /></span>            </button>
+          </div>
+        </div>
+        <m.div
+          id="w-mobile-menu"
+          className="w-mobile-menu"
+          hidden={!menuOpen}
+          initial={false}
+          animate={menuOpen ? { opacity: 1, y: 0 } : { opacity: 0, y: reduce ? 0 : 8 }}
+          transition={reduce ? { duration: 0 } : { duration: 0.18, ease: EASE_OUT }}
+        >
+          <a
+            href="#how"
+            onClick={(e) => { e.preventDefault(); goToSection('how'); }}
+          >How it works</a>
+          <a
+            href="#ask"
+            onClick={(e) => { e.preventDefault(); goToSection('ask'); }}
+          >Ask</a>
+          <a
+            href="#trust"
+            onClick={(e) => { e.preventDefault(); goToSection('trust'); }}
+          >Security</a>
+          <button type="button" className="w-mobile-link" onClick={() => { setMenuOpen(false); focusAuth('signin', true); }}>Sign in</button>
+          <button
+            type="button"
+            className="w-nav-cta w-nav-cta-volt"
+            onClick={() => { setMenuOpen(false); focusAuth('create', true); }}
+            disabled={!boot || busy !== null}
+          >
+            Create account
+          </button>
+        </m.div>
+      </header>
+
       <section className="w-hero" aria-labelledby="w-title">
         {/* A daytime sky the page climbs out of: the sign-in scene at the
             bottom of the page is the same sky, above the clouds. */}
         <div className="sky-layer w-clouds" aria-hidden="true">
           <Cloud className="h1" tone="b" /><Cloud className="h2" /><Cloud className="h3" tone="b" /><Cloud className="h4" />
         </div>
-        <nav className="w-nav" aria-label="Settle">
-          <a className="w-logo" href="/" aria-label="Settle home">
-            <Pip size={30} track={false} idle={false} mood="happy" />
-            <span>settle</span>
-          </a>
-          <span className="w-nav-links">
-            <a href="#how">How it works</a>
-            <button type="button" onClick={() => focusAuth('signin')}>Sign in</button>
-          </span>
-          <button type="button" className="w-nav-cta w-nav-cta-volt" onClick={() => focusAuth('create')} disabled={!boot || busy !== null}>
-            Create account
-          </button>
-        </nav>
 
         <div className="w-hero-body">
           <div className="w-copy">
@@ -194,7 +314,7 @@ export function Welcome({
               </span>
             </h1>
             <m.p className="w-lede" {...rise(0.5)}>
-              Log a spend in two taps. See your week in one glance. A tiny bean named Pip keeps the streak honest.
+              Log a spend in two taps. See your week in one glance. Settle, your pocket-sized money buddy, keeps the streak honest.
             </m.p>
             <m.div className="w-actions" {...rise(0.62)}>
               <button type="button" className="w-btn w-btn-volt" onClick={() => focusAuth('create')} disabled={!boot || busy !== null}>
@@ -219,7 +339,7 @@ export function Welcome({
             animate={{ opacity: 1, transform: 'translateY(0px) scale(1)' }}
             transition={{ duration: 1, ease: EASE_OUT, delay: 0.25 }}
           >
-            <div className="w-pip-perch"><Pip size={96} mood="happy" greet /></div>
+            <div className="w-mascot-perch"><Mascot size={96} mood="happy" greet /></div>
             <TiltCard className="s-card s-card-lg">
               <div className="s-card-top">
                 <span className="s-card-brand">settle</span>
@@ -256,7 +376,7 @@ export function Welcome({
         </div>
       </section>
 
-      <section className="w-section" id="how" aria-labelledby="how-title">
+      <section className="w-section" id="how" ref={howRef} tabIndex={-1} aria-labelledby="how-title">
         <InView>
           <p className="w-kicker">How it works</p>
           <h2 id="how-title" className="w-h2">Less app. More awareness.</h2>
@@ -275,7 +395,7 @@ export function Welcome({
           <InView as="article" className="w-tile" delay={0.08}>
             <span className="w-tile-n">02</span>
             <h3>Two taps to log.</h3>
-            <p>Amount, category, done. Pip hops when you keep the streak alive.</p>
+            <p>Amount, category, done. Settle hops when you keep the streak alive.</p>
             <div className="w-mini w-mini-log" aria-hidden="true">
               <strong>$4.50</strong>
               <span className="chips-row"><i className="is-on">☕ Dining</i><i>🛒 Groceries</i><i>🚌 Transit</i></span>
@@ -289,21 +409,50 @@ export function Welcome({
               {HEAT.map((h, i) => <i key={i} className={`h${h}`} />)}
             </div>
           </InView>
-          <InView as="article" className="w-tile w-tile-wide w-tile-dark" delay={0.24}>
-            <span className="w-tile-n">04</span>
-            <h3>Ask in plain English.</h3>
-            <p>Read-only answers grounded in your records. It can look, it can’t move money.</p>
-            <div className="w-ask" aria-hidden="true">
-              <div className="w-ask-q"><Icon name="sparkle" size={15} />Can I afford a $60 night out this week?</div>
-              <div className="w-ask-a">
-                Yes. You have <b>$128.50</b> left of your weekly pace and you usually spend <b>$22</b> on Saturdays.
-                <span className="w-cite">1</span><span className="w-cite">2</span>
+          <div id="ask" className="w-tile-anchor" ref={askRef} tabIndex={-1}>
+            <InView as="article" className="w-tile w-tile-wide w-tile-dark" delay={0.24}>
+              <span className="w-tile-n">04</span>
+              <h3>Ask in plain English.</h3>
+              <p>Read-only answers grounded in your records. It can look, it can’t move money.</p>
+              <div className="w-ask" aria-hidden="true">
+                <div className="w-ask-q"><Icon name="sparkle" size={15} />Can I afford a $60 night out this week?</div>
+                <div className="w-ask-a">
+                  Yes. You have <b>$128.50</b> left of your weekly pace and you usually spend <b>$22</b> on Saturdays.
+                  <span className="w-cite">1</span><span className="w-cite">2</span>
+                </div>
               </div>
-            </div>
+            </InView>
+          </div>
+        </div>
+      </section>
+
+      <section className="w-section w-trust" id="trust" ref={trustRef} tabIndex={-1} aria-labelledby="trust-title">
+        <InView>
+          <p className="w-kicker">Security</p>
+          <h2 id="trust-title" className="w-h2">Built like a ledger, not a toy.</h2>
+        </InView>
+        <div className="w-trust-grid">
+          <InView as="article" className="w-trust-card" delay={0}>
+            <span className="w-trust-icon" aria-hidden="true"><Icon name="lock" size={20} /></span>
+            <h3>Read-only AI</h3>
+            <p>Ask answers from tools scoped to your wallet. It can look, it cannot move money.</p>
+          </InView>
+          <InView as="article" className="w-trust-card" delay={0.08}>
+            <span className="w-trust-icon" aria-hidden="true"><Icon name="wallet" size={20} /></span>
+            <h3>Double-entry records</h3>
+            <p>Every entry balances. Append-only, idempotent writes, with fraud rules on transfers.</p>
+          </InView>
+          <InView as="article" className="w-trust-card" delay={0.16}>
+            <span className="w-trust-icon" aria-hidden="true"><Icon name="sparkle" size={20} /></span>
+            <h3>Your account, your data</h3>
+            <p>No bank login required. Export a statement any time; delete on request.</p>
           </InView>
         </div>
       </section>
 
+      {/* #account is the footer's "Create account" landing point; #own-wallet
+          stays where it was, because Google and reset links already use it. */}
+      <span id="account" className="sky-anchor" aria-hidden="true" />
       <AuthSky id="own-wallet" ref={accountRef} labelledBy="own-title">
         <div className="sky-card-head">
           <p className="w-kicker">{mode === 'create' ? 'Your account' : 'Welcome back'}</p>
@@ -339,7 +488,7 @@ export function Welcome({
                 <div className="auth-divider"><span>or continue with email</span></div>
               </> : null}
               {mode === 'create' ? (
-                <SkyField id="account-name" label="What should Pip call you?" value={name}>
+                <SkyField id="account-name" label="What should we call you?" value={name}>
                   <input id="account-name" required disabled={busy !== null} maxLength={40} autoComplete="name" placeholder=" " value={name} onChange={(e) => setName(e.target.value)} />
                 </SkyField>
               ) : null}

@@ -301,3 +301,11 @@
 ## Session: preview PR publication (2026-11-08)
 - User authorized a new branch and PR for Vercel previews. Created codex/google-auth-contrast-preview from verified merge b813a95, retaining the Google restoration, contrast fixes and save guards. Publishing against main; no production deployment or main merge. Owner .gitignore change remains excluded.
 
+
+## Session: missing Google action in preview diagnosed (2026-11-08)
+- PR #30 CI and Vercel deployment succeeded. Read-only Vercel Preview environment listing contains only LEDGER_URL and GEMINI_API_KEY; Google enable flag/client credentials, APP_URL and persistent auth storage configuration are absent. Bootstrap hides Google unless persistent identity and valid Google configuration are both available. Preview public bootstrap returned HTML (deployment protection), so no live preview JSON claimed. No environment changes made; use dedicated preview auth storage and an explicitly authorized Google callback to enable end-to-end preview login.
+
+
+## Session: owner-authorized main merge (2026-11-08)
+- User explicitly authorized merging PR #30 to main. All PR checks passed and GitHub reported CLEAN/MERGEABLE before the merge. Merged via GitHub with a head-commit guard. Production deployment and fresh Google sign-in remain separate verification steps; preview environment settings were not changed. Owner .gitignore edit preserved.
+

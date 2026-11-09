@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_STEPS, runAssistant } from '../src/server/agent.js';
+import { FallbackChainProvider } from '../src/server/providers/fallback-chain.js';
 import { ScriptedProvider } from '../src/server/providers/scripted.js';
+import type { AgentResult, LlmProvider } from '../src/server/providers/types.js';
 import { fixtureSpendLogStore } from '../evals/spend-fixture.js';
 import { FixtureLedger, ME, NOW } from '../evals/fixture.js';
 import { amountsGrounded } from '../evals/graders.js';
@@ -53,5 +55,43 @@ describe('graders', () => {
     ]));
     expect(amountsGrounded('')(reply)).toBe('ungrounded amounts: $3,800');
     expect(amountsGrounded('round to $3,800')(reply)).toBeNull();
+  });
+});
+
+describe('runAssistant route', () => {
+  it('reports gemini when the chain secondary answered', async () => {
+    class StubProvider implements LlmProvider {
+      constructor(
+        readonly name: string,
+        readonly model: string,
+        private readonly fn: () => Promise<AgentResult>,
+      ) {}
+
+      run(): Promise<AgentResult> {
+        return this.fn();
+      }
+    }
+    const primary = new StubProvider('openrouter', 'or', async () => {
+      const err = new Error('OpenRouter 404: no endpoints available matching your data policy') as Error & { status?: number };
+      err.status = 404;
+      throw err;
+    });
+    const secondary = new StubProvider('gemini', 'gemini-2.5-flash-lite', async () => ({
+      answer: 'from gemini',
+      toolCalls: [],
+      truncated: false,
+    }));
+    const chain = new FallbackChainProvider(primary, secondary);
+    const reply = await runAssistant({
+      provider: chain,
+      ledger,
+      spendLogs: fixtureSpendLogStore(),
+      accountId: ME,
+      now: () => NOW,
+      messages: [{ role: 'user', text: 'hi' }],
+    });
+    expect(reply.answer).toBe('from gemini');
+    expect(reply.route).toBe('gemini');
+    expect(chain.lastProviderName).toBe('gemini');
   });
 });

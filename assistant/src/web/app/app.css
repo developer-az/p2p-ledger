@@ -1,5 +1,5 @@
 /* Settle — "Sky": soft daylight, white glass surfaces, ink type and one volt accent
-   (Pip's lime). /ops keeps its own look. */
+   (Settle's lime). /ops keeps its own look. */
 
 .app, .app-preloader {
   --bg: #f3f7fc;
@@ -163,14 +163,17 @@ body:has(.app), body:has(.app-preloader) { margin: 0; }
 /* ---------- Shell ---------- */
 
 .app .topbar {
-  position: sticky; top: 0; z-index: 30;
-  background: color-mix(in srgb, var(--pen-soft) 92%, var(--surface));
-  backdrop-filter: blur(14px) saturate(1.1);
-  border-bottom: 2px solid color-mix(in srgb, var(--pen) 22%, var(--line));
+  position: sticky; top: 0; z-index: 50;
+  /* Same glass as the landing header once it scrolls: white, blurred, one hairline. */
+  background: rgb(255 255 255 / 68%);
+  -webkit-backdrop-filter: saturate(160%) blur(16px);
+  backdrop-filter: saturate(160%) blur(16px);
+  border-bottom: 1px solid rgb(17 23 38 / 8%);
+  box-shadow: 0 8px 30px -18px rgb(17 23 38 / 35%);
 }
 .app .topbar-inner {
-  max-width: 1180px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; gap: 16px;
-  min-height: 58px;
+  max-width: 1180px; margin: 0 auto; padding-inline: clamp(16px, 4vw, 32px); padding-block: 0;
+  display: flex; align-items: center; gap: 16px; height: 62px;
 }
 .app .tabs { display: flex; gap: 4px; margin-left: 14px; }
 .app .tab {
@@ -196,14 +199,15 @@ body:has(.app), body:has(.app-preloader) { margin: 0; }
 .app .sync-banner .link-btn { white-space: nowrap; }
 .app .menu-wrap { position: relative; }
 .app .wallet-chip {
-  display: inline-flex; align-items: center; gap: 9px;
-  border: 1px solid var(--line-strong); background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+  display: inline-flex; align-items: center; gap: 9px; min-height: 40px;
+  border: 1px solid rgb(17 23 38 / 10%); background: rgb(255 255 255 / 80%);
   border-radius: 999px; padding: 5px 14px 5px 5px; font-weight: 650; font-size: 0.86rem;
-  letter-spacing: 0.02em; box-shadow: 0 1px 0 rgb(255 255 255 / 40%) inset;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  letter-spacing: 0.02em; color: var(--ink); cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
-.app .wallet-chip:hover { border-color: var(--ink); box-shadow: var(--shadow); }
-.app .wallet-chip .avatar { box-shadow: 0 0 0 1px var(--line-strong); }
+.app .wallet-chip:hover { border-color: rgb(17 23 38 / 20%); box-shadow: var(--shadow); }
+.app .wallet-chip:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-color: rgb(17 23 38 / 20%); }
+.app .wallet-chip .avatar { box-shadow: 0 0 0 1px rgb(17 23 38 / 10%); }
 .app .main { max-width: 1180px; margin: 0 auto; padding: 34px 24px 130px; }
 .app .view { animation: view-in 280ms cubic-bezier(.2,.7,.2,1) both; }
 @keyframes view-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -219,7 +223,9 @@ body:has(.app), body:has(.app-preloader) { margin: 0; }
 @media (max-width: 900px) {
   .app .tabs { display: none; }
   .app .main { padding: 22px 16px 132px; }
-  .app .topbar-inner { padding: 10px 16px; gap: 12px; }
+  .app .topbar-inner { height: 62px; padding-inline: 16px; gap: 12px; }
+  /* Every topbar control is a full 44px target once the bar is the main nav. */
+  .app .topbar .demo-pill, .app .topbar .wallet-chip { min-height: 44px; }
   .app .bottom-nav {
     display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 28;
     background: color-mix(in srgb, var(--surface) 92%, transparent);
@@ -353,6 +359,7 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
   transition: transform 120ms ease, box-shadow 160ms ease;
 }
 .app .demo-pill:hover { transform: translateY(-1px); box-shadow: 0 0 0 4px color-mix(in srgb, var(--metal) 50%, transparent); }
+.app .demo-pill:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 
 .app .demo-guide {
   position: relative; overflow: hidden;
@@ -604,8 +611,8 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .ask-empty { display: grid; justify-items: center; text-align: center; padding: 28px 10px 12px; }
 .app .ask-head { justify-content: flex-start; align-items: center; }
 .app .ask-head > div { flex: 1; }
-.app .ask-card-pip { position: absolute; top: 16px; right: 18px; }
-.app .ask-card:has(.ask-card-pip) { padding-right: 90px; }
+.app .ask-card-mascot { position: absolute; top: 16px; right: 18px; }
+.app .ask-card:has(.ask-card-mascot) { padding-right: 90px; }
 .app .ask-empty h2 { font-family: var(--display); font-weight: 400; font-size: 1.9rem; }
 .app .ask-empty p { margin-top: 4px; }
 .app .suggestion-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 20px; width: 100%; max-width: 640px; }
@@ -614,12 +621,25 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .chat { display: grid; gap: 14px; }
 .app .chat-turn { display: flex; gap: 10px; align-items: flex-start; }
 .app .chat-user { justify-content: flex-end; }
-.app .chat-avatar { width: 28px; height: 28px; border-radius: 9px; background: var(--lime); color: #0e0e10; display: grid; place-items: center; flex: none; font-size: 0.8rem; }
+.app .chat-avatar {
+  width: 34px; height: 34px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.app .chat-avatar .mascot-tilt, .app .chat-avatar .mascot { line-height: 0; }
+.app .chat-avatar .mascot { max-width: 30px; max-height: 30px; }
 .app .chat-turn { animation: row-in 360ms var(--ease-out) both; }
 .app .bubble { max-width: min(76ch, 88%); padding: 12px 16px; border-radius: 18px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.95rem; }
 .app .bubble-user { justify-self: end; background: var(--ink); color: var(--bg); border-bottom-right-radius: 6px; }
 .app .bubble-ai { justify-self: start; background: var(--surface-2); border: 1px solid var(--line); border-bottom-left-radius: 6px; }
 .app .chat-grounding { color: var(--faint); font-size: 0.76rem; margin: 5px 4px 0; }
+.app .chat-status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.85rem; font-weight: 550; }
+.app .chat-status-bars { display: inline-flex; align-items: flex-end; gap: 3px; height: 12px; }
+.app .chat-status-bars i { display: block; width: 3px; border-radius: 2px; background: var(--lime); animation: chat-bars 900ms ease-in-out infinite alternate; }
+.app .chat-status-bars i:nth-child(1) { height: 6px; }
+.app .chat-status-bars i:nth-child(2) { height: 12px; animation-delay: 150ms; }
+.app .chat-status-bars i:nth-child(3) { height: 8px; animation-delay: 300ms; }
+@keyframes chat-bars { from { transform: scaleY(0.45); opacity: 0.5; } to { transform: scaleY(1); opacity: 1; } }
 .app .chat-form { display: flex; gap: 10px; align-items: stretch; }
 .app .chat-form .input { flex: 1; }
 .app .ask-hint { text-align: center; }
@@ -730,7 +750,7 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .toast-action { background: rgb(255 255 255 / 16%); border: 0; border-radius: 999px; padding: 5px 11px; color: inherit; font-weight: 700; font-size: 0.8rem; }
 @media (min-width: 901px) { .app .toasts { bottom: 28px; } }
 
-/* ---------- Skeleton, menu, footer ---------- */
+/* ---------- Skeleton, menu ---------- */
 
 .app .skeleton { background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2)); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 16px; }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
@@ -742,15 +762,82 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .menu-label { padding: 6px 12px; font-size: 0.7rem; color: var(--faint); font-weight: 750; text-transform: uppercase; letter-spacing: 0.08em; }
 .app .menu-email { padding: 4px 12px 8px; color: var(--muted); font-size: 0.78rem; }
 
-.app .footer {
-  max-width: 1180px; margin: 0 auto; padding: 26px 24px 46px;
-  border-top: 1px solid var(--line);
-  color: var(--faint); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase;
-  display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center;
+/* ---------- Site footer: the evening-ink band ---------- */
+
+/* Spans the viewport whatever the main column is doing. The band sits straight
+   under the auth sky, so it has no top margin of its own. */
+.app .site-footer-full {
+  position: relative;
+  width: 100%; margin: 0; padding: 0;
+  background: linear-gradient(180deg, #13203d, #0c1428);
+  color: rgb(255 255 255 / 72%);
+  font-family: var(--font); font-size: 0.95rem;
+  letter-spacing: normal; text-transform: none;
 }
-.app .footer a { color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--line-strong); padding-bottom: 1px; }
-.app .footer a:hover { color: var(--ink); border-bottom-color: var(--ink); }
-@media (max-width: 900px) { .app .footer { padding: 22px 16px 116px; } }
+/* The white cloud floor stops at the top of the band, which read as a hard
+   cut. A 48px veil sits above the band and fades the floor into the ink, so it
+   adds no gap, no width and covers no footer content. */
+.app .site-footer-full::before {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 48px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgb(19 32 61 / 0%), #13203d);
+}
+.app .site-footer-inner { max-width: 1200px; margin: 0 auto; padding: 72px clamp(16px, 4vw, 40px) 32px; }
+
+.app .site-footer-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px clamp(20px, 4vw, 48px); }
+@media (min-width: 600px) { .app .site-footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 980px) { .app .site-footer-grid { grid-template-columns: 1.4fr repeat(3, minmax(0, 1fr)); } }
+
+.app .site-footer-brand { display: grid; gap: 14px; align-content: start; justify-items: start; }
+.app .site-footer-logo {
+  display: inline-flex; align-items: center; gap: 9px; color: #fff; text-decoration: none;
+  font-family: var(--display); font-weight: 750; font-size: 1.5rem; letter-spacing: -0.055em; font-stretch: 85%;
+  line-height: 1.1;
+}
+.app .site-footer-pitch { margin: 0; font-size: 0.95rem; color: rgb(255 255 255 / 72%); line-height: 1.5; }
+.app .site-footer-pill {
+  display: inline-flex; align-items: center; gap: 8px; margin: 2px 0 0;
+  padding: 5px 12px; border: 1px solid rgb(255 255 255 / 14%); border-radius: 999px;
+  font-size: 0.78rem; color: rgb(255 255 255 / 78%);
+}
+.app .site-footer-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #f5b83b; }
+.app .site-footer-pill.is-live .site-footer-dot { background: var(--lime); }
+
+.app .site-footer-col { display: grid; gap: 12px; align-content: start; }
+.app .site-footer-heading {
+  margin: 0; font-family: var(--font); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: rgb(255 255 255 / 90%);
+}
+.app .site-footer-links { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.app .site-footer-links a { color: rgb(255 255 255 / 72%); text-decoration: none; font-size: 0.95rem; }
+.app .site-footer-links a:hover { color: #fff; text-decoration: underline; text-underline-offset: 4px; }
+.app .site-footer-links a:focus-visible, .app .site-footer-logo:focus-visible {
+  outline: 2px solid var(--lime); outline-offset: 3px; border-radius: 4px;
+}
+
+.app .site-footer-bottom {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 10px 24px; margin-top: 56px; padding-top: 24px;
+  border-top: 1px solid rgb(255 255 255 / 10%);
+}
+.app .site-footer-bottom p { margin: 0; font-size: 0.82rem; color: rgb(255 255 255 / 55%); }
+
+/* The signed-in bar keeps the app's voice: same line, same muted type, with
+   room underneath for the floating dock on small screens. */
+.app .site-footer-compact {
+  width: 100%; max-width: 1180px; margin: 0 auto;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 8px 20px;
+  padding: 20px 24px 26px;
+  border-top: 1px solid var(--line);
+  color: var(--faint); font-family: var(--font); font-size: 0.82rem;
+  letter-spacing: normal; text-transform: none;
+}
+.app .site-footer-compact-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+.app .site-footer-compact-nav a { color: var(--muted); text-decoration: none; }
+.app .site-footer-compact-nav a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.app .site-footer-compact-nav a:focus-visible { outline: 2px solid var(--lime); outline-offset: 3px; border-radius: 4px; }
+@media (max-width: 900px) { .app .site-footer-compact { padding: 18px 16px 116px; } }
 
 /* ---------- Settle Up: requests, split and rail badges ---------- */
 
@@ -842,7 +929,7 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 /* ==========================================================================
    POCKET — the house layer
    Apple Wallet card as the one hero object, Notion calm everywhere else,
-   Pip as the only character, volt lime as the only accent. Rules here win
+   Settle as the only character, volt lime as the only accent. Rules here win
    over the base sheet above.
    ========================================================================== */
 
@@ -856,14 +943,11 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 
 /* ---------- Shell ---------- */
 
-.app .topbar {
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
-  backdrop-filter: blur(20px) saturate(1.4);
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
-}
 .app .tabs { display: none; }
-.app .brand { display: inline-flex; align-items: center; gap: 9px; color: var(--ink); text-decoration: none; }
-.app .brand-word { font-family: var(--display); font-weight: 750; font-size: 1.4rem; letter-spacing: -0.055em; font-stretch: 85%; }
+.app .brand { display: inline-flex; align-items: center; gap: 9px; min-height: 44px; color: var(--ink); text-decoration: none; }
+/* The wordmark carries the landing `.w-logo` typography into the signed-in bar. */
+.app .brand-word { font-family: var(--display); font-weight: 750; font-size: 1.5rem; letter-spacing: -0.055em; font-stretch: 85%; }
+.app .brand:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 10px; }
 .app .main-welcome { max-width: none; padding: 0; }
 
 .app .float-dock {
@@ -897,8 +981,6 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .bottom-nav { display: none !important; }
 
 
-.app .footer { font-family: var(--mono); letter-spacing: 0.02em; }
-
 /* ---------- Surfaces: white glass floating on the sky ---------- */
 
 .app .card { box-shadow: var(--shadow); border-radius: var(--radius); border-color: color-mix(in srgb, var(--line) 80%, white); }
@@ -919,34 +1001,35 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .ask-card, .app .card.ask-card { background: var(--dusk); color: var(--dusk-ink); border: 0; box-shadow: var(--shadow); }
 .app-sheet-panel { border-radius: 24px; }
 
-/* ---------- Pip ---------- */
+/* ---------- Settle ---------- */
 
-.pip { display: block; flex: none; color: var(--ink, #0e0e10); }
-.pip-body { fill: var(--lime, #c8f53b); stroke: #0e0e10; stroke-width: 2.6; }
-.pip-shine { fill: none; stroke: rgb(255 255 255 / 75%); stroke-width: 3.2; stroke-linecap: round; }
-.pip-eye ellipse { fill: #0e0e10; }
-.pip-eye .pip-glint { fill: #fff; }
-.pip-lid path, .pip-brow path, .pip-mouth { fill: none; stroke: #0e0e10; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-.pip-mouth.is-open { fill: #0e0e10; }
-.pip-blush { fill: #ff8fa3; opacity: 0.55; transition: opacity 300ms ease; }
-.pip-blush.is-warm { opacity: 0.95; }
-/* Hands and feet are the body's lime, a shade deeper, with the same outline. */
-.pip-hand, .pip-foot { fill: color-mix(in srgb, var(--lime, #c8f53b) 82%, #6f9a12); stroke: #0e0e10; stroke-width: 2.4; }
-.pip-foot { fill: color-mix(in srgb, var(--lime, #c8f53b) 70%, #4e7a08); }
-.pip-stem { fill: none; stroke: #0e0e10; stroke-width: 2.4; stroke-linecap: round; }
-.pip-leaf { fill: #7fd45a; stroke: #0e0e10; stroke-width: 2.2; stroke-linejoin: round; }
-.pip-leaf-b { fill: #9be36f; }
+.mascot { display: block; flex: none; color: var(--ink, #0e0e10); }
+/* Depth shell: holds the perspective and keeps the layout box exactly `size`.
+   Gradients and filters live in the SVG defs, so CSS must not repaint fills. */
+.mascot-tilt { display: inline-block; line-height: 0; flex: none; }
+.mascot-tilt-inner { display: inline-block; line-height: 0; transform-origin: 50% 62%; will-change: transform; }
+.mascot-spec { pointer-events: none; }
+.mascot-eye .mascot-glint { fill: #fff; }
+.mascot-eye .mascot-glint-dim { fill: rgb(255 255 255 / 65%); }
+.mascot-lid path, .mascot-brow path, .mascot-mouth { stroke: #1d2a08; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.mascot-lid path, .mascot-brow path, .mascot-mouth:not(.is-open) { fill: none; }
+.mascot-tongue { pointer-events: none; }
+.mascot-blush { opacity: 0.8; transition: opacity 300ms ease; }
+.mascot-blush.is-warm { opacity: 1; }
+/* Hands, feet and leaves carry their own gradients and rims in the TSX. */
+.mascot-stem { fill: none; stroke: #3f6e12; stroke-width: 2.4; stroke-linecap: round; }
+.mascot-vein { fill: none; stroke: rgb(255 255 255 / 45%); stroke-width: 0.9; stroke-linecap: round; }
 /* The sprout drifts on its own as well as leaning with the gaze. */
-.pip-sprout-idle { transform-box: view-box; transform-origin: 50px 13px; animation: pip-sprout 4.6s ease-in-out infinite; }
-.pip-sprout-shake { transform-box: view-box; transform-origin: 50px 13px; animation: pip-shake 0.9s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
-@keyframes pip-sprout { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(5deg); } }
-@keyframes pip-shake { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(-22deg); } 35% { transform: rotate(18deg); } 55% { transform: rotate(-10deg); } 75% { transform: rotate(5deg); } }
-.pip-shadow { fill: rgb(0 0 0 / 14%); }
-.pip-z { font: 600 15px var(--mono, monospace); fill: currentColor; animation: pip-z 2.4s ease-in-out infinite; }
-.pip-breathe { transform-box: fill-box; transform-origin: 50% 100%; animation: pip-breathe 3.2s ease-in-out infinite; }
-@keyframes pip-breathe { 50% { transform: scale(1.03, 0.97); } }
-@keyframes pip-z { 0% { opacity: 0; transform: translate(0, 4px); } 50% { opacity: 0.7; } 100% { opacity: 0; transform: translate(6px, -8px); } }
-.pip-btn { border: 0; background: none; padding: 0; cursor: pointer; border-radius: 50%; flex: none; }
+.mascot-sprout-idle { transform-box: view-box; transform-origin: 50px 13px; animation: mascot-sprout 4.6s ease-in-out infinite; }
+.mascot-sprout-shake { transform-box: view-box; transform-origin: 50px 13px; animation: mascot-shake 0.9s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+@keyframes mascot-sprout { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(5deg); } }
+@keyframes mascot-shake { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(-22deg); } 35% { transform: rotate(18deg); } 55% { transform: rotate(-10deg); } 75% { transform: rotate(5deg); } }
+.mascot-shadow { pointer-events: none; }
+.mascot-z { font: 600 15px var(--mono, monospace); fill: currentColor; animation: mascot-z 2.4s ease-in-out infinite; }
+.mascot-breathe { transform-box: fill-box; transform-origin: 50% 100%; animation: mascot-breathe 3.2s ease-in-out infinite; }
+@keyframes mascot-breathe { 50% { transform: scale(1.03, 0.97); } }
+@keyframes mascot-z { 0% { opacity: 0; transform: translate(0, 4px); } 50% { opacity: 0.7; } 100% { opacity: 0; transform: translate(6px, -8px); } }
+.mascot-btn { border: 0; background: none; padding: 0; cursor: pointer; border-radius: 50%; flex: none; }
 
 /* ---------- The card (Apple Wallet) ---------- */
 
@@ -1004,9 +1087,9 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .hello { display: flex; align-items: center; gap: 16px; margin-bottom: 6px; }
 .app .hello-copy { flex: 1; min-width: 0; }
 .app .hello h1 { font-size: clamp(2.1rem, 4.6vw, 3rem); line-height: 1; margin-top: 6px; }
-/* What Pip says sits in a speech bubble whose tail points back at Pip. */
-.app .pip-says { margin-top: 10px; max-width: 52ch; }
-.app .pip-says > span {
+/* What Settle says sits in a speech bubble whose tail points back at Settle. */
+.app .mascot-says { margin-top: 10px; max-width: 52ch; }
+.app .mascot-says > span {
   position: relative; display: inline-block; padding: 9px 14px; border-radius: 16px 16px 16px 4px;
   background: var(--surface); color: var(--ink-2); font-size: 0.95rem; line-height: 1.4;
   box-shadow: var(--shadow); border: 1px solid var(--line);
@@ -1065,12 +1148,21 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 }
 
 
+/* The sticky header keeps its 76px of flow inside the welcome, so the hero
+   below only has to fill what is left of the first viewport. The strip behind
+   the header is the same sky the hero starts on, so nothing seams at rest —
+   and the header's ink-on-light colours stay legible in a dark session too. */
+.app .welcome {
+  --w-header-h: 76px;
+  background: linear-gradient(180deg, #bcd9fb 0 var(--w-header-h), transparent var(--w-header-h));
+}
 .app .w-hero {
   position: relative; overflow: hidden; isolation: isolate;
-  min-height: min(100svh, 940px); display: flex; flex-direction: column;
+  min-height: min(calc(100svh - var(--w-header-h)), 940px); display: flex; flex-direction: column;
   /* Daytime: clear blue at the top, hazy toward the horizon, fading into the
-     page so the "how it works" section sits on the same light. */
-  background: linear-gradient(180deg, #a9cef8 0%, #c2ddfa 40%, #dcebfc 100%);
+     page so the "how it works" section sits on the same light. The first
+     stop matches the sky the header rests on, so there is no seam at the top. */
+  background: linear-gradient(180deg, #bcd9fb 0%, #a9cef8 14%, #c2ddfa 48%, #dcebfc 100%);
   color: #111726;
 }
 .app .w-hero::after {
@@ -1082,11 +1174,126 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .w-clouds .h2 { width: 340px; left: 32%; top: 62%; --t: 90s; --d: 120px; }
 .app .w-clouds .h3 { width: 180px; right: 32%; top: 9%; --t: 150s; --d: 100px; opacity: 0.75; }
 .app .w-clouds .h4 { width: 420px; right: -6%; top: 58%; --t: 80s; --d: 70px; }
-.app .w-nav { display: flex; align-items: center; gap: 24px; padding: 20px clamp(20px, 4vw, 56px); max-width: 1440px; width: 100%; margin: 0 auto; }
-.app .w-logo { display: inline-flex; align-items: center; gap: 9px; color: var(--ink); text-decoration: none; font-family: var(--display); font-weight: 750; font-size: 1.5rem; letter-spacing: -0.055em; font-stretch: 85%; }
-.app .w-nav-links { display: flex; align-items: center; gap: 26px; margin-left: auto; font-size: 0.9rem; }
-.app .w-nav-links a, .app .w-nav-links button { color: rgb(17 23 38 / 66%); text-decoration: none; background: none; border: 0; padding: 0; font-size: 0.9rem; transition: color 160ms ease; }
+/* The header rests as bare sky and becomes glass on scroll. Its colours are
+   literal: it always sits on the light top of the page, never on night. */
+.app .w-header {
+  position: sticky; top: 0; z-index: 60;
+  background: transparent; border-bottom: 1px solid transparent;
+  transition: background-color 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
+}
+.app .w-header.is-scrolled {
+  background: rgb(255 255 255 / 68%);
+  -webkit-backdrop-filter: saturate(160%) blur(16px);
+  backdrop-filter: saturate(160%) blur(16px);
+  border-bottom-color: rgb(17 23 38 / 8%);
+  box-shadow: 0 8px 30px -18px rgb(17 23 38 / 35%);
+}
+.app .w-header-inner {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 24px;
+  max-width: 1200px; margin: 0 auto; padding-inline: clamp(16px, 4vw, 40px);
+  height: calc(var(--w-header-h) - 1px); transition: height 220ms var(--ease-out);
+}
+.app .w-header.is-scrolled .w-header-inner { height: 61px; }
+.app .w-logo { display: inline-flex; align-items: center; gap: 9px; justify-self: start; color: #111726; text-decoration: none; font-family: var(--display); font-weight: 750; font-size: 1.5rem; letter-spacing: -0.055em; font-stretch: 85%; }
+.app .w-nav-links { display: flex; align-items: center; gap: 30px; justify-self: center; }
+.app .w-nav-links a, .app .w-nav-links button {
+  position: relative; display: inline-block; padding: 0; border: 0; background: none;
+  color: rgb(17 23 38 / 70%); text-decoration: none; font-family: var(--font);
+  font-size: 0.92rem; font-weight: 550; line-height: 1.4; transition: color 160ms ease;
+}
+/* The underline grows out of the centre, not the left edge. */
+.app .w-nav-links a::after, .app .w-nav-links button::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -5px; height: 2px; border-radius: 2px;
+  background: var(--lime); transform: scaleX(0); transform-origin: 50% 50%;
+  transition: transform 220ms var(--ease-out);
+}
 .app .w-nav-links a:hover, .app .w-nav-links button:hover { color: #111726; }
+.app .w-nav-links a:hover::after, .app .w-nav-links a:focus-visible::after,
+.app .w-nav-links button:hover::after, .app .w-nav-links button:focus-visible::after { transform: scaleX(1); }
+.app .w-nav-links a:focus-visible, .app .w-nav-links button:focus-visible,
+.app .w-nav-signin:focus-visible, .app .w-menu-btn:focus-visible { outline: 2px solid #111726; outline-offset: 3px; }
+.app .w-header-actions { display: flex; align-items: center; gap: 16px; justify-self: end; }
+.app .w-nav-signin {
+  padding: 0; border: 0; background: none; font-family: var(--font);
+  font-size: 0.92rem; font-weight: 550; color: rgb(17 23 38 / 70%); transition: color 160ms ease;
+}
+.app .w-nav-signin:hover { color: #111726; }
+
+/* Mobile menu: three lines folding into an X, panel under the bar. */
+.app .w-menu-btn {
+  display: none; align-items: center; justify-content: center;
+  width: 40px; height: 40px; padding: 0; border-radius: 50%;
+  border: 1px solid rgb(17 23 38 / 14%); background: rgb(255 255 255 / 66%); color: #111726;
+  transition: background-color 160ms ease;
+}
+.app .w-menu-btn:hover { background: rgb(255 255 255 / 90%); }
+.app .w-menu-icon { position: relative; display: block; width: 16px; height: 12px; }
+.app .w-menu-icon i {
+  position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px; background: currentColor;
+  transition: transform 200ms var(--ease-out), opacity 120ms ease;
+}
+.app .w-menu-icon i:nth-child(1) { top: 0; }
+.app .w-menu-icon i:nth-child(2) { top: 5px; }
+.app .w-menu-icon i:nth-child(3) { top: 10px; }
+.app .w-menu-btn.is-open .w-menu-icon i:nth-child(1) { transform: translateY(5px) rotate(45deg); }
+.app .w-menu-btn.is-open .w-menu-icon i:nth-child(2) { opacity: 0; }
+.app .w-menu-btn.is-open .w-menu-icon i:nth-child(3) { transform: translateY(-5px) rotate(-45deg); }
+.app .w-mobile-menu {
+  position: absolute; left: 16px; right: 16px; top: calc(100% + 6px);
+  display: flex; flex-direction: column; gap: 2px; padding: 8px;
+  border-radius: 22px; border: 1px solid rgb(17 23 38 / 8%);
+  background: rgb(255 255 255 / 92%);
+  -webkit-backdrop-filter: saturate(160%) blur(16px);
+  backdrop-filter: saturate(160%) blur(16px);
+  box-shadow: 0 24px 50px -24px rgb(17 23 38 / 40%);
+}
+.app .w-mobile-menu[hidden] { display: none; }
+.app .w-mobile-menu a, .app .w-mobile-menu button {
+  display: flex; align-items: center; min-height: 48px; padding: 0 14px; border-radius: 14px;
+  border: 0; background: none; text-align: left;
+  color: rgb(17 23 38 / 82%); text-decoration: none; font-family: var(--font);
+  font-size: 0.95rem; font-weight: 550;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.app .w-mobile-menu a:hover, .app .w-mobile-menu button:hover { background: rgb(17 23 38 / 5%); color: #111726; }
+.app .w-mobile-menu a:focus-visible, .app .w-mobile-menu button:focus-visible { outline: 2px solid #111726; outline-offset: -2px; }
+/* The last item is the action, not a link: a full-width lime pill with a
+   hairline above it. `.w-mobile-menu button` would otherwise strip the fill. */
+.app .w-mobile-menu .w-nav-cta {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 48px; min-height: 48px;
+  margin-top: 8px; padding: 0 16px;
+  border: 1px solid transparent; border-radius: 999px;
+  background: var(--lime); color: #0e0e10;
+  font-size: 0.95rem; font-weight: 650; text-align: center;
+}
+.app .w-mobile-menu .w-nav-cta::before {
+  content: ''; position: absolute; left: 0; right: 0; top: -5px; height: 1px;
+  border-radius: 1px; background: rgb(17 23 38 / 8%); pointer-events: none;
+}
+.app .w-mobile-menu .w-nav-cta:hover:not(:disabled) { background: #d6ff4d; color: #0e0e10; }
+.app .w-mobile-menu .w-nav-cta:disabled { background: var(--lime); color: #0e0e10; opacity: 0.5; cursor: not-allowed; }
+.app .w-mobile-menu .w-nav-cta:focus-visible { outline-offset: 3px; }
+@media (min-width: 900px) { .app .w-mobile-menu { display: none; } }
+@media (max-width: 899.98px) {
+  .app .w-nav-links, .app .w-nav-signin { display: none; }
+  .app .w-header-inner { grid-template-columns: 1fr auto; }
+  .app .w-menu-btn { display: inline-flex; }
+  .app .w-header-actions { gap: 10px; }
+}
+/* Narrow phones: keep the wordmark, the pill and the menu button on one line. */
+@media (max-width: 420px) {
+  .app .w-header-inner { gap: 12px; padding-inline: 14px; }
+  .app .w-header-actions { gap: 8px; }
+  .app .w-nav-cta { padding: 8px 12px; font-size: 0.84rem; white-space: nowrap; }
+  .app .w-logo { font-size: 1.35rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app .w-header, .app .w-header-inner, .app .w-nav-links a::after, .app .w-nav-links button::after,
+  .app .w-menu-icon i, .app .w-mobile-menu a, .app .w-mobile-menu button { transition: none; }
+}
+
 .app .w-nav-cta {
   border: 1px solid transparent; background: var(--lime); color: #0e0e10;
   border-radius: 999px; padding: 9px 16px; font-weight: 650; font-size: 0.88rem;
@@ -1141,7 +1348,7 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .w-error { margin-top: 14px; color: #b42318; font-size: 0.9rem; }
 
 .app .w-stage { position: relative; justify-self: center; width: min(100%, 470px); }
-.app .w-pip-perch { position: absolute; right: 22px; top: -72px; z-index: 3; }
+.app .w-mascot-perch { position: absolute; right: 22px; top: -72px; z-index: 3; }
 .app .s-card-lg { padding: 30px 32px 26px; }
 .app .s-card-lg .s-card-amount { font-size: clamp(3rem, 5.4vw, 4.4rem); }
 .app .w-float {
@@ -1173,7 +1380,23 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
 .app .w-tape i { font-style: normal; }
 @keyframes tape { to { transform: translateX(-50%); } }
 
-.app .w-section { max-width: 1240px; margin: 0 auto; padding: clamp(64px, 9vw, 120px) clamp(20px, 4vw, 56px) 0; }
+.app .w-section { max-width: 1240px; margin: 0 auto; padding: clamp(64px, 9vw, 120px) clamp(20px, 4vw, 56px) 0; scroll-margin-top: 88px; }
+.app .w-tile-anchor { grid-column: 1 / -1; scroll-margin-top: 88px; }
+.app .welcome > .sky { scroll-margin-top: 88px; }
+.app .w-trust-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 44px; }
+.app .w-trust-card {
+  display: flex; flex-direction: column; gap: 10px; padding: 26px;
+  border-radius: 24px; background: var(--surface); border: 1px solid var(--line);
+  transition: border-color 200ms ease;
+}
+.app .w-trust-card:hover { border-color: var(--line-strong); }
+.app .w-trust-icon {
+  display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px;
+  border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); color: #111726;
+}
+.app .w-trust-card h3 { margin: 4px 0 0; font-family: var(--display); font-size: 1.25rem; font-weight: 700; letter-spacing: -0.035em; line-height: 1.1; }
+.app .w-trust-card p { margin: 0; color: var(--muted); font-size: 0.95rem; max-width: 34ch; }
+@media (max-width: 760px) { .app .w-trust-grid { grid-template-columns: minmax(0, 1fr); } }
 .app .w-kicker { font: 500 0.74rem var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
 .app .w-h2 { margin-top: 12px; font-family: var(--display); font-weight: 750; font-size: clamp(2.4rem, 5.6vw, 4.8rem); line-height: 0.94; letter-spacing: -0.058em; font-stretch: 80%; }
 .app .w-bento { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 44px; }
@@ -1263,6 +1486,19 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
 .app-preloader-inner { display: grid; justify-items: center; gap: 12px; text-align: center; animation: preloader-in 520ms var(--ease-out) both; }
 .app-preloader-copy { font-family: var(--display); font-weight: 700; font-size: 1.3rem; letter-spacing: -0.04em; }
 .app-preloader-sub { color: var(--muted); font: 400 0.8rem var(--mono); }
+.app-preloader-bar {
+  position: relative; width: 120px; height: 3px; margin-top: 2px; overflow: hidden;
+  border-radius: 999px; background: rgb(17 23 38 / 8%);
+}
+.app-preloader-bar i {
+  position: absolute; inset-block: 0; left: 0; width: 40%; border-radius: inherit;
+  background: var(--lime); animation: preloader-bar 1.2s ease-in-out infinite;
+}
+@keyframes preloader-bar {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(60%); }
+  100% { transform: translateX(250%); }
+}
 @keyframes preloader-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 
 /* ---------- Entrances ---------- */
@@ -1299,13 +1535,12 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
 }
 
 @media (max-width: 640px) {
-  .app .w-nav-links, .app .w-status-extra { display: none; }
-  .app .w-nav-cta { margin-left: auto; }
+  .app .w-status-extra { display: none; }
   .app .w-title { font-size: clamp(3.2rem, 17vw, 5rem); }
-  .app .w-pip-perch { top: -62px; right: 12px; }
-  .app .w-pip-perch .pip { width: 76px; height: 76px; }
+  .app .w-mascot-perch { top: -62px; right: 12px; }
+  .app .w-mascot-perch .mascot { width: 76px; height: 76px; }
   .app .hello { align-items: flex-start; flex-wrap: wrap; }
-  .app .hello > .pip-btn .pip { width: 56px; height: 56px; }
+  .app .hello > .mascot-btn .mascot { width: 56px; height: 56px; }
   .app .hello-badges { order: -1; width: 100%; justify-content: flex-end; margin-bottom: -48px; }
   .app .s-card { padding: 22px 20px 18px; border-radius: 24px; }
   .app .s-card-patterns { width: 100%; grid-auto-flow: column; justify-content: space-between; align-items: center; text-align: left; }
@@ -1315,8 +1550,10 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
 
 @media (prefers-reduced-motion: reduce) {
   html.settle-smooth-scroll { scroll-behavior: auto; }
+  .app-preloader-bar i { animation: none !important; transform: none; width: 40%; }
+  .app .chat-status-bars i { animation: none !important; transform: none; opacity: 1; }
   .app-preloader-inner, .app .stagger-in > *, .app.app-ready .main, .app .view, .app .float-dock,
-  .pip-breathe, .pip-z, .pip-sprout-idle, .pip-sprout-shake, .app .w-tape-track, .app .feed-in .list > li, .app .chat-turn { animation: none !important; }
+  .mascot-breathe, .mascot-z, .mascot-sprout-idle, .mascot-sprout-shake, .app .w-tape-track, .app .feed-in .list > li, .app .chat-turn { animation: none !important; }
   .app * { transition-duration: 0.01ms !important; }
 }
 
@@ -1358,15 +1595,11 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
 
 /* ---------- Sky: shell, dock "+", add sheet ---------- */
 
-.app .topbar {
-  background: rgb(255 255 255 / 62%);
-  border-bottom: 1px solid rgb(255 255 255 / 70%);
-  box-shadow: 0 10px 30px -24px rgb(30 55 100 / 40%);
-}
+/* Night keeps the same bar shape on the dusk palette, so ink text stays legible. */
 @media (prefers-color-scheme: dark) {
-  .app .topbar { background: rgb(14 20 38 / 70%); border-bottom-color: rgb(255 255 255 / 6%); }
+  .app .topbar { background: rgb(14 20 38 / 72%); border-bottom-color: rgb(255 255 255 / 8%); box-shadow: 0 8px 30px -18px rgb(0 0 0 / 55%); }
 }
-.app .hello > .pip-btn { margin: -6px 0 -10px; }
+.app .hello > .mascot-btn { margin: -6px 0 -10px; }
 
 /* The dock: ink glass with one raised lime "+" in the middle. The "+" turns
    into an "×" while the add sheet is open, on a spring. */
@@ -1385,7 +1618,7 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
 /* Add sheet */
 .app .add-form { display: grid; gap: 14px; }
 .app .add-top { display: flex; align-items: center; gap: 14px; }
-.app .add-pip { margin: -10px 0 -6px -4px; }
+.app .add-mascot { margin: -10px 0 -6px -4px; }
 .app .add-switch {
   position: relative; display: grid; grid-template-columns: 1fr 1fr; flex: 1; padding: 4px;
   border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line);
@@ -1444,7 +1677,7 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
   .app .dock-add { width: 52px; height: 52px; margin-top: -16px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .app .pip-says > span { animation: none; }
+  .app .mascot-says > span { animation: none; }
 }
 
 
@@ -1512,11 +1745,11 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
 
 .app .sky-stage { position: relative; z-index: 1; display: grid; grid-template-columns: auto minmax(0, 440px); align-items: center; gap: clamp(8px, 3vw, 40px); width: min(100%, 720px); }
 
-/* Pip rides its own little cloud, bobbing on a slow swell. */
-.app .sky-pip { align-self: end; margin-bottom: 40px; }
-.app .sky-pip-float { position: relative; display: grid; justify-items: center; animation: sky-bob 5.5s ease-in-out infinite; }
-.app .sky-pip-float .pip { position: relative; z-index: 1; margin-bottom: -46px; }
-.app .sky-pip-float .sky-pip-cloud { position: relative; width: 190px; animation: none; }
+/* Settle rides its own little cloud, bobbing on a slow swell. */
+.app .sky-mascot { align-self: end; margin-bottom: 40px; }
+.app .sky-mascot-float { position: relative; display: grid; justify-items: center; animation: sky-bob 5.5s ease-in-out infinite; }
+.app .sky-mascot-float .mascot { position: relative; z-index: 1; margin-bottom: -46px; }
+.app .sky-mascot-float .sky-mascot-cloud { position: relative; width: 190px; animation: none; }
 @keyframes sky-bob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-14px) rotate(1.5deg); } }
 
 /* The card: thick frosted glass. backdrop-filter is fine here: this screen
@@ -1578,13 +1811,13 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
 
 @media (max-width: 760px) {
   .app .sky-stage { grid-template-columns: 1fr; justify-items: center; }
-  .app .sky-pip { margin: 0 0 -30px; }
-  .app .sky-pip .pip { width: 92px; height: 92px; }
-  .app .sky-pip-float .sky-pip-cloud { width: 150px; }
+  .app .sky-mascot { margin: 0 0 -30px; }
+  .app .sky-mascot .mascot { width: 92px; height: 92px; }
+  .app .sky-mascot-float .sky-mascot-cloud { width: 150px; }
   .app .sky-card { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .app .sky-cloud, .app .sky-pip-float, .app .sky-sun, .app .sky-twinkles i, .app .sky-card { animation: none !important; }
+  .app .sky-cloud, .app .sky-mascot-float, .app .sky-sun, .app .sky-twinkles i, .app .sky-card { animation: none !important; }
 }
 
 /* ---------- Shared sky behind every screen ---------- */
@@ -1620,8 +1853,6 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
   .app .card { background: linear-gradient(180deg, rgb(27 38 64 / 94%), rgb(19 27 46 / 92%)); border-color: rgb(255 255 255 / 6%); box-shadow: var(--shadow); }
 }
 
-/* The footer stands on the cloud floor at the bottom of the page. */
-.app .footer { border-top: 0; max-width: none; padding-left: max(24px, calc((100vw - 1180px) / 2 + 24px)); padding-right: max(24px, calc((100vw - 1180px) / 2 + 24px)); }
-.app .main-welcome + .footer { background: #ffffff; }
-@media (prefers-color-scheme: dark) { .app .main-welcome + .footer { background: transparent; } }
+/* The #account anchor above the sign-in sky scrolls clear of the sticky header. */
+.app .sky-anchor { display: block; height: 0; scroll-margin-top: 88px; }
 @media (prefers-reduced-motion: reduce) { .app .sky-backdrop .sky-cloud { animation: none; } }

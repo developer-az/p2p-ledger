@@ -85,6 +85,13 @@ const defs = {
     description: 'This week vs last week for user-logged spends: totals, week-over-week, category trends.',
     schema: z.object({}).strict(),
   },
+  get_weekly_pace: {
+    description:
+      'Weekly budget, logged spending, amount left this week, and spendable cash. Use for can-I-afford questions. ' +
+      'spendableCash is null when the user has not entered cash (cashKnown false); never treat ' +
+      'friendPaymentsBalance as spendable cash.',
+    schema: z.object({}).strict(),
+  },
 } as const;
 
 export type ToolName = keyof typeof defs;
@@ -106,6 +113,14 @@ export interface ToolContext {
   spendLogs: SpendLogStore;
   accountId: string;
   now: () => Date;
+  finance?: () => Promise<WeeklyFinance>;
+}
+
+export interface WeeklyFinance {
+  /** Profile cash plus this period's income/spends, or null when the user has not entered cash. */
+  spendableMinor: number | null;
+  budgetMinor: number | null;
+  spentMinor: number;
 }
 
 /** Runs a tool call from the model. Arguments are untrusted and validated first; errors become results the model can read. */
@@ -231,6 +246,24 @@ export async function executeTool(ctx: ToolContext, name: string, rawArgs: unkno
       const events = await ctx.spendLogs.list(ctx.accountId, { limit: 500 });
       const account = await ctx.ledger.getAccount(ctx.accountId);
       return weeklySpendingStory(events, ctx.now(), account?.currency ?? 'USD');
+    }
+    case 'get_weekly_pace': {
+      const account = await ctx.ledger.getAccount(ctx.accountId);
+      if (!account) return { error: 'Account not found' };
+      // No finance context means no entered cash — not the P2P balance.
+      const finance: WeeklyFinance = ctx.finance ? await ctx.finance() : {
+        spendableMinor: null, budgetMinor: null, spentMinor: 0,
+      };
+      const cashKnown = finance.spendableMinor !== null;
+      return {
+        weeklyBudget: finance.budgetMinor === null ? null : formatMoney(finance.budgetMinor, account.currency),
+        spentThisWeek: formatMoney(finance.spentMinor, account.currency),
+        leftThisWeek: finance.budgetMinor === null ? null : formatMoney(Math.max(0, finance.budgetMinor - finance.spentMinor), account.currency),
+        spendableCash: finance.spendableMinor === null ? null : formatMoney(finance.spendableMinor, account.currency),
+        cashKnown,
+        /** P2P ledger balance — money to settle with friends, not spending cash. */
+        friendPaymentsBalance: formatMoney(account.balanceMinor, account.currency),
+      };
     }
   }
 }

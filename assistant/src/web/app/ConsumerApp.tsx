@@ -22,7 +22,9 @@ import { FloatingDock, useSwipeNav } from './dock.js';
 import { AppPreloader } from './Preloader.js';
 import { Welcome } from './Welcome.js';
 import { SkyBackdrop } from './AuthSky.js';
-import { Pip } from './Pip.js';
+import { Mascot } from './Mascot.js';
+import { READINESS_POLL_CAP_MS, readinessPollDelays, runReadinessPoll } from './readiness-poll.js';
+import { SiteFooter } from './SiteFooter.js';
 
 /** Animation features load in their own chunk; `strict` rejects a stray full `motion.*` import. */
 const loadMotion = () => import('./motion-features.js').then((mod) => mod.default);
@@ -78,24 +80,31 @@ export function ConsumerApp() {
   const [session, setSession] = useState<Session | null>(() => loadSession());
   const [bootReady, setBootReady] = useState(false);
 
-  // A sleeping ledger can fail the initial readiness probe. Refresh the
-  // capabilities after it wakes so the form does not stay disabled.
+  // A sleeping ledger can fail the initial readiness probe. Poll the capabilities
+  // after it wakes so the form does not stay disabled until a reload. Only worth
+  // polling when accounts are persistent: a deployment without them never opens
+  // sign-up, no matter how long we wait.
   useEffect(() => {
-    if (!boot?.identity || boot.identity.signupAvailable) return;
-    let cancelled = false;
-    const timers = [5_000, 20_000, 45_000].map((delay) => window.setTimeout(() => {
-      void api.bootstrap().then((next) => {
-        if (!cancelled) setBoot(next);
-      }).catch(() => undefined);
-    }, delay));
-    return () => {
-      cancelled = true;
-      timers.forEach(window.clearTimeout);
-    };
-  }, [boot?.identity?.signupAvailable]);
+    if (!boot?.identity?.persistent || boot.identity.signupAvailable) return;
+    // Stops after ~5 minutes of wall clock (not five minutes of gaps), bounds each
+    // probe, and re-arms instead of probing while the tab is hidden.
+    return runReadinessPoll({
+      probe: (signal) => api.bootstrap({ signal }).then((next) => ({
+        ready: next.identity?.signupAvailable === true,
+        boot: next,
+      })),
+      onResult: (result) => setBoot(result.boot),
+      delays: readinessPollDelays(),
+      capMs: READINESS_POLL_CAP_MS,
+      isHidden: () => document.visibilityState === 'hidden',
+    });
+  }, [boot?.identity?.persistent, boot?.identity?.signupAvailable]);
 
   useEffect(() => {
     document.documentElement.classList.add('settle-smooth-scroll');
+    // Start the sleeping Render ledger booting while the landing page renders.
+    // Not awaited: a wake takes 30-60s and nothing here may block the preloader.
+    void api.wake();
     const minSplash = new Promise<void>((resolve) => { window.setTimeout(resolve, 720); });
     void Promise.all([
       api.bootstrap().then(setBoot).catch((e: Error) => setBootError(e.message)),
@@ -144,19 +153,7 @@ export function ConsumerApp() {
               </main>
             </>
           )}
-          <footer className="footer">
-            <span>
-              {session?.demo
-                ? 'Sample household. This is not your account.'
-                : session?.user
-                  ? `Signed in as ${session.user.email}`
-                  : 'Create an account to keep a wallet of your own.'}
-            </span>
-            {session?.user && boot?.identity?.googleAvailable ? <a href="/account-access">Account access</a> : null}
-            <a href="/ops">Console</a>
-            <a href="/privacy">Privacy</a>
-            <a href="/terms">Terms</a>
-          </footer>
+          <SiteFooter variant={session && boot ? 'compact' : 'full'} boot={boot} session={session} />
         </div>
       </ToastProvider>
     </LazyMotion>
@@ -176,7 +173,7 @@ function Brand({ onHome }: { onHome?: () => void }) {
         onHome();
       } : undefined}
     >
-      <Pip size={30} track={false} idle={false} mood="happy" />
+      <Mascot size={28} track={false} idle={false} mood="happy" />
       <span className="brand-word">settle</span>
     </a>
   );

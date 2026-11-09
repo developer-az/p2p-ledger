@@ -27,8 +27,13 @@ export function providerFromEnv(env: NodeJS.ProcessEnv = process.env): LlmProvid
   const openRouterModel = normalizeOpenRouterModel(env.OPENROUTER_MODEL?.trim() || DEFAULT_OPENROUTER_MODEL);
 
   switch (which) {
-    case 'openrouter':
-      return new OpenRouterProvider(required(env, 'OPENROUTER_API_KEY'), openRouterModel);
+    case 'openrouter': {
+      const openRouter = new OpenRouterProvider(required(env, 'OPENROUTER_API_KEY'), openRouterModel);
+      const geminiKey = env.GEMINI_API_KEY?.trim();
+      if (!geminiKey) return openRouter;
+      // OpenRouter slugs 404 for policy/guardrail reasons; Gemini is the second chance.
+      return new FallbackChainProvider(openRouter, new GeminiProvider(geminiKey, geminiModelId(env)));
+    }
     case 'anthropic':
       return new AnthropicProvider(required(env, 'ANTHROPIC_API_KEY'), env.LLM_MODEL || undefined);
     case 'gemini': {

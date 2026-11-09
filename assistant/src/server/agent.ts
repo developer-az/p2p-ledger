@@ -3,6 +3,7 @@ import type { SpendLogStore } from './spend-log.js';
 import { FallbackChainProvider } from './providers/fallback-chain.js';
 import type { ChatTurn, LlmProvider, ToolCallRecord } from './providers/types.js';
 import { executeTool, TOOL_SPECS } from './tools.js';
+import type { WeeklyFinance } from './tools.js';
 
 export const MAX_STEPS = 6;
 
@@ -20,6 +21,8 @@ export function systemPrompt(
     '',
     'Habits (user logs):',
     '- Use list_spends, summarize_spending, weekly_spending_story for patterns and totals.',
+    '- For can-I-afford questions, call get_weekly_pace.',
+    '- If get_weekly_pace reports cashKnown false, say cash is unknown; never use the friend-payments balance as spending money.',
     '- Be warm and brief — one or two trends, not a wall of numbers.',
     '',
     'Ledger (exact money):',
@@ -55,25 +58,29 @@ export async function runAssistant(opts: {
   messages: ChatTurn[];
   peers?: { id: string; owner: string }[];
   now?: () => Date;
+  finance?: () => Promise<WeeklyFinance>;
+  deadlineAt?: number;
 }): Promise<AssistantReply> {
   const now = opts.now ?? (() => new Date());
-  const ctx = { ledger: opts.ledger, spendLogs: opts.spendLogs, accountId: opts.accountId, now };
+  const ctx = { ledger: opts.ledger, spendLogs: opts.spendLogs, accountId: opts.accountId, now, finance: opts.finance };
   const result = await opts.provider.run({
     system: systemPrompt(opts.accountId, now(), opts.peers ?? []),
     messages: opts.messages,
     tools: TOOL_SPECS,
     execute: (name, args) => executeTool(ctx, name, args),
     maxSteps: MAX_STEPS,
+    deadlineAt: opts.deadlineAt ?? Date.now() + 50_000,
   });
   const answer = result.truncated || !result.answer.trim()
     ? "Sorry, I couldn't finish answering that. Try asking a narrower question."
     : result.answer.trim();
+  const routeName = opts.provider instanceof FallbackChainProvider
+    ? opts.provider.lastProviderName
+    : opts.provider.name;
   let route: AssistantReply['route'];
-  if (opts.provider instanceof FallbackChainProvider) {
-    route = opts.provider.lastUsed === 'secondary' ? 'openrouter' : 'gemini';
-  } else if (opts.provider.name === 'gemini') route = 'gemini';
-  else if (opts.provider.name === 'anthropic') route = 'anthropic';
-  else if (opts.provider.name === 'openrouter') route = 'openrouter';
+  if (routeName === 'gemini') route = 'gemini';
+  else if (routeName === 'anthropic') route = 'anthropic';
+  else if (routeName === 'openrouter') route = 'openrouter';
   return {
     answer,
     toolCalls: result.toolCalls,

@@ -3,6 +3,7 @@ import { createApp } from '../src/server/app.js';
 import { LedgerError, type LedgerAuditor, type LedgerWriter } from '../src/server/ledger.js';
 import { CompositeLedger, PracticeLedger } from '../src/server/practice-ledger.js';
 import { ScriptedProvider } from '../src/server/providers/scripted.js';
+import { InMemoryPersonalFinanceStore } from '../src/server/personal-finance.js';
 import { fixtureSpendLogStore } from '../evals/spend-fixture.js';
 import { FixtureLedger, ME, NOW } from '../evals/fixture.js';
 
@@ -166,6 +167,41 @@ describe('GET /api/accounts/:id', () => {
   });
 });
 
+describe('GET /api/wake', () => {
+  const withProbe = (isLiveLedgerUp?: () => Promise<boolean>) => createApp({
+    ledger: new CompositeLedger(Object.assign(new FixtureLedger(), writer), practice, async () => false),
+    practice,
+    spendLogs,
+    provider: () => new ScriptedProvider([{ answer: 'Hello!' }]),
+    now: () => NOW,
+    isLiveLedgerUp,
+  });
+
+  it('reports the ledger awake when the probe answers', async () => {
+    const res = await withProbe(async () => true).request('/api/wake');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    const body = await res.json() as { awake: boolean; configured: boolean; ms: number };
+    expect(body.awake).toBe(true);
+    expect(body.configured).toBe(true);
+    expect(typeof body.ms).toBe('number');
+  });
+
+  it('answers awake false instead of failing when the probe rejects', async () => {
+    const res = await withProbe(() => Promise.reject(new Error('connect ECONNREFUSED'))).request('/api/wake');
+    expect(res.status).toBe(200);
+    const body = await res.json() as { awake: boolean; configured: boolean };
+    expect(body.awake).toBe(false);
+    expect(body.configured).toBe(true);
+  });
+
+  it('says it is unconfigured when no live ledger probe is wired', async () => {
+    const res = await withProbe().request('/api/wake');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ awake: false, configured: false });
+  });
+});
+
 describe('POST /api/chat', () => {
   it('answers for a valid account', async () => {
     const res = await chat({ accountId: ME, messages: [{ role: 'user', text: 'hi' }] });
@@ -199,6 +235,61 @@ describe('POST /api/chat', () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ answer: 'Your balance is $3,750.51.', provider: 'ledger' });
+  });
+
+  it('uses profile cash for afford answers when the ledger balance is zero', async () => {
+    class EmptyWalletLedger extends FixtureLedger {
+      override async getAccount(id: string) {
+        const account = await super.getAccount(id);
+        return account && id === ME ? { ...account, balanceMinor: 0 } : account;
+      }
+    }
+    const personalFinance = new InMemoryPersonalFinanceStore();
+    await personalFinance.updateProfile(ME, 'USD', {
+      walletCashMinor: 50_000, weeklyBudgetMinor: 100_000, spendLogsAffectWallet: false,
+    }, NOW);
+    const limited = createApp({
+      ledger: new CompositeLedger(Object.assign(new EmptyWalletLedger(), writer), practice, async () => false),
+      practice, spendLogs, personalFinance, now: () => NOW,
+      provider: () => ({
+        name: 'scripted', model: 'fake',
+        run: () => Promise.reject(Object.assign(new Error('quota'), { status: 429 })),
+      }),
+    });
+    const res = await limited.request('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ accountId: ME, messages: [{ role: 'user', text: 'Can I afford $60 this week?' }] }),
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '8.8.4.4' },
+    });
+    expect(res.status).toBe(200);
+    const reply = await res.json() as { answer: string; provider: string; route: string };
+    expect(reply).toMatchObject({
+      provider: 'ledger', route: 'ledger-fallback', answer: expect.stringContaining('spendable cash is $500.00'),
+    });
+    expect(reply.answer).toContain('fits');
+  });
+
+  it('says cash is unknown instead of using the ledger balance when no cash was entered', async () => {
+    // Default profile: walletCashMinor is null, so cash is unknown. The fixture balance is $3,750.51.
+    const limited = createApp({
+      ledger: new CompositeLedger(Object.assign(new FixtureLedger(), writer), practice, async () => false),
+      practice, spendLogs, personalFinance: new InMemoryPersonalFinanceStore(), now: () => NOW,
+      provider: () => ({
+        name: 'scripted', model: 'fake',
+        run: () => Promise.reject(Object.assign(new Error('quota'), { status: 429 })),
+      }),
+    });
+    const res = await limited.request('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ accountId: ME, messages: [{ role: 'user', text: 'Can I afford $60 this week?' }] }),
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '8.8.4.5' },
+    });
+    expect(res.status).toBe(200);
+    const reply = await res.json() as { answer: string; provider: string; route: string };
+    expect(reply).toMatchObject({ provider: 'ledger', route: 'ledger-fallback' });
+    expect(reply.answer).toContain("You haven't entered your cash yet");
+    expect(reply.answer).toContain("Your friend-payments balance is $3,750.51, but that isn't your spending cash.");
+    expect(reply.answer).not.toContain('Yes, $60.00 fits');
   });
 
   it('rate-limits a single client', async () => {

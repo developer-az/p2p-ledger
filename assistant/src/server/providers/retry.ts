@@ -69,6 +69,36 @@ export function retryableStatus(error: unknown): number | undefined {
 export function isModelOutage(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   const status = retryableStatus(error);
-  if (status === 429 || status === 503 || status === 504) return true;
+  if (status === 429 || (status !== undefined && status >= 500) || isNetworkError(error)) return true;
   return /RESOURCE_EXHAUSTED|UNAVAILABLE|DEADLINE_EXCEEDED|high demand|Deadline expired/i.test(message);
+}
+
+/**
+ * OpenRouter returns 404 when no endpoint matches the guardrail / data policy, and Google returns
+ * NOT_FOUND for a retired model id. Neither is transient: another model is the only way forward.
+ */
+const MODEL_MISSING_PATTERN =
+  /no endpoints|endpoints out of|guardrail|data policy|model not found|is not found|not supported for generateContent|NOT_FOUND/i;
+
+export function isModelMissing(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  if ((error as { status?: number }).status === 404) return true;
+  return MODEL_MISSING_PATTERN.test(message);
+}
+
+/**
+ * A guardrail / data-policy rejection applies to the whole OpenRouter account,
+ * not to one slug, so walking candidates cannot help: every model has the same
+ * block. Distinct from a plain 404 (retired slug), which does move on.
+ */
+const POLICY_BLOCKED_PATTERN = /guardrail|data policy|endpoints out of|no endpoints/i;
+
+export function isPolicyBlocked(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return POLICY_BLOCKED_PATTERN.test(message);
+}
+
+/** Stop using this provider/model entirely: either it is overloaded or the model no longer resolves. */
+export function isProviderUnavailable(error: unknown): boolean {
+  return isModelOutage(error) || isModelMissing(error);
 }

@@ -14,7 +14,7 @@ import { categoryLabel, categoryMeta } from './categories.js';
 import { money } from './format.js';
 import { recordIncomeMutation, recordSpendMutation } from './ledger-mutations.js';
 import type { OptimisticMutation, OptimisticResult } from './ledger-store.js';
-import { Pip } from './Pip.js';
+import { Mascot } from './Mascot.js';
 import { Sheet, useToast } from './ui.js';
 
 type WalletRun = (mutation: OptimisticMutation) => Promise<OptimisticResult>;
@@ -230,7 +230,7 @@ export function AddSheet({
         onSubmit={(e) => { e.preventDefault(); submitFromKeyboard(); }}
       >
         <div className="add-top">
-          <Pip size={58} mood={minor === null ? 'calm' : 'happy'} idle={false} className="add-pip" />
+          <Mascot size={58} mood={minor === null ? 'calm' : 'happy'} idle={false} className="add-mascot" />
           <div className="add-switch" role="radiogroup" aria-label="What happened">
             <span className="add-switch-thumb" aria-hidden="true" />
             <button type="button" role="radio" disabled={busy !== null} aria-checked={mode === 'spent'} onClick={() => switchMode('spent')}>I spent</button>

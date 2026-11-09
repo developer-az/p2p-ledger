@@ -29,6 +29,27 @@ describe('providerFromEnv', () => {
     expect(p).toBeInstanceOf(OpenRouterProvider);
   });
 
+  it('chains OpenRouter with Gemini when LLM_PROVIDER=openrouter and both keys are set', () => {
+    const p = providerFromEnv({
+      LLM_PROVIDER: 'openrouter',
+      OPENROUTER_API_KEY: 'o',
+      OPENROUTER_MODEL: 'google/gemini-2.5-flash-lite',
+      GEMINI_API_KEY: 'g',
+    });
+    expect(p).toBeInstanceOf(FallbackChainProvider);
+    expect(p.model).toBe('google/gemini-2.5-flash-lite → gemini-2.5-flash-lite');
+  });
+
+  it('keeps OpenRouter alone in openrouter mode when no Gemini key is set', () => {
+    const p = providerFromEnv({
+      LLM_PROVIDER: 'openrouter',
+      OPENROUTER_API_KEY: 'o',
+      GEMINI_API_KEY: '  ',
+    });
+    expect(p).toBeInstanceOf(OpenRouterProvider);
+    expect(p).not.toBeInstanceOf(FallbackChainProvider);
+  });
+
   it('openrouter provider mode uses OPENROUTER_MODEL not LLM_MODEL', () => {
     const p = providerFromEnv({
       LLM_PROVIDER: 'openrouter',
@@ -47,6 +68,6 @@ describe('providerFromEnv', () => {
       LLM_MODEL: 'google/gemini-2.0-flash-001',
     });
     expect(p).toBeInstanceOf(GeminiProvider);
-    expect(p.model).toBe('gemini-2.0-flash-lite');
+    expect(p.model).toBe('gemini-2.5-flash-lite');
   });
 });

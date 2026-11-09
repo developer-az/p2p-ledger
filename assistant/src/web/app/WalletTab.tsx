@@ -6,7 +6,7 @@ import { TrustTab } from './TrustTab.js';
 import type { WalletData } from './data.js';
 import { Icon, Skeleton } from './ui.js';
 import { CountUp, TiltCard } from './motion-kit.js';
-import { Pip } from './Pip.js';
+import { Mascot } from './Mascot.js';
 
 export interface WalletActions {
   setup: () => void;
@@ -115,7 +115,7 @@ export function WalletTab({
 
         <div className="stack">
           <section className="ask-card" aria-labelledby="wallet-ask">
-            <Pip size={56} mood="calm" className="ask-card-pip" />
+            <Mascot size={56} mood="calm" className="ask-card-mascot" />
             <p className="eyebrow">A second pair of eyes</p>
             <h2 id="wallet-ask">Ask about your money</h2>
             <p className="ask-lede">Read-only answers from your records. It cannot move a cent.</p>

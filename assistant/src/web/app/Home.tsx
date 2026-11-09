@@ -8,7 +8,7 @@ import { moneyPlan } from './money-plan.js';
 import { NeedsYouCard } from './SettleUp.js';
 import type { WalletData } from './data.js';
 import { CountUp, TiltCard } from './motion-kit.js';
-import { Pip, pipMood, type PipMood } from './Pip.js';
+import { Mascot, mascotMood, type MascotMood } from './Mascot.js';
 import { EmptyState, Icon, ProgressRing, Skeleton } from './ui.js';
 
 export interface HomeActions {
@@ -45,16 +45,16 @@ export function Home({ me, name, data, actions, guide, cheer = 0 }: { me: Accoun
     ? plan.patterns.week.spentMinor - plan.patterns.week.lastWeekSpentMinor
     : 0;
   const loggedToday = dots.some((d) => d.today && d.logged);
-  const mood = pipMood({ overBudget: plan.overBudget, streakDays: plan.streakDays, loggedToday, hasData: habitFeed.length > 0 });
+  const mood = mascotMood({ overBudget: plan.overBudget, streakDays: plan.streakDays, loggedToday, hasData: habitFeed.length > 0 });
 
   return (
     <div className="home stagger-in">
       <header className="hello">
-        <Pip mood={mood} cheer={cheer} size={92} greet onTap={() => actions.logSpend()} />
+        <Mascot mood={mood} cheer={cheer} size={92} greet onTap={() => actions.logSpend()} />
         <div className="hello-copy">
           <p className="eyebrow">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</p>
           <h1>Hi, {name ?? displayName(me.owner)}.</h1>
-          <p className="pip-says" aria-live="polite"><span>{pipLine(mood, plan)}</span></p>
+          <p className="mascot-says" aria-live="polite"><span>{mascotLine(mood, plan)}</span></p>
         </div>
         <div className="hello-badges">
           <span className="streak-pill" title="Consecutive days with a logged spend">
@@ -85,7 +85,7 @@ export function Home({ me, name, data, actions, guide, cheer = 0 }: { me: Accoun
                 title="Log one thing"
                 action={<button type="button" className="btn btn-primary" onClick={() => actions.logSpend()}>Log a coffee</button>}
               >
-                One log wakes Pip up and unlocks your week ring. About five seconds.
+                One log wakes Settle up and unlocks your week ring. About five seconds.
               </EmptyState>
             ) : (
               <FeedList items={habitFeed.slice(0, 5)} onOpen={actions.openItem} grouped={false} />
@@ -102,7 +102,7 @@ export function Home({ me, name, data, actions, guide, cheer = 0 }: { me: Accoun
   );
 }
 
-function pipLine(mood: PipMood, plan: ReturnType<typeof moneyPlan>): string {
+function mascotLine(mood: MascotMood, plan: ReturnType<typeof moneyPlan>): string {
   switch (mood) {
     case 'worried':
       return plan.budgetMinor === null
@@ -236,7 +236,7 @@ function SetupHero({ actions }: { actions: HomeActions }) {
     <section className="money-hero" aria-labelledby="setup-title">
       <div className="s-card s-card-setup">
         <p className="s-card-label">Your starting point</p>
-        <h2 id="setup-title">Three numbers.<br />Then Pip does the math.</h2>
+        <h2 id="setup-title">Three numbers.<br />Then Settle does the math.</h2>
         <div className="setup-preview">
           <div><small>Cash</small><strong>what you have</strong></div>
           <div><small>Cards</small><strong>what you owe</strong></div>

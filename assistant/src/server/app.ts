@@ -34,7 +34,7 @@ import {
 } from './personal-finance.js';
 import { formatMoney } from './money.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
-import { loadAccountView } from './tools.js';
+import { loadAccountView, type WeeklyFinance } from './tools.js';
 import {
   InMemoryPaymentRequestStore,
   type PaymentRequest,
@@ -137,6 +137,9 @@ const recordIncomeBody = z.object({
   note: z.string().max(140).optional(),
   occurredAt: z.string().datetime().optional(),
 });
+
+/** How long /wake waits on the ledger before answering "still asleep". */
+const WAKE_PROBE_TIMEOUT_MS = 9_000;
 
 /**
  * Rate limiters are built once per app instance (see rate-limit.ts). The chat
@@ -247,6 +250,31 @@ export function createApp(deps: {
       await deps.javaWorkflows.assertReady();
       return c.json({ ready: true });
     } catch { return c.json({ ready: false }, 503); }
+  });
+
+  /**
+   * Cheap wake trigger. Render's free tier sleeps the ledger after ~15 idle
+   * minutes and takes 30-60s to come back. The client fires this on first paint
+   * so the ledger starts booting while the landing page renders. It probes,
+   * gives up after 9s, and never returns 5xx: a cold ledger is not an error.
+   */
+  app.get('/wake', async (c) => {
+    c.header('Cache-Control', 'no-store');
+    if (!deps.isLiveLedgerUp) return c.json({ awake: false, configured: false });
+    const started = Date.now();
+    let awake = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      awake = await Promise.race([
+        deps.isLiveLedgerUp(),
+        new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), WAKE_PROBE_TIMEOUT_MS); }),
+      ]);
+    } catch {
+      awake = false;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    return c.json({ awake, configured: true, ms: Date.now() - started });
   });
 
   app.get('/bootstrap', async (c) => {
@@ -1066,14 +1094,41 @@ export function createApp(deps: {
     if (denied) return denied;
     const account = await deps.ledger.getAccount(accountId);
     if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const deadlineAt = Date.now() + 50_000;
 
     // Only the newest turns go to the model; old history is cost without value.
     const messages = trimHistory(rawMessages);
     const question = messages.at(-1)?.text ?? '';
 
+    const chatFinance = async (): Promise<WeeklyFinance> => {
+      const [profile, spends, incomes] = await Promise.all([
+        personalFinance.getProfile(accountId, account.currency, now()),
+        deps.spendLogs.list(accountId, { limit: 500 }),
+        personalFinance.listIncome(accountId, { limit: 500 }),
+      ]);
+      const snapshot = buildFinanceSnapshot(profile, formatMoney(account.balanceMinor, account.currency), spends, incomes);
+      // Match snapshot.projectedCash, including its income and spend-log rules.
+      // No entered cash means unknown. The P2P balance settles up with friends; it is not the user's cash.
+      const spendableMinor = profile.walletCashMinor === null ? null
+        : profile.walletCashMinor + snapshot.periodTotals.incomeMinor
+          - (profile.spendLogsAffectWallet ? snapshot.periodTotals.spendMinor : 0);
+      return {
+        spendableMinor,
+        budgetMinor: profile.weeklyBudgetMinor,
+        spentMinor: buildSpendingPatterns(spends, [], now(), profile).week.spentMinor,
+      };
+    };
+
     /** Deterministic ledger answers — used on config errors, budget exhaustion and model failures. */
     const degrade = async (reason: string): Promise<AssistantReply> => ({
-      ...(await answerFromLedger({ ledger: deps.ledger, spendLogs: deps.spendLogs, accountId, question, now })),
+      ...(await answerFromLedger({
+        ledger: deps.ledger,
+        spendLogs: deps.spendLogs,
+        accountId,
+        question,
+        now,
+        finance: chatFinance,
+      })),
       route: 'ledger-fallback',
       fallbackReason: reason,
     });
@@ -1093,7 +1148,7 @@ export function createApp(deps: {
         messages,
         produce: async () => {
           const peers = await listPeers(deps.ledger, accountId);
-          return runAssistant({ provider, ledger: deps.ledger, spendLogs: deps.spendLogs, accountId, messages, peers, now });
+          return runAssistant({ provider, ledger: deps.ledger, spendLogs: deps.spendLogs, accountId, messages, peers, now, finance: chatFinance, deadlineAt });
         },
         degrade,
       });

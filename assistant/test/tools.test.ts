@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { executeTool, TOOL_SPECS } from '../src/server/tools.js';
 import { fixtureSpendLogStore } from '../evals/spend-fixture.js';
 import { FixtureLedger, ME, NOW } from '../evals/fixture.js';
@@ -15,6 +15,30 @@ describe('tools', () => {
 
   it('reports the balance formatted from integer cents', async () => {
     expect(await executeTool(ctx, 'get_account_overview', {})).toMatchObject({ owner: 'riley', balance: '$3,750.51' });
+  });
+
+  it('returns account-scoped weekly pace and spendable cash', async () => {
+    const finance = vi.fn(async () => ({ spendableMinor: 50_000, budgetMinor: 25_000, spentMinor: 23_000 }));
+    expect(await executeTool({ ...ctx, finance }, 'get_weekly_pace', {})).toEqual({
+      weeklyBudget: '$250.00', spentThisWeek: '$230.00', leftThisWeek: '$20.00',
+      spendableCash: '$500.00', cashKnown: true, friendPaymentsBalance: '$3,750.51',
+    });
+    expect(finance).toHaveBeenCalledOnce();
+    expect(await executeTool({ ...ctx, finance }, 'get_weekly_pace', { accountId: 'someone-else' }))
+      .toMatchObject({ error: 'Invalid arguments' });
+    // No finance context: cash is unknown, and the P2P balance is reported separately.
+    expect(await executeTool(ctx, 'get_weekly_pace', {})).toMatchObject({
+      weeklyBudget: null, leftThisWeek: null, spendableCash: null, cashKnown: false,
+      friendPaymentsBalance: '$3,750.51',
+    });
+  });
+
+  it('reports unknown cash and the friend-payments balance when no cash was entered', async () => {
+    const finance = vi.fn(async () => ({ spendableMinor: null, budgetMinor: 40_000, spentMinor: 23_000 }));
+    expect(await executeTool({ ...ctx, finance }, 'get_weekly_pace', {})).toEqual({
+      weeklyBudget: '$400.00', spentThisWeek: '$230.00', leftThisWeek: '$170.00',
+      spendableCash: null, cashKnown: false, friendPaymentsBalance: '$3,750.51',
+    });
   });
 
   it('lists transfers newest first with direction and counterparty', async () => {

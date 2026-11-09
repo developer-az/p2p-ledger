@@ -3,7 +3,7 @@ import type { LedgerReader } from './ledger.js';
 import type { SpendLogStore } from './spend-log.js';
 import { InMemorySpendLogStore } from './spend-log.js';
 import type { ToolCallRecord } from './providers/types.js';
-import { executeTool, type ToolContext } from './tools.js';
+import { executeTool, type ToolContext, type WeeklyFinance } from './tools.js';
 
 /**
  * Answers from the ledger tools when the model is out of quota. Amounts are copied
@@ -15,6 +15,8 @@ export async function answerFromLedger(opts: {
   accountId: string;
   question: string;
   now?: () => Date;
+  /** Profile cash and pace. Without it, cash is unknown — the P2P balance is not the user's cash. */
+  finance?: () => Promise<WeeklyFinance>;
 }): Promise<AssistantReply> {
   const ctx: ToolContext = {
     ledger: opts.ledger,
@@ -34,9 +36,91 @@ export async function answerFromLedger(opts: {
   });
 
   const q = opts.question.toLowerCase();
-  if (/\b(send|transfer|pay)\b/.test(q) && (/\$\s?\d/.test(q) || /\b\d+(\.\d{1,2})?\b/.test(q))) {
-    return finish("I can't send money from chat. Use CMD: pay sam 10 lunch (or :pay sam 10 lunch).");
-  }
+  /* An afford question can contain "pay" ("afford to pay $60") and "paycheck"
+     ("afford $60 after my paycheck"), so it is answered before the income totals. */
+  const isAfford = /\bafford\b|can i (spend|buy|go)|is it ok to spend|do i have enough/.test(q);
+  const hasAmount = /\$\s?\d/.test(q) || /\b\d+(\.\d{1,2})?\b/.test(q);
+  /* A request to move money is refused however it is phrased: "Pay Jordan $20 so
+     he can afford lunch", "I need you to pay Jordan $20", "can you send sam $60".
+     Rather than listing phrasings, look at each send/transfer/pay verb and ignore
+     only the two uses that are not a transfer:
+       - "afford to pay $60" asks whether the money is there;
+       - "send me / send us" asks for information ("send me a breakdown").
+     Any other transfer verb plus an amount is a request to move money. */
+  const isTransferCommand = hasAmount && [...q.matchAll(/\b(send|transfer|pay)\b/g)].some((match) => {
+    const at = match.index ?? 0;
+    const before = q.slice(0, at);
+    const after = q.slice(at + match[0].length);
+    if (/afford to\s+$/.test(before)) return false;
+    if (/^\s+(me|us)\b/.test(after)) return false;
+    return true;
+  });
+  const refuseTransfer = (): AssistantReply =>
+    finish("I can't send money from chat. Use CMD: pay sam 10 lunch (or :pay sam 10 lunch).");
+
+  /** Afford questions are questions, not commands: answer them before the refusal. */
+  const answerAfford = async (): Promise<AssistantReply> => {
+    const overview = await call('get_account_overview', {});
+    const story = await call('weekly_spending_story', {});
+    const balance = String(overview.balance);
+    const finance = opts.finance ? await opts.finance() : null;
+    // null means the user has not entered cash; the P2P balance settles with friends, it is not cash.
+    const spendableMinor = finance?.spendableMinor ?? null;
+    const thisWeek = String(story.totalThisWeek);
+    const lastWeek = String(story.totalLastWeek);
+    const asked = amountIn(q);
+    if (spendableMinor === null) {
+      const target = asked === undefined ? 'that' : money(Math.round(asked * 100));
+      const pace = paceLine(finance?.budgetMinor ?? null, finance?.spentMinor ?? 0);
+      return finish(
+        `You haven't entered your cash yet, so I can't tell if ${target} fits. ` +
+        (pace ? `${pace} ` : '') +
+        `Your friend-payments balance is ${balance}, but that isn't your spending cash. ` +
+        'Add your cash in Edit money snapshot to get a real answer.',
+      );
+    }
+    const spendable = money(spendableMinor);
+    if (asked === undefined) {
+      return finish(`Your spendable cash is ${spendable}. This week you've logged ${thisWeek} (last week ${lastWeek}).`);
+    }
+    const amountMinor = Math.round(asked * 100);
+    const amount = money(amountMinor);
+    if (amountMinor > spendableMinor) {
+      return finish(
+        `Your spendable cash is ${spendable}, less than ${amount}. ` +
+        `This week you've logged ${thisWeek} (last week ${lastWeek}).`,
+      );
+    }
+    const budgetMinor = finance?.budgetMinor ?? null;
+    if (budgetMinor === null) {
+      return finish(
+        `You haven't set a weekly pace, so I can only check your spendable cash: ${spendable} covers ${amount}. ` +
+        `This week you've logged ${thisWeek} (last week ${lastWeek}).`,
+      );
+    }
+    const spentMinor = finance?.spentMinor ?? 0;
+    const remainingMinor = budgetMinor - spentMinor;
+    const budget = money(budgetMinor);
+    const remaining = money(Math.max(0, remainingMinor));
+    if (amountMinor > remainingMinor) {
+      if (remainingMinor <= 0) {
+        return finish(
+          `You're already over your weekly pace by ${money(-remainingMinor)}: you have ${money(0)} left of ` +
+          `${budget} this week (spendable cash ${spendable}).`,
+        );
+      }
+      return finish(
+        `That would put you over your weekly pace: you have ${remaining} left of ${budget} this week ` +
+        `(spendable cash ${spendable}).`,
+      );
+    }
+    return finish(
+      `Yes, ${amount} fits: you have ${remaining} left of your ${budget} weekly pace, and your spendable cash is ${spendable}.`,
+    );
+  };
+
+  if (isTransferCommand) return refuseTransfer();
+  if (isAfford) return answerAfford();
   if (/credit score|social security|password/.test(q)) {
     return finish("I don't have access to that. I can only read this account's payments.");
   }
@@ -154,6 +238,16 @@ function numberIn(q: string): number | undefined {
   return n ? Number(n[1]) : undefined;
 }
 
+/** First dollar amount in the question, else the first bare number, as a plain dollar figure. */
+function amountIn(q: string): number | undefined {
+  // "$5,000" and "1,200" read as one number, not as 5 or 1.
+  const s = q.replace(/(\d),(?=\d{3})/g, '$1');
+  const dollars = /\$\s?(\d+(?:\.\d{1,2})?)/.exec(s);
+  if (dollars) return Number(dollars[1]);
+  const bare = /\b(\d+(?:\.\d{1,2})?)\b/.exec(s);
+  return bare ? Number(bare[1]) : undefined;
+}
+
 function memoMatches(question: string, memo: string | null): boolean {
   if (!memo) return false;
   const words = memo.toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 3);
@@ -184,6 +278,22 @@ function asRows(value: unknown): { counterparty: string; sent: string }[] {
 
 function asCategoryRows(value: unknown): { category: string; total: string }[] {
   return Array.isArray(value) ? value as { category: string; total: string }[] : [];
+}
+
+function money(minor: number): string {
+  return `$${(minor / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** Pace facts for answers where cash is unknown: what is left of the weekly pace, or how far over it is. */
+function paceLine(budgetMinor: number | null, spentMinor: number): string | null {
+  if (budgetMinor === null) return null;
+  const remainingMinor = budgetMinor - spentMinor;
+  const budget = money(budgetMinor);
+  if (remainingMinor <= 0) {
+    return `You're already over your weekly pace by ${money(-remainingMinor)}: ` +
+      `you have ${money(0)} left of ${budget} this week.`;
+  }
+  return `You have ${money(remainingMinor)} left of your ${budget} weekly pace.`;
 }
 
 function moneyMinor(display: string): number {

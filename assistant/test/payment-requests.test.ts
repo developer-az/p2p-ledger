@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createApp } from '../src/server/app.js';
+import { createApp, PRACTICE_REQUEST_PARKING, PRACTICE_REQUEST_UTILITIES } from '../src/server/app.js';
 import { splitEvenly } from '../src/server/money.js';
 import { InMemoryPaymentRequestStore } from '../src/server/payment-requests.js';
 import {
@@ -68,11 +68,15 @@ describe('payment requests', () => {
     const sam = await (await app.request(`/api/requests?accountId=${PRACTICE_SAM}`)).json() as {
       incoming: { memo: string; amount: string; requester: { owner: string } }[]; outgoing: unknown[];
     };
-    expect(sam.incoming).toHaveLength(1);
-    expect(sam.incoming[0]).toMatchObject({ memo: 'Dinner', amount: '$20.00', requester: { owner: 'anthony' } });
-    expect(sam.outgoing).toHaveLength(0);
-    const anthony = await (await app.request(`/api/requests?accountId=${PRACTICE_ANTHONY}`)).json() as { outgoing: unknown[] };
-    expect(anthony.outgoing).toHaveLength(2);
+    /* The practice account also gets the three seeded demo rows, so match the new ask by memo. */
+    const dinner = sam.incoming.filter((r) => r.memo === 'Dinner');
+    expect(dinner).toHaveLength(1);
+    expect(dinner[0]).toMatchObject({ amount: '$20.00', requester: { owner: 'anthony' } });
+    expect(sam.outgoing.filter((r) => (r as { memo: string }).memo === 'Dinner')).toHaveLength(0);
+    const anthony = await (await app.request(`/api/requests?accountId=${PRACTICE_ANTHONY}`)).json() as {
+      outgoing: { memo: string }[];
+    };
+    expect(anthony.outgoing.filter((r) => r.memo === 'Dinner')).toHaveLength(2);
   });
 
   it('refuses asking yourself, asking someone twice, and unknown accounts', async () => {
@@ -170,5 +174,68 @@ describe('payment requests', () => {
     const res = await post(`/requests/${created.requests[0]!.id}/cancel`, { accountId: PRACTICE_ANTHONY });
     expect(res.status).toBe(200);
     expect(((await res.json()) as { request: { status: string } }).request.status).toBe('CANCELLED');
+  });
+});
+
+/**
+ * Vercel sends the list and the pay/decline call to different instances. These
+ * tests build an instance that has never served GET /requests (so its in-memory
+ * store is empty) and show the fixed practice ids still resolve there.
+ */
+describe('practice requests on a fresh serverless instance', () => {
+  it('pays the seeded utilities request without listing it first', async () => {
+    const { post, balance } = setup();
+    const anthonyBefore = await balance(PRACTICE_ANTHONY);
+    const jordanBefore = await balance(PRACTICE_JORDAN);
+
+    const res = await post(`/requests/${PRACTICE_REQUEST_UTILITIES}/pay`, { accountId: PRACTICE_ANTHONY });
+    expect(res.status).toBe(200);
+    const { request } = await res.json() as { request: { id: string; status: string; transferId: string | null } };
+    expect(request).toMatchObject({ id: PRACTICE_REQUEST_UTILITIES, status: 'PAID' });
+    expect(request.transferId).toBeTruthy();
+    expect(await balance(PRACTICE_ANTHONY)).toBe(anthonyBefore - 6_000);
+    expect(await balance(PRACTICE_JORDAN)).toBe(jordanBefore + 6_000);
+  });
+
+  it('answers a second pay on the same practice request with 200 and moves no more money', async () => {
+    const { post, balance } = setup();
+    expect((await post(`/requests/${PRACTICE_REQUEST_UTILITIES}/pay`, { accountId: PRACTICE_ANTHONY })).status).toBe(200);
+    const anthonyAfterFirst = await balance(PRACTICE_ANTHONY);
+
+    const second = await post(`/requests/${PRACTICE_REQUEST_UTILITIES}/pay`, { accountId: PRACTICE_ANTHONY });
+    expect(second.status).toBe(200);
+    const { request } = await second.json() as { request: { status: string } };
+    expect(request.status).toBe('PAID');
+    expect(await balance(PRACTICE_ANTHONY)).toBe(anthonyAfterFirst);
+  });
+
+  it('declines the seeded parking request on another fresh instance, twice with 200', async () => {
+    const { post } = setup();
+    const first = await post(`/requests/${PRACTICE_REQUEST_PARKING}/decline`, { accountId: PRACTICE_SAM });
+    expect(first.status).toBe(200);
+    const declined = await first.json() as { request: { id: string; status: string } };
+    expect(declined.request).toMatchObject({ id: PRACTICE_REQUEST_PARKING, status: 'DECLINED' });
+    const second = await post(`/requests/${PRACTICE_REQUEST_PARKING}/decline`, { accountId: PRACTICE_SAM });
+    expect(second.status).toBe(200);
+    expect(((await second.json()) as { request: { status: string } }).request.status).toBe('DECLINED');
+  });
+
+  it('records a rail on the seeded parking request from a fresh instance', async () => {
+    const { post } = setup();
+    const res = await post(`/requests/${PRACTICE_REQUEST_PARKING}/settle`, { accountId: PRACTICE_ANTHONY, settledVia: 'cashapp' });
+    expect(res.status).toBe(200);
+    const { request } = await res.json() as { request: { status: string; settledVia: string | null } };
+    expect(request).toMatchObject({ status: 'PAID', settledVia: 'cashapp' });
+  });
+
+  it('keeps the 409 for a user-created request that was already declined', async () => {
+    const { post } = setup();
+    const created = await (await post('/requests', {
+      requesterAccountId: PRACTICE_ANTHONY,
+      payers: [{ accountId: PRACTICE_SAM, amountMinor: 700 }],
+    })).json() as RequestBody;
+    const id = created.requests[0]!.id;
+    expect((await post(`/requests/${id}/decline`, { accountId: PRACTICE_SAM })).status).toBe(200);
+    expect((await post(`/requests/${id}/decline`, { accountId: PRACTICE_SAM })).status).toBe(409);
   });
 });

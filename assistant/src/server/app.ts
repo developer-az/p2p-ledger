@@ -116,6 +116,15 @@ const requestSettleBody = z.object({
 const paymentBody = z.object({ accountId: z.string().uuid(), transferId: z.string().uuid() });
 const raceBody = z.object({ accountId: z.string().uuid(), fromAccountId: z.string().uuid() });
 
+/**
+ * Fixed ids for the three seeded demo requests. Every serverless instance agrees on these
+ * keys, so a pay/decline call can land anywhere and still find the row (see PLAN.md step 2).
+ */
+export const PRACTICE_REQUEST_GROCERIES = '01111111-1111-7111-8111-111111111301';
+export const PRACTICE_REQUEST_UTILITIES = '01111111-1111-7111-8111-111111111302';
+export const PRACTICE_REQUEST_PARKING = '01111111-1111-7111-8111-111111111303';
+const PRACTICE_REQUEST_IDS = new Set([PRACTICE_REQUEST_GROCERIES, PRACTICE_REQUEST_UTILITIES, PRACTICE_REQUEST_PARKING]);
+
 const recordSpendBody = z.object({
   amountMinor: z.number().int().positive().max(MAX_MINOR_UI),
   category: z.enum(SPEND_CATEGORIES),
@@ -634,18 +643,42 @@ export function createApp(deps: {
     return c.json({ requests: created }, 201);
   });
 
-  /** The offline practice household starts with a few open requests so the screen is never empty. */
+  /**
+   * The offline practice household starts with a few open requests so the screen is never empty.
+   * The ids are fixed (not random) because Vercel spreads the list and the pay/decline call across
+   * instances: with a deterministic key, any instance can seed on demand and then resolve the row.
+   */
   let practiceSeeded: Promise<void> | null = null;
   function seedPracticeRequests(): Promise<void> {
     practiceSeeded ??= (async () => {
-      if ((await paymentRequests.listFor(PRACTICE_ANTHONY, 1)).length > 0) return;
-      const make = (requester: string, payer: string, amountMinor: number, memo: string) =>
-        paymentRequests.create({ requesterAccountId: requester, payerAccountId: payer, amountMinor, currency: 'USD', memo }, now());
-      await make(PRACTICE_SAM, PRACTICE_ANTHONY, 1_850, 'Groceries run');
-      await make(PRACTICE_JORDAN, PRACTICE_ANTHONY, 6_000, 'Utilities share');
-      await make(PRACTICE_ANTHONY, PRACTICE_SAM, 3_500, 'Concert parking');
-    })();
+      const seeds = [
+        { id: PRACTICE_REQUEST_GROCERIES, requester: PRACTICE_SAM, payer: PRACTICE_ANTHONY, amountMinor: 1_850, memo: 'Groceries run' },
+        { id: PRACTICE_REQUEST_UTILITIES, requester: PRACTICE_JORDAN, payer: PRACTICE_ANTHONY, amountMinor: 6_000, memo: 'Utilities share' },
+        { id: PRACTICE_REQUEST_PARKING, requester: PRACTICE_ANTHONY, payer: PRACTICE_SAM, amountMinor: 3_500, memo: 'Concert parking' },
+      ];
+      for (const seed of seeds) {
+        /* Idempotent per instance: a row that is already here may be PAID or DECLINED, so
+           leave it alone instead of recreating it as PENDING. */
+        if (await paymentRequests.get(seed.id)) continue;
+        await paymentRequests.create({
+          id: seed.id,
+          requesterAccountId: seed.requester,
+          payerAccountId: seed.payer,
+          amountMinor: seed.amountMinor,
+          currency: 'USD',
+          memo: seed.memo,
+        }, now());
+      }
+    })().catch((error: unknown) => {
+      practiceSeeded = null;
+      throw error;
+    });
     return practiceSeeded;
+  }
+
+  /** Seeded demo rows are the only practice requests that resolve idempotently. */
+  function isSeedPracticeRequest(id: string): boolean {
+    return PRACTICE_REQUEST_IDS.has(id);
   }
 
   app.get('/requests', async (c) => {
@@ -677,6 +710,10 @@ export function createApp(deps: {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = requestActorBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    /* Another instance may own the write: seed the fixed demo rows here first so the id resolves. */
+    if (isSeedPracticeRequest(c.req.param('id')) || deps.ledger.isPracticeAccount(parsed.data.accountId)) {
+      await seedPracticeRequests();
+    }
     const request = await findRequest(c.req.param('id'));
     if (!request) return c.json({ error: 'Request not found' }, 404);
     const denied = await walletAccessError(c, parsed.data.accountId);
@@ -692,6 +729,10 @@ export function createApp(deps: {
     }
     if (request.status !== 'PENDING' && request.status !== 'PAID') {
       return c.json({ error: `This request was ${request.status.toLowerCase()}`, request: await requestView(request) }, 409);
+    }
+    /* A repeated tap on a demo request is a no-op, not a second transfer. */
+    if (request.status === 'PAID' && isSeedPracticeRequest(request.id)) {
+      return c.json({ request: await requestView(request) });
     }
     const transfer = await deps.ledger.transfer({
       sourceAccountId: request.payerAccountId,
@@ -723,6 +764,9 @@ export function createApp(deps: {
       if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
       const parsed = requestActorBody.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+      if (isSeedPracticeRequest(c.req.param('id')) || deps.ledger.isPracticeAccount(parsed.data.accountId)) {
+        await seedPracticeRequests();
+      }
       const request = await findRequest(c.req.param('id'));
       if (!request) return c.json({ error: 'Request not found' }, 404);
       const denied = await walletAccessError(c, parsed.data.accountId);
@@ -733,6 +777,10 @@ export function createApp(deps: {
       if (deps.javaWorkflows && !deps.ledger.isPracticeAccount(parsed.data.accountId)) {
         const result = await deps.javaWorkflows.resolve(request.id, action, parsed.data.accountId);
         return c.json({ request: await requestView(result.request) });
+      }
+      /* A repeated tap on a demo request is a no-op, not a 409. */
+      if (request.status === status && isSeedPracticeRequest(request.id)) {
+        return c.json({ request: await requestView(request) });
       }
       const resolved = await paymentRequests.resolve(request.id, status, null, now());
       if (!resolved) return c.json({ error: `This request was already ${request.status.toLowerCase()}`, request: await requestView(request) }, 409);
@@ -749,6 +797,9 @@ export function createApp(deps: {
     if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = requestSettleBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    if (isSeedPracticeRequest(c.req.param('id')) || deps.ledger.isPracticeAccount(parsed.data.accountId)) {
+      await seedPracticeRequests();
+    }
     const request = await findRequest(c.req.param('id'));
     if (!request) return c.json({ error: 'Request not found' }, 404);
     const denied = await walletAccessError(c, parsed.data.accountId);
@@ -760,6 +811,10 @@ export function createApp(deps: {
     if (deps.javaWorkflows && !deps.ledger.isPracticeAccount(parsed.data.accountId)) {
       const result = await deps.javaWorkflows.resolve(request.id, 'settle', parsed.data.accountId, settledVia);
       return c.json({ request: await requestView(result.request) });
+    }
+    /* Recording the same rail twice on a demo row returns the settled row, not a 409. */
+    if (request.status === 'PAID' && isSeedPracticeRequest(request.id)) {
+      return c.json({ request: await requestView(request) });
     }
     const resolved = await paymentRequests.resolve(request.id, 'PAID', null, now(), settledVia);
     if (!resolved) return c.json({ error: `This request was already ${request.status.toLowerCase()}`, request: await requestView(request) }, 409);

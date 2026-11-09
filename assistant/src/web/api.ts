@@ -343,7 +343,8 @@ export interface PaymentRequestView {
 
 export interface PayRequestResult {
   request: PaymentRequestView;
-  transfer: {
+  /** Absent when a repeated tap on an already-paid request is a no-op. */
+  transfer?: {
     id: string;
     status: 'COMPLETED' | 'REJECTED';
     rejectionReason: string | null;

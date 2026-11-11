@@ -17,8 +17,13 @@ export interface ThrottleRecord {
   lockedUntil: Date | null;
 }
 
+/** A challenge is only valid for the flow that created it. */
+export type ChallengePurpose = 'mfa' | 'register' | 'login' | 'step-up';
+
 export interface MfaChallengeRecord {
-  userId: string;
+  /** Identifies the account, except for discoverable passkey login challenges. */
+  userId: string | null;
+  purpose: ChallengePurpose;
   expiresAt: Date;
   attempts: number;
 }
@@ -28,9 +33,17 @@ export interface SecurityStateStore {
   /** Increments failures atomically and stores the lock the caller computes. */
   failThrottle(key: string, now: Date, lockFor: (failures: number) => Date): Promise<ThrottleRecord>;
   clearThrottle(key: string): Promise<void>;
-  saveChallenge(challenge: string, userId: string, expiresAt: Date, now?: Date): Promise<void>;
+  saveChallenge(
+    challenge: string,
+    userId: string | null,
+    expiresAt: Date,
+    now?: Date,
+    purpose?: ChallengePurpose,
+  ): Promise<void>;
   getChallenge(challenge: string): Promise<MfaChallengeRecord | null>;
-  /** Returns the new attempt count for this challenge (0 when it is gone). */
+  /** Deletes and returns the challenge in one operation, so only one caller wins. */
+  takeChallenge(challenge: string): Promise<MfaChallengeRecord | null>;
+  /** Atomic attempt increment, capped at five attempts (0 when gone or used up). */
   incrementChallengeAttempts(challenge: string): Promise<number>;
   deleteChallenge(challenge: string): Promise<void>;
   /** Removes challenge rows past their expiry and very old throttle rows. */
@@ -38,6 +51,7 @@ export interface SecurityStateStore {
 }
 
 const THROTTLE_STALE_MS = 24 * 60 * 60 * 1000;
+const MAX_CHALLENGE_ATTEMPTS = 5;
 
 function challengeHash(challenge: string): string {
   return createHash('sha256').update(challenge).digest('hex');
@@ -71,9 +85,16 @@ export class InMemorySecurityStateStore implements SecurityStateStore {
     this.throttles.delete(key);
   }
 
-  async saveChallenge(challenge: string, userId: string, expiresAt: Date, now?: Date): Promise<void> {
+  async saveChallenge(
+    challenge: string,
+    userId: string | null,
+    expiresAt: Date,
+    now?: Date,
+    purpose: ChallengePurpose = 'mfa',
+  ): Promise<void> {
     this.challenges.set(challengeHash(challenge), {
       userId,
+      purpose,
       expiresAt: new Date(expiresAt.getTime()),
       attempts: 0,
     });
@@ -81,16 +102,22 @@ export class InMemorySecurityStateStore implements SecurityStateStore {
   }
 
   async getChallenge(challenge: string): Promise<MfaChallengeRecord | null> {
-    const entry = this.challenges.get(challengeHash(challenge));
-    return entry
-      ? { userId: entry.userId, expiresAt: new Date(entry.expiresAt.getTime()), attempts: entry.attempts }
-      : null;
+    return copyChallenge(this.challenges.get(challengeHash(challenge)));
+  }
+
+  async takeChallenge(challenge: string): Promise<MfaChallengeRecord | null> {
+    // get and delete run before the first await, so concurrent callers in one
+    // process cannot both observe the challenge.
+    const key = challengeHash(challenge);
+    const entry = this.challenges.get(key);
+    if (!entry) return null;
+    this.challenges.delete(key);
+    return copyChallenge(entry);
   }
 
   async incrementChallengeAttempts(challenge: string): Promise<number> {
-    const key = challengeHash(challenge);
-    const entry = this.challenges.get(key);
-    if (!entry) return 0;
+    const entry = this.challenges.get(challengeHash(challenge));
+    if (!entry || entry.attempts >= MAX_CHALLENGE_ATTEMPTS) return 0;
     entry.attempts += 1;
     return entry.attempts;
   }
@@ -119,10 +146,13 @@ create table if not exists app_login_throttle (
 );
 create table if not exists app_mfa_challenges (
     token_hash text primary key,
-    user_id    uuid not null,
+    user_id    uuid,
+    purpose    text not null default 'mfa',
     expires_at timestamptz not null,
     attempts   int not null default 0
 );
+alter table app_mfa_challenges add column if not exists purpose text not null default 'mfa';
+alter table app_mfa_challenges alter column user_id drop not null;
 create index if not exists app_mfa_challenges_expires_idx on app_mfa_challenges (expires_at);
 `;
 
@@ -155,6 +185,27 @@ function ensureSchema(connectionString: string, pool: PgPool): Promise<void> {
 
 function toDate(value: unknown): Date | null {
   return value == null ? null : new Date(value as string | Date);
+}
+
+function copyChallenge(entry: MfaChallengeRecord | undefined): MfaChallengeRecord | null {
+  return entry
+    ? {
+      userId: entry.userId,
+      purpose: entry.purpose,
+      expiresAt: new Date(entry.expiresAt.getTime()),
+      attempts: entry.attempts,
+    }
+    : null;
+}
+
+function challengeFromRow(row: Record<string, unknown> | undefined): MfaChallengeRecord | null {
+  if (!row) return null;
+  return {
+    userId: row.user_id == null ? null : String(row.user_id),
+    purpose: String(row.purpose ?? 'mfa') as ChallengePurpose,
+    expiresAt: new Date(row.expires_at as string | Date),
+    attempts: Number(row.attempts),
+  };
 }
 
 export class PostgresSecurityStateStore implements SecurityStateStore {
@@ -219,16 +270,23 @@ export class PostgresSecurityStateStore implements SecurityStateStore {
     await pool.query(`delete from app_login_throttle where key = $1`, [key]);
   }
 
-  async saveChallenge(challenge: string, userId: string, expiresAt: Date, now?: Date): Promise<void> {
+  async saveChallenge(
+    challenge: string,
+    userId: string | null,
+    expiresAt: Date,
+    now?: Date,
+    purpose: ChallengePurpose = 'mfa',
+  ): Promise<void> {
     const pool = await this.pool();
     await pool.query(
-      `insert into app_mfa_challenges (token_hash, user_id, expires_at, attempts)
-       values ($1, $2, $3, 0)
+      `insert into app_mfa_challenges (token_hash, user_id, purpose, expires_at, attempts)
+       values ($1, $2, $3, $4, 0)
        on conflict (token_hash) do update
          set user_id = excluded.user_id,
+             purpose = excluded.purpose,
              expires_at = excluded.expires_at,
              attempts = 0`,
-      [challengeHash(challenge), userId, expiresAt.toISOString()],
+      [challengeHash(challenge), userId, purpose, expiresAt.toISOString()],
     );
     void this.prune(now ?? new Date(Math.min(Date.now(), expiresAt.getTime()))).catch(() => {});
   }
@@ -236,25 +294,28 @@ export class PostgresSecurityStateStore implements SecurityStateStore {
   async getChallenge(challenge: string): Promise<MfaChallengeRecord | null> {
     const pool = await this.pool();
     const { rows } = await pool.query(
-      `select user_id, expires_at, attempts from app_mfa_challenges where token_hash = $1`,
+      `select user_id, purpose, expires_at, attempts from app_mfa_challenges where token_hash = $1`,
       [challengeHash(challenge)],
     );
-    const row = rows[0] as Record<string, unknown> | undefined;
-    return row
-      ? {
-        userId: String(row.user_id),
-        expiresAt: new Date(row.expires_at as string | Date),
-        attempts: Number(row.attempts),
-      }
-      : null;
+    return challengeFromRow(rows[0] as Record<string, unknown> | undefined);
+  }
+
+  async takeChallenge(challenge: string): Promise<MfaChallengeRecord | null> {
+    const pool = await this.pool();
+    const { rows } = await pool.query(
+      `delete from app_mfa_challenges where token_hash = $1
+        returning user_id, purpose, expires_at, attempts`,
+      [challengeHash(challenge)],
+    );
+    return challengeFromRow(rows[0] as Record<string, unknown> | undefined);
   }
 
   async incrementChallengeAttempts(challenge: string): Promise<number> {
     const pool = await this.pool();
     const { rows } = await pool.query(
       `update app_mfa_challenges set attempts = attempts + 1
-        where token_hash = $1 returning attempts`,
-      [challengeHash(challenge)],
+        where token_hash = $1 and attempts < $2 returning attempts`,
+      [challengeHash(challenge), MAX_CHALLENGE_ATTEMPTS],
     );
     return Number(rows[0]?.attempts ?? 0);
   }

@@ -415,12 +415,22 @@ interface StoredKeyRow {
 
 const GLOBAL_INDEX_KEY = createHash('sha256').update('settle-global-blind-index-v1').digest();
 
+/** Cached data keys are re-validated against the row soon after loading. */
+const CACHE_TTL_MS = 30_000;
+const CACHE_RECHECK_MS = 5_000;
+
+interface CachedDataKey {
+  key: Buffer;
+  createdAt: number;
+  verifiedAt: number;
+}
+
 function normalizeIndexValue(value: string): string {
   return value.normalize('NFKC').trim().toLowerCase();
 }
 
 export abstract class BaseDataKeyStore implements DataKeyStore {
-  private readonly cache = new Map<string, Buffer>();
+  private readonly cache = new Map<string, CachedDataKey>();
   private readonly pending = new Map<string, Promise<Buffer>>();
   /** Fail closed in this process even if a load raced with shred. */
   private readonly shredded = new Set<string>();
@@ -440,13 +450,18 @@ export abstract class BaseDataKeyStore implements DataKeyStore {
   protected abstract deleteWrapped(userId: string, at: string): Promise<void>;
   protected abstract listRows(): Promise<Array<{ userId: string; wrapped: string; kekId: string }>>;
 
+  private remember(userId: string, key: Buffer): void {
+    const at = Date.now();
+    this.cache.set(userId, { key, createdAt: at, verifiedAt: at });
+  }
+
   private async loadOrCreate(userId: string): Promise<Buffer> {
     if (this.shredded.has(userId)) throw new ShreddedKeyError(userId);
     const row = await this.loadRow(userId);
     if (row?.shreddedAt) throw new ShreddedKeyError(userId);
     if (row?.wrapped && row.kekId) {
       const key = await this.wrapper.unwrap(row.wrapped, row.kekId);
-      this.cache.set(userId, key);
+      this.remember(userId, key);
       return key;
     }
 
@@ -455,7 +470,7 @@ export abstract class BaseDataKeyStore implements DataKeyStore {
     const inserted = await this.insertRow({ userId, wrapped, kekId, createdAt: new Date().toISOString() });
     if (inserted) {
       if (this.shredded.has(userId)) throw new ShreddedKeyError(userId);
-      this.cache.set(userId, key);
+      this.remember(userId, key);
       return key;
     }
 
@@ -466,14 +481,29 @@ export abstract class BaseDataKeyStore implements DataKeyStore {
     }
     const winner = await this.wrapper.unwrap(existing.wrapped, existing.kekId);
     if (this.shredded.has(userId)) throw new ShreddedKeyError(userId);
-    this.cache.set(userId, winner);
+    this.remember(userId, winner);
     return winner;
   }
 
   protected async dataKey(userId: string): Promise<Buffer> {
     if (this.shredded.has(userId)) throw new ShreddedKeyError(userId);
     const cached = this.cache.get(userId);
-    if (cached) return cached;
+    if (cached) {
+      const at = Date.now();
+      if (at - cached.createdAt < CACHE_TTL_MS) {
+        // After a short grace period, confirm the shared row still exists. A
+        // shred on another instance must not leave this process decrypting.
+        if (at - cached.verifiedAt < CACHE_RECHECK_MS) return cached.key;
+        const row = await this.loadRow(userId);
+        if (!row || row.shreddedAt || !row.wrapped || !row.kekId) {
+          this.cache.delete(userId);
+          throw new ShreddedKeyError(userId);
+        }
+        cached.verifiedAt = at;
+        return cached.key;
+      }
+      this.cache.delete(userId);
+    }
     const inFlight = this.pending.get(userId);
     if (inFlight) return inFlight;
     const task = this.loadOrCreate(userId).finally(() => this.pending.delete(userId));

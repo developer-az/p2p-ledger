@@ -365,6 +365,7 @@ function emptySpendLogs(): SpendLogStore {
   return {
     list: async () => [],
     listSpendPage: async () => [],
+    listSpendCursorPage: async () => ({ rows: [], next: null }),
     listPage: async () => [],
     record: async () => { throw new Error('read-only'); },
     remove: async () => false,

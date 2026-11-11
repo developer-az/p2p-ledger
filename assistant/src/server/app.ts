@@ -58,7 +58,7 @@ import {
 import { CSV_HEADER_ROW, csvExportRow } from './data-export.js';
 import { isBreachedPassword } from './breached-password.js';
 import { LoginThrottle } from './login-throttle.js';
-import { createSecurityStateStore, type SecurityStateStore } from './security-state.js';
+import { createSecurityStateStore, type ChallengePurpose, type SecurityStateStore } from './security-state.js';
 import { retryAfterSeconds } from './rate-limit.js';
 import { InMemoryRateLimitStore, durableLimiter, type RateLimitStore } from './rate-limit-store.js';
 import { SETTLE_RAILS, type SettleRail } from './payment-requests.js';
@@ -209,8 +209,6 @@ const WAKE_PROBE_TIMEOUT_MS = 9_000;
 const MFA_CHALLENGE_TTL_MS = 5 * 60_000;
 const STEP_UP_MS = 10 * 60_000;
 const PASSKEY_CHALLENGE_TTL_MS = 5 * 60_000;
-/** Login challenges are not tied to a user; discoverable credentials identify the account. */
-const PASSKEY_LOGIN_CHALLENGE_USER = '00000000-0000-0000-0000-000000000000';
 
 /**
  * Export page size. Each page is rendered as its own chunk so the response body
@@ -297,15 +295,15 @@ export function createApp(deps: {
     const challenge = randomBytes(32).toString('base64url');
     const at = now();
     await securityState.saveChallenge(challenge, userId,
-      new Date(at.getTime() + MFA_CHALLENGE_TTL_MS), at);
+      new Date(at.getTime() + MFA_CHALLENGE_TTL_MS), at, 'mfa');
     return challenge;
   };
-  /** WebAuthn challenges are single-use and share the security-state store. */
-  const newPasskeyChallenge = async (userId: string): Promise<string> => {
+  /** WebAuthn challenges are single-use and bound to a purpose and account. */
+  const newPasskeyChallenge = async (userId: string | null, purpose: ChallengePurpose): Promise<string> => {
     const challenge = randomBytes(32).toString('base64url');
     const at = now();
     await securityState.saveChallenge(challenge, userId,
-      new Date(at.getTime() + PASSKEY_CHALLENGE_TTL_MS), at);
+      new Date(at.getTime() + PASSKEY_CHALLENGE_TTL_MS), at, purpose);
     return challenge;
   };
   const appOrigin = (c: Context): string => appUrl
@@ -322,15 +320,18 @@ export function createApp(deps: {
     createdAt: passkey.createdAt.toISOString(),
     lastUsedAt: passkey.lastUsedAt?.toISOString() ?? null,
   });
-  /** True when a challenge exists, belongs to the caller and has not expired. */
-  const passkeyChallengeValid = async (challenge: string, userId: string): Promise<boolean> => {
-    const pending = await securityState.getChallenge(challenge);
-    if (!pending || pending.userId !== userId) return false;
-    if (pending.expiresAt.getTime() <= now().getTime()) {
-      await securityState.deleteChallenge(challenge);
-      return false;
-    }
-    return true;
+  /**
+   * Claims the challenge before verification. The store deletes and returns it
+   * in one operation, so a concurrent request cannot replay the same value.
+   */
+  const takePasskeyChallenge = async (
+    challenge: string,
+    userId: string | null,
+    purpose: ChallengePurpose,
+  ): Promise<boolean> => {
+    const pending = await securityState.takeChallenge(challenge);
+    if (!pending || pending.purpose !== purpose || pending.userId !== userId) return false;
+    return pending.expiresAt.getTime() > now().getTime();
   };
   const webauthnFailure = (c: Context, error: unknown): Response => {
     if (error instanceof WebAuthnError) return c.json({ error: error.code }, 400);
@@ -754,16 +755,33 @@ export function createApp(deps: {
       }
       return total;
     };
+    /** Same, for stores that own an opaque cursor instead of an id. */
+    const pageCursorRows = async <T>(
+      load: (cursor: string | null) => Promise<{ rows: T[]; next: string | null }>,
+      visit?: (rows: T[]) => void,
+    ): Promise<number> => {
+      let cursor: string | null = null;
+      let total = 0;
+      for (;;) {
+        const page = await load(cursor);
+        if (page.rows.length === 0) break;
+        total += page.rows.length;
+        visit?.(page.rows);
+        if (page.next === null || page.next === cursor) break;
+        cursor = page.next;
+      }
+      return total;
+    };
     const loadIncomePage = (afterId: string | null) =>
       personalFinance.listIncomePage(user.accountId, afterId, EXPORT_PAGE_SIZE);
-    const loadSpendPage = (afterId: string | null) =>
-      deps.spendLogs.listSpendPage(user.accountId, afterId, EXPORT_PAGE_SIZE);
+    const loadSpendPage = (cursor: string | null) =>
+      deps.spendLogs.listSpendCursorPage(user.accountId, cursor, EXPORT_PAGE_SIZE);
 
     const [profile, sessions, incomeCount, spendCount] = await Promise.all([
       personalFinance.getProfile(user.accountId, 'USD', now()),
       auth.listSessions(user.id),
       pageRows(loadIncomePage),
-      pageRows(loadSpendPage),
+      pageCursorRows(loadSpendPage),
     ]);
     const at = now();
     await audit(c, user.id, 'export', { format, income: incomeCount, spendLogs: spendCount });
@@ -782,7 +800,7 @@ export function createApp(deps: {
             await pageRows(loadIncomePage, (rows) => {
               controller.enqueue(encoder.encode(rows.map((entry) => csvExportRow('income', entry)).join('')));
             });
-            await pageRows(loadSpendPage, (rows) => {
+            await pageCursorRows(loadSpendPage, (rows) => {
               controller.enqueue(encoder.encode(rows.map((entry) => csvExportRow('spend', entry)).join('')));
             });
             controller.close();
@@ -846,7 +864,7 @@ export function createApp(deps: {
           });
           controller.enqueue(encoder.encode('],"spendLogs":['));
           first = true;
-          await pageRows(loadSpendPage, (rows) => {
+          await pageCursorRows(loadSpendPage, (rows) => {
             const json = rows.map((entry) => JSON.stringify({
               id: entry.id,
               amountMinor: entry.amountMinor,
@@ -969,7 +987,9 @@ export function createApp(deps: {
     const parsed = mfaVerifyBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'invalid_code' }, 400);
     const pending = await securityState.getChallenge(parsed.data.challenge);
-    if (!pending) return c.json({ error: 'invalid_code' }, 400);
+    if (!pending || pending.purpose !== 'mfa' || !pending.userId) {
+      return c.json({ error: 'invalid_code' }, 400);
+    }
     const at = now();
     if (pending.expiresAt.getTime() <= at.getTime()) {
       await securityState.deleteChallenge(parsed.data.challenge);
@@ -984,6 +1004,13 @@ export function createApp(deps: {
     const throttleKey = 'mfa:' + user.id;
     const throttle = await mfaThrottle.checkAsync(throttleKey);
     if (!throttle.allowed) return tooManyMfaAttempts(c, throttle.retryAfterSec);
+    // The attempt counter is the atomic gate. A missing or exhausted challenge
+    // cannot be verified even by two requests that both read it beforehand.
+    const attempts = await securityState.incrementChallengeAttempts(parsed.data.challenge);
+    if (attempts === 0) {
+      await securityState.deleteChallenge(parsed.data.challenge);
+      return c.json({ error: 'invalid_code' }, 400);
+    }
     const secret = decryptSecret(state.secret, mfaKey);
     const verdict = verifyTotp(secret, parsed.data.code, at.getTime(),
       { lastUsedStep: state.lastUsedStep });
@@ -1003,7 +1030,6 @@ export function createApp(deps: {
       if (usedRecoveryCode) await audit(c, user.id, 'recovery_code_used');
       return c.json({ ok: true });
     }
-    const attempts = await securityState.incrementChallengeAttempts(parsed.data.challenge);
     if (attempts >= 5) {
       // One account-level failure per used-up challenge: a password holder gets
       // five guesses per sign-in, and repeated sign-ins back off up to 15 minutes.
@@ -1049,7 +1075,7 @@ export function createApp(deps: {
     const user = await sessionUser(c);
     if (!user) return c.json({ error: 'Sign in first.' }, 401);
     const passkeys = await auth.listPasskeys(user.id);
-    const challenge = await newPasskeyChallenge(user.id);
+    const challenge = await newPasskeyChallenge(user.id, 'step-up');
     return c.json({
       challenge,
       rpId: rpIdFor(c),
@@ -1078,7 +1104,7 @@ export function createApp(deps: {
       let challenge = '';
       try {
         challenge = readClientDataChallenge(parsed.data.passkey, 'webauthn.get');
-        if (!await passkeyChallengeValid(challenge, user.id))
+        if (!await takePasskeyChallenge(challenge, user.id, 'step-up'))
           return c.json({ error: 'challenge_expired' }, 400);
         const passkey = await auth.getPasskey(readCredentialId(parsed.data.passkey));
         if (!passkey || passkey.userId !== user.id)
@@ -1089,14 +1115,10 @@ export function createApp(deps: {
           rpId: rpIdFor(c),
           passkey,
         });
-        await securityState.deleteChallenge(challenge);
         await auth.touchPasskey(passkey.id, verified.signCount, at);
         accepted = true;
       } catch (error) {
         if (error instanceof WebAuthnError) {
-          if (error.code === 'passkey_cloned') {
-            await securityState.deleteChallenge(challenge).catch(() => {});
-          }
           await mfaThrottle.failAsync(throttleKey);
           return c.json({ error: error.code }, 400);
         }
@@ -1136,7 +1158,7 @@ export function createApp(deps: {
     const denied = await requireStepUp(c, auth, now);
     if (denied) return denied;
     const passkeys = await auth.listPasskeys(user.id);
-    const challenge = await newPasskeyChallenge(user.id);
+    const challenge = await newPasskeyChallenge(user.id, 'register');
     return c.json({
       rp: { id: rpIdFor(c), name: 'Settle' },
       user: {
@@ -1169,16 +1191,19 @@ export function createApp(deps: {
     if (!user) return c.json({ error: 'Sign in first.' }, 401);
     const parsed = passkeyRegisterBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'invalid_credential' }, 400);
+    // Options already require step-up; saving the credential requires the
+    // window to still be open, so a stolen session cannot add a passkey later.
+    const denied = await requireStepUp(c, auth, now);
+    if (denied) return denied;
     try {
       const challenge = readClientDataChallenge(parsed.data.credential, 'webauthn.create');
-      if (!await passkeyChallengeValid(challenge, user.id))
+      if (!await takePasskeyChallenge(challenge, user.id, 'register'))
         return c.json({ error: 'challenge_expired' }, 400);
       const verified = verifyRegistration(parsed.data.credential, {
         expectedChallenge: challenge,
         expectedOrigin: appOrigin(c),
         rpId: rpIdFor(c),
       });
-      await securityState.deleteChallenge(challenge);
       const name = parsed.data.name ?? 'Passkey';
       await auth.addPasskey({
         id: verified.credentialId,
@@ -1222,7 +1247,7 @@ export function createApp(deps: {
   });
 
   app.post('/auth/passkeys/login/options', async (c) => {
-    const challenge = await newPasskeyChallenge(PASSKEY_LOGIN_CHALLENGE_USER);
+    const challenge = await newPasskeyChallenge(null, 'login');
     return c.json({
       challenge,
       rpId: rpIdFor(c),
@@ -1248,7 +1273,7 @@ export function createApp(deps: {
     if (!parsed.success) return fail(c.json({ error: 'invalid_credential' }, 400));
     try {
       const challenge = readClientDataChallenge(parsed.data.credential, 'webauthn.get');
-      if (!await passkeyChallengeValid(challenge, PASSKEY_LOGIN_CHALLENGE_USER)) {
+      if (!await takePasskeyChallenge(challenge, null, 'login')) {
         return fail(c.json({ error: 'challenge_expired' }, 400));
       }
       const passkey = await auth.getPasskey(readCredentialId(parsed.data.credential));
@@ -1264,7 +1289,6 @@ export function createApp(deps: {
       } catch (error) {
         if (error instanceof WebAuthnError) {
           if (error.code === 'passkey_cloned') {
-            await securityState.deleteChallenge(challenge);
             await audit(c, passkey.userId, 'passkey_login', { result: 'passkey_cloned' });
           }
           return fail(c.json({ error: error.code }, 400));
@@ -1272,7 +1296,6 @@ export function createApp(deps: {
         throw error;
       }
       await ipThrottle.succeedAsync(ipKey);
-      await securityState.deleteChallenge(challenge);
       await auth.touchPasskey(passkey.id, verified.signCount, now());
       await audit(c, passkey.userId, 'passkey_login', { uv: verified.userVerified });
       const user = await auth.findById(passkey.userId);

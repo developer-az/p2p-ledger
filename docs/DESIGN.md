@@ -386,16 +386,46 @@ painted page, so it does not cost a blur per frame.
   drop shadows. Cards that sit directly on the page take the glass material
   (see Glass) instead of a flat fill.
 - **Tables and rows.** Row height `--row-h`, horizontal padding `--pad`,
-  dividers in `--line`. Amounts right-aligned with `.num`. Header labels use the
-  small all-caps style.
-- **Chips.** Radius `--r1`, `--t-xs`, padding `4px 8px`. Neutral chips are
-  neutral tinted glass with `--ink-2` text. State chips (`.pill-good`,
-  `.pill-bad`, `.pill-warn`) take the state colour at `--tint-state` in the fill,
-  keep a state-coloured border and use `--pos-ink`/`--neg-ink`/`--warn-ink` for
-  the label. There is no longer a `--*-soft` flat fill behind a chip: the soft
-  tints were the same idea in one flat colour.
-- **Empty states.** One sentence in `--muted`, an optional outline button, and
-  the `Planned · M#` label when the feature is not built. No illustration.
+  dividers in `--line`. Amounts right-aligned in tabular mono (`.num`). Header
+  labels use the small all-caps style.
+- **Transaction rows.** A 36px round category glyph on the tinted-glass
+  material, then a two-line main column, an optional category/source tag, and
+  the amount. The glyph takes `--tint` from the category map and mixes 65% of
+  that hue toward `--ink` for the icon; unknown rows fall back to the first
+  letter. Line 1 is the name, line 2 is `who · time` in `--muted` at `--t-xs`,
+  so a name never truncates before its meta. The category is not repeated in
+  the meta; it lives in the tag. Rows use 12px vertical padding and a hover fill
+  of `--surface-2` at 70% over the panel.
+- **Category tags.** Rounded pills (999px), `--t-xs`, padding `1px 10px`, on the
+  category tint at `--tint-state`. Label ink is the category colour mixed 65%
+  toward `--ink`; that is the contrast-safe form in both themes because several
+  raw light hues (dining, housing, shopping) land near 4:1 on their own tint.
+  The single colour/icon map is `app/categories.ts`; tags, row glyphs, chart
+  colours and the Top categories bars all read it, and every value is a token.
+  The shipped categories are dining, groceries, transport, entertainment,
+  housing, shopping, health and other; bills and receipts fall under Other,
+  which uses the file glyph.
+- **KPI tiles.** Money tiles use the glass material and keep the top edge
+  highlight from `--glass-shadow`. Values use the display face; a 30-day inline
+  SVG sparkline may sit under a value when the loaded pattern window has data.
+  The line is static (no animation), labelled for assistive tech, and never the
+  only cue: any delta also carries a word such as “less” or “more”.
+- **Top categories.** Bars are 6px, fully rounded, coloured from the category
+  map; the share percentage sits above the bar in muted mono, with the amount
+  aligned right.
+- **Chips.** Pills use 999px radius, `--t-xs`, padding `1px 10px`. Neutral
+  chips are neutral tinted glass with `--ink-2` text. Category chips take the
+  category hue at `--tint-state` and the contrast-safe ink mix from the category
+  tag rule above. State chips (`.pill-good`, `.pill-bad`, `.pill-warn`) take the
+  state colour at `--tint-state` in the fill, keep a state-coloured border and
+  use `--pos-ink`/`--neg-ink`/`--warn-ink` for the label. There is no longer a
+  `--*-soft` flat fill behind a chip: the soft tints were the same idea in one
+  flat colour.
+- **Empty states.** A composed block: one icon in a 40px neutral tinted-glass
+  circle, a title in `--ink`, one sentence in `--muted`, then the
+  `Planned · M#` pill when the feature is not built. No illustration, no
+  mascot. Loading screens mirror the same header, figure strip and panel shapes
+  with skeletons rather than a bare spinner.
 - **Planned labels.** `Planned · M#` in the small all-caps style, colour
   `--muted` on neutral tinted glass. They sit next to any control that does not
   work yet.

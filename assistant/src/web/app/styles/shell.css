@@ -53,7 +53,7 @@
   display: flex;
   align-items: center;
   gap: var(--s1);
-  padding-bottom: var(--s1);
+  padding-bottom: 0;
 }
 
 .app .shell.is-rail .shell-side-head {
@@ -163,18 +163,50 @@
 .app .shell-nav {
   display: flex;
   flex-direction: column;
-  gap: var(--s1);
+  gap: 2px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
+  /* Thin overlay scrollbar: the track stays transparent and the thumb only
+     appears while the nav is hovered or focused, so the full list reads as a
+     plain column at 800px tall. */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.app .shell-nav:hover,
+.app .shell-nav:focus-within {
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.app .shell-nav::-webkit-scrollbar {
+  width: 8px;
+}
+
+.app .shell-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app .shell-nav::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  background-clip: padding-box;
+}
+
+.app .shell-nav:hover::-webkit-scrollbar-thumb,
+.app .shell-nav:focus-within::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  background-clip: padding-box;
 }
 
 .app .shell-group {
   display: flex;
   flex-direction: column;
-  gap: var(--s1);
-  margin-top: var(--s4);
+  gap: 2px;
+  margin-top: var(--s3);
 }
 
 .app .shell-group:first-child {
@@ -187,6 +219,7 @@
   color: var(--muted);
   font-size: var(--t-xs);
   font-weight: 500;
+  line-height: 1.4;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -275,7 +308,7 @@
 
 .app .shell-nav-end {
   margin-top: auto;
-  padding-top: var(--s2);
+  padding-top: var(--s1);
   border-top: 1px solid var(--line);
 }
 
@@ -771,7 +804,14 @@
 }
 
 .app .planned-mark {
-  display: block;
+  --tint: var(--ink);
+  --tint-strength: var(--tint-neutral);
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  color: var(--muted);
 }
 
 .app .planned-view h1 {
@@ -795,7 +835,7 @@
   display: inline-flex;
   align-items: center;
   padding: var(--s1) var(--s2);
-  border-radius: var(--r1);
+  border-radius: 999px;
   color: var(--muted);
   font-family: var(--mono);
   font-size: var(--t-xs);

@@ -113,6 +113,7 @@
    a frosted layer under it, so it keeps the tint, edge and sheen and drops the
    second live blur. */
 .glass :is(
+  .glass-tint,
   .btn,
   .pill,
   .chip,

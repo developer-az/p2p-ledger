@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { avatarHue, initials } from './format.js';
+import { areaPath, linePath, niceMax } from './chart-geometry.js';
 import { shouldDismissSheet } from './sheet-dismiss.js';
 
 /* ---------- Icons: small inline SVGs so there is nothing to download ---------- */
@@ -224,12 +225,18 @@ export function Skeleton({ height = 20, width = '100%' }: { height?: number; wid
   return <div className="skeleton" style={{ height, width }} aria-hidden="true" />;
 }
 
-export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
+export function EmptyState({ icon = 'info', title, children, action }: {
+  icon?: IconName;
+  title: string;
+  children?: ReactNode;
+  action?: ReactNode;
+}) {
   return (
-    <div className="card-flat" style={{ textAlign: 'center', padding: '28px 16px' }}>
-      <p style={{ fontWeight: 700 }}>{title}</p>
-      {children ? <p className="muted" style={{ marginTop: 4 }}>{children}</p> : null}
-      {action ? <div style={{ marginTop: 14 }}>{action}</div> : null}
+    <div className="empty-block">
+      <span className="empty-icon glass-tint" aria-hidden="true"><Icon name={icon} size={20} /></span>
+      <p className="empty-title">{title}</p>
+      {children ? <p className="empty-copy">{children}</p> : null}
+      {action ? <div className="empty-action">{action}</div> : null}
     </div>
   );
 }
@@ -248,6 +255,47 @@ export function ErrorNotice({ message, onRetry }: { message: string; onRetry?: (
 }
 
 /* ---------- Small data visuals ---------- */
+
+/**
+ * A 30-day inline sparkline. No library and no motion: the series is drawn once
+ * with the shared chart-geometry helpers, and the label carries the meaning so
+ * the shape is never the only cue.
+ */
+export function Sparkline({
+  values,
+  tone = 'ink',
+  label,
+  height = 28,
+}: {
+  values: number[];
+  tone?: 'ink' | 'pos' | 'neg';
+  label: string;
+  height?: number;
+}) {
+  if (values.length < 2) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const flat = max === min;
+  const normalized = values.map((value) => (flat ? 0.5 : value - min));
+  const top = flat ? 1 : niceMax(max - min);
+  const width = 120;
+  return (
+    <svg
+      className={`spark spark-${tone}`}
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      role="img"
+      aria-label={label}
+    >
+      <path className="spark-area" d={areaPath(normalized, width, height, top)} />
+      <path
+        className="spark-line"
+        d={linePath(normalized, width, height, top)}
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+}
 
 export function ProgressRing({
   value,

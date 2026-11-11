@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import './styles/views.css';
+import './styles/insights.css';
 import { categoryMeta } from './categories.js';
 import { money } from './format.js';
 import { moneyPlan, moneyStory, monthsToClear } from './money-plan.js';
@@ -44,15 +46,12 @@ export function InsightsTab({
           <button type="button" className="btn btn-primary btn-sm" onClick={onDemoHome}>← Back to demo home</button>
         </div>
       ) : null}
-      <header className="patterns-head">
+      <header className="insight-head">
         <div>
-          <p className="eyebrow">Patterns</p>
-          <h1>The shape of your money.</h1>
-          <p className="page-sub">Built only from what you log. No bank feed, no guessing.</p>
+          <h1 className="v-title">Insights</h1>
+          <p className="v-sub">Built only from what you log. No bank feed, no guessing.</p>
         </div>
-        <div className="patterns-head-badges">
-          <button type="button" className="btn btn-sm" onClick={onAsk}><Icon name="sparkle" size={16} /> Ask about this</button>
-        </div>
+        <button type="button" className="btn btn-sm" onClick={onAsk}><Icon name="sparkle" size={16} /> Ask about this</button>
       </header>
 
       {state.kind === 'none' ? (

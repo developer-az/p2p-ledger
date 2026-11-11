@@ -112,7 +112,7 @@ export function SignIn({
     <div className="signin">
       <div className="signin-top">
         <a className="signin-home" href="/">
-          <BrandMark size={20} />
+          <BrandMark size={24} />
           <span>Settle</span>
         </a>
       </div>
@@ -263,6 +263,7 @@ export function SignIn({
         </div>
 
         <aside className="signin-aside" aria-labelledby="signin-aside-title">
+          <BrandMark size={40} className="signin-aside-mark" />
           <p className="signin-aside-label" id="signin-aside-title">How your data is handled</p>
           <ul className="signin-aside-list">
             <li>Passwords are stored only as salted scrypt hashes.</li>

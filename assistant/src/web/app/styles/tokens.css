@@ -14,6 +14,8 @@
   --accent: #2d4fc4;
   --accent-hover: #2442a8;
   --accent-ink: #ffffff;
+  /* Text on a filled colour swatch (avatar hues) that is mid-dark in both themes. */
+  --on-solid: #ffffff;
   --accent-soft: #eef1fb;
   --pos: #1a7f4b;
   --pos-soft: #e7f4ec;
@@ -21,6 +23,8 @@
   --neg-soft: #fbecea;
   --warn: #a15c07;
   --warn-soft: #fbf1e0;
+  /* Brand colour, used only by the wax-seal emblem. */
+  --brand-gold: #a8874a;
   --shadow: 0 1px 2px rgb(0 0 0 / 4%), 0 1px 1px rgb(0 0 0 / 3%);
   --shadow-lg: 0 12px 32px -12px rgb(0 0 0 / 18%), 0 2px 6px rgb(0 0 0 / 6%);
   color-scheme: light;
@@ -84,6 +88,7 @@
     --neg-soft: #2c1715;
     --warn: #f0b84a;
     --warn-soft: #2a2110;
+    --brand-gold: #c8a96a;
     --shadow: 0 0 0 1px var(--line);
     --shadow-lg: 0 16px 40px -16px rgb(0 0 0 / 70%), 0 0 0 1px var(--line);
     color-scheme: dark;
@@ -111,6 +116,7 @@
   --neg-soft: #2c1715;
   --warn: #f0b84a;
   --warn-soft: #2a2110;
+  --brand-gold: #c8a96a;
   --shadow: 0 0 0 1px var(--line);
   --shadow-lg: 0 16px 40px -16px rgb(0 0 0 / 70%), 0 0 0 1px var(--line);
   color-scheme: dark;

@@ -1,4 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#17181a"/>
-  <path d="M24 12V8H8v8h16v8H8v-4" fill="none" stroke="#fafaf9" stroke-width="4"/>
+  <rect width="32" height="32" rx="7" fill="#0f1012"/>
+  <g transform="translate(3 3) scale(0.40625)" fill="none" stroke="#c8a96a">
+    <circle cx="32" cy="32" r="29" stroke-width="3.4"/>
+    <path d="M 32.00 10.50 L 32.00 6.50 M 42.75 13.38 L 44.75 9.92 M 50.62 21.25 L 54.08 19.25 M 53.50 32.00 L 57.50 32.00 M 50.62 42.75 L 54.08 44.75 M 42.75 50.62 L 44.75 54.08 M 32.00 53.50 L 32.00 57.50 M 21.25 50.62 L 19.25 54.08 M 13.38 42.75 L 9.92 44.75 M 10.50 32.00 L 6.50 32.00 M 13.38 21.25 L 9.92 19.25 M 21.25 13.38 L 19.25 9.92" stroke-width="2.6"/>
+    <g stroke-width="1.5">
+      <circle cx="32.00" cy="23.50" r="11"/>
+      <circle cx="36.25" cy="24.64" r="11"/>
+      <circle cx="39.36" cy="27.75" r="11"/>
+      <circle cx="40.50" cy="32.00" r="11"/>
+      <circle cx="39.36" cy="36.25" r="11"/>
+      <circle cx="36.25" cy="39.36" r="11"/>
+      <circle cx="32.00" cy="40.50" r="11"/>
+      <circle cx="27.75" cy="39.36" r="11"/>
+      <circle cx="24.64" cy="36.25" r="11"/>
+      <circle cx="23.50" cy="32.00" r="11"/>
+      <circle cx="24.64" cy="27.75" r="11"/>
+      <circle cx="27.75" cy="24.64" r="11"/>
+    </g>
+    <circle cx="32" cy="32" r="3.4" fill="#c8a96a" stroke="none"/>
+  </g>
 </svg>

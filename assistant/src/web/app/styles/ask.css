@@ -1,0 +1,245 @@
+/* Ask view on v2 tokens: bordered input row, dense turns, one accent per
+   highlighted mark. Imported by AskTab. */
+
+.app .ask-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s6);
+  min-width: 0;
+}
+
+/* ---------- Page header ---------- */
+
+.app .ask-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.app .ask-head > div {
+  display: grid;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+/* ---------- Panel ---------- */
+
+.app .ask-panel {
+  display: grid;
+  gap: var(--s4);
+  min-height: 420px;
+}
+
+.app .ask-empty {
+  display: grid;
+  justify-items: center;
+  padding: var(--s8) var(--s4) var(--s3);
+  text-align: center;
+}
+
+.app .ask-empty h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.app .ask-empty p {
+  margin: var(--s1) 0 0;
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+
+/* ---------- Suggestions as bordered rows ---------- */
+
+.app .suggestion-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s2);
+  width: 100%;
+  max-width: 640px;
+  margin-top: var(--s5);
+}
+
+.app .suggestion {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--t-sm);
+  text-align: left;
+}
+
+.app .suggestion:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+}
+
+.app .suggestion:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Turns ---------- */
+
+.app .chat {
+  display: grid;
+  gap: var(--s3);
+}
+
+.app .chat-turn {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s2);
+  padding-bottom: var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+
+.app .chat-user {
+  justify-content: flex-end;
+}
+
+.app .bubble {
+  max-width: min(76ch, 88%);
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r3);
+  font-size: var(--t-base);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.app .bubble-user {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.app .bubble-ai {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.app .chat-grounding {
+  margin: var(--s1) 0 0;
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
+.app .chat-status {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+
+.app .chat-status-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.app .chat-status-bars i {
+  display: block;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: ask-bars 900ms var(--ease) infinite alternate;
+}
+
+.app .chat-status-bars i:nth-child(1) {
+  height: 6px;
+}
+
+.app .chat-status-bars i:nth-child(2) {
+  height: 12px;
+  animation-delay: 150ms;
+}
+
+.app .chat-status-bars i:nth-child(3) {
+  height: 8px;
+  animation-delay: 300ms;
+}
+
+@keyframes ask-bars {
+  from {
+    transform: scaleY(0.45);
+    opacity: 0.5;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+/* ---------- Input row ---------- */
+
+.app .chat-form {
+  display: flex;
+  align-items: stretch;
+  gap: var(--s2);
+  padding: var(--s1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--surface);
+}
+
+.app .chat-form:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.app .chat-form .input {
+  flex: 1;
+  min-height: 36px;
+  padding-inline: var(--s2);
+  border: 0;
+  background: transparent;
+}
+
+.app .chat-form .input:focus-visible {
+  outline: none;
+}
+
+.app .chat-form .btn {
+  width: 36px;
+  min-width: 36px;
+  padding: 0;
+}
+
+.app .ask-hint {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  text-align: center;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 720px) {
+  .app .suggestion-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .app .chat-form .input,
+  .app .chat-form .btn {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app .chat-status-bars i {
+    animation: none;
+    transform: none;
+    opacity: 1;
+  }
+}

@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import './app.css';
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/components.css';
 
 export function AccountAccess() {
   const [authError] = useState(() => typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('authError'));

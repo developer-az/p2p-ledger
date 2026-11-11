@@ -1,0 +1,310 @@
+/* Settings: tab list, panel stack, planned rows. Tokens only.
+   Imported by SettingsView.tsx; everything is scoped to `.app`. */
+
+/* ---------- Layout ---------- */
+
+.app .set-layout {
+  display: grid;
+  gap: var(--s4);
+  min-width: 0;
+}
+
+.app .set-content {
+  display: grid;
+  gap: var(--s5);
+  min-width: 0;
+}
+
+/* ---------- Tab list ---------- */
+
+.app .set-tabs {
+  min-width: 0;
+}
+
+.app .set-tab-list {
+  display: flex;
+  gap: var(--s1);
+  margin: 0 0 var(--s1);
+  padding-bottom: var(--s1);
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+}
+
+.app .set-tab-list::-webkit-scrollbar {
+  display: none;
+}
+
+.app .set-tab {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: var(--row-h);
+  padding: 0 var(--s3);
+  border-radius: var(--r2);
+  color: var(--muted);
+  font-size: var(--t-sm);
+  font-weight: 400;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.app .set-tab:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.app .set-tab[aria-current="page"] {
+  background: var(--surface-3);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.app .set-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Two columns only when the content column has the room; the view root is the
+   container, so a narrow window keeps the tab row on top. */
+@container (min-width: 900px) {
+  .app .set-layout {
+    grid-template-columns: 220px minmax(0, 1fr);
+    align-items: start;
+    gap: var(--s6);
+  }
+
+  .app .set-tab-list {
+    flex-direction: column;
+    margin: 0;
+    padding-bottom: 0;
+    overflow: visible;
+  }
+}
+
+/* ---------- Panels ---------- */
+
+/* Balances figures and the embedded integrity cards never outgrow their
+   column: one cell below 240px of room, auto-fit above it. */
+.app .set-content .v-figs,
+.app .set-content .grid-2 {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+
+/* In this column auto-fit decides the count, so no cell has to span. */
+.app .set-content .v-figs.v-figs-3 .v-fig:last-child {
+  grid-column: auto;
+}
+
+.app .set-panel {
+  display: grid;
+  gap: var(--s3);
+}
+
+.app .set-copy {
+  margin: 0;
+  max-width: 68ch;
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+.app .set-copy.muted {
+  color: var(--muted);
+}
+
+.app .set-mono {
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+}
+
+.app .set-link {
+  color: var(--accent);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.app .set-link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.app .set-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Read-only facts ---------- */
+
+.app .set-facts {
+  display: grid;
+  margin: 0;
+}
+
+.app .set-facts > div {
+  display: grid;
+  grid-template-columns: minmax(0, 160px) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--s2) var(--s3);
+  padding: var(--s2) 0;
+  border-top: 1px solid var(--line);
+}
+
+.app .set-facts > div:first-child {
+  border-top: 0;
+}
+
+.app .set-facts dt {
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+
+.app .set-facts dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-base);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Rows with a planned tag ---------- */
+
+.app .set-rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app .set-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s1) var(--s3);
+  min-height: var(--row-h);
+  padding: var(--s2) 0;
+  border-top: 1px solid var(--line);
+}
+
+.app .set-row:first-child {
+  border-top: 0;
+}
+
+.app .set-row-label {
+  color: var(--ink);
+  font-size: var(--t-base);
+}
+
+.app .set-row-desc {
+  flex: 1 1 240px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+.app .planned {
+  display: inline-block;
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0 var(--s1);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  color: var(--muted);
+  font-size: var(--t-xs);
+  white-space: nowrap;
+}
+
+/* ---------- Radio groups ---------- */
+
+.app .set-fieldset {
+  display: grid;
+  gap: var(--s2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.app .set-legend {
+  padding: 0;
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+
+.app .set-choices {
+  display: grid;
+  gap: var(--s1);
+  max-width: 320px;
+}
+
+.app .set-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 36px;
+  padding: 0 var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  color: var(--ink);
+  font-size: var(--t-sm);
+  cursor: pointer;
+}
+
+.app .set-choice:hover {
+  background: var(--surface-2);
+}
+
+.app .set-choice input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.app .set-choice:has(input:checked) {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+  font-weight: 500;
+}
+
+.app .set-choice:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Embedded blocks ---------- */
+
+.app .set-embed {
+  min-width: 0;
+}
+
+.app .set-import {
+  display: grid;
+  gap: var(--s2);
+  justify-items: start;
+  min-width: 0;
+}
+
+.app .set-import input[type="file"] {
+  max-width: 100%;
+}
+
+.app .set-import p {
+  margin: 0;
+}
+
+.app .set-import [role="status"],
+.app .set-import [role="alert"] {
+  font-size: var(--t-sm);
+}
+
+@media (max-width: 639px) {
+  .app .set-facts > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .app .set-choice {
+    min-height: 44px;
+  }
+}

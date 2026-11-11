@@ -1,33 +1,26 @@
 import { Fragment } from 'react';
-import { groupByDay, money, timeLabel } from './format.js';
+import { categoryLabel } from './categories.js';
+import { groupByDay, money, monthDay, timeLabel } from './format.js';
 import type { FeedItem } from './feed.js';
-import { Icon, type IconName } from './ui.js';
-
-const ICONS: Record<FeedItem['kind'], IconName> = {
-  sent: 'send',
-  received: 'receive',
-  deposit: 'bank',
-  declined: 'alert',
-  spend: 'pencil',
-  income: 'plus',
-};
 
 export function FeedRow({ item, onOpen, showTime = false }: { item: FeedItem; onOpen: (item: FeedItem) => void; showTime?: boolean }) {
   const incoming = item.signedMinor > 0 && item.kind !== 'declined';
-  const amountClass = item.kind === 'declined' ? 'amount amount-failed' : incoming ? 'amount amount-in' : 'amount';
+  const declined = item.kind === 'declined';
   const sign = item.signedMinor > 0 ? '+' : item.signedMinor < 0 ? '−' : '';
+  // Grouped lists already carry the day in their header, so rows show the time.
+  // A flat list (Overview) has no header, so each row shows its date instead.
+  const meta = showTime ? timeLabel(item.occurredAt) : monthDay(item.occurredAt);
+  const amountClass = `v-amount num${incoming ? ' is-pos' : ''}${declined ? ' is-failed' : ''}`;
   return (
     <li>
-      <button type="button" className="item" onClick={() => onOpen(item)}>
-        <span className={`icon-circle${incoming ? ' icon-in' : ''}${item.kind === 'declined' ? ' icon-failed' : ''}`}>
-          <Icon name={ICONS[item.kind]} size={18} />
-        </span>
-        <span className="item-body">
-          <span className="item-title" style={{ display: 'block' }}>{item.title}</span>
-          <span className="item-sub" style={{ display: 'block' }}>
-            {item.subtitle}{showTime ? ` · ${timeLabel(item.occurredAt)}` : ''}
+      <button type="button" className="v-row" onClick={() => onOpen(item)}>
+        <span className="v-row-main">
+          <span className="v-row-title">{item.title}</span>
+          <span className="v-row-sub">
+            {item.subtitle}{meta ? ` · ${meta}` : ''}
           </span>
         </span>
+        {item.category ? <span className="v-chip">{categoryLabel(item.category)}</span> : null}
         <span className={amountClass}>
           {sign}{money(Math.abs(item.signedMinor))}
         </span>
@@ -45,8 +38,8 @@ export function FeedList({ items, onOpen, grouped = true, dayTotals = false, now
 }) {
   if (!grouped) {
     return (
-      <ul className="list">
-        {items.map((i) => <FeedRow key={i.id} item={i} onOpen={onOpen} showTime />)}
+      <ul className="v-feed-list">
+        {items.map((i) => <FeedRow key={i.id} item={i} onOpen={onOpen} />)}
       </ul>
     );
   }
@@ -56,11 +49,11 @@ export function FeedList({ items, onOpen, grouped = true, dayTotals = false, now
         const net = g.rows.reduce((total, item) => total + (item.kind === 'declined' ? 0 : item.signedMinor), 0);
         return (
           <Fragment key={g.label}>
-            <div className="day-head">
-              <p className="day-label">{g.label}</p>
-              {dayTotals && net !== 0 ? <span className={`day-total num ${net > 0 ? 'is-in' : ''}`}>{net > 0 ? '+' : '−'}{money(Math.abs(net))}</span> : null}
+            <div className="v-day-head">
+              <p className="v-day-label">{g.label}</p>
+              {dayTotals && net !== 0 ? <span className={`v-day-total num${net > 0 ? ' is-pos' : ''}`}>{net > 0 ? '+' : '−'}{money(Math.abs(net))}</span> : null}
             </div>
-            <ul className="list">
+            <ul className="v-feed-list">
               {g.rows.map((i) => <FeedRow key={i.id} item={i} onOpen={onOpen} showTime />)}
             </ul>
           </Fragment>

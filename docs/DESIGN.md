@@ -124,8 +124,11 @@ animations, parallax, auto-scrolling and celebratory effects are out.
   `--line` rules, numbered `01`–`05`, each with a small all-caps label.
 - **App shell**: a sidebar plus a top bar. The sidebar holds navigation groups,
   the account switcher and the theme control; the top bar holds breadcrumbs,
-  search and the primary action. This shell ships in M7b. Until then the current
-  consumer screens run on the v2 tokens through the alias layer.
+  search and the primary action (`AppShell.tsx`, `styles/shell.css`). Under
+  768px the sidebar becomes a drawer; at 768px and up it can collapse to a 56px
+  icon rail with `[`. Every view is a URL under `/app/`. Keyboard: `⌘K`/Ctrl+K
+  palette, `?` shortcut list, `N` new transaction, `G` then O/T/I/S/A to move.
+  Sections that are not built yet render one shared `PlannedView`.
 
 ## Components
 
@@ -178,16 +181,20 @@ animations, parallax, auto-scrolling and celebratory effects are out.
 
 ## Brand mark
 
-A static geometric "S": three horizontal ledger rules joined by short verticals,
-with a short hook at each end so it does not read as a 5. Drawn in `currentColor`
-(`BrandMark.tsx`, 24px viewBox, 3-unit stroke); the favicon is the same shape on an
-ink square. It replaces the mascot everywhere.
+The emblem is an engine-turned (guilloché) watch dial: a bezel, a minute track
+(60 ticks, every fifth longer) and a 30-circle rose-engine rosette around a
+centre boss. `DIAL_SMALL` — 12 ticks, 12 heavier circles, a larger boss — is the
+simplified cut for 24px and below. The geometry lives in `brand-dial.ts` (pure,
+tested) and is rendered by `BrandMark.tsx`. It is drawn in `--brand-gold`
+(`#a8874a` light, `#c8a96a` dark), the only gold in the product. The app icon is
+the champagne dial on `#0f1012`.
 
-## Legacy
+## Stylesheets
 
-Old token names (`--pen`, `--lime`, `--sky-top`, `--dusk`, `--radius`,
-`--display`, …) still resolve through an alias block at the top of
-`assistant/src/web/app/app.css`. The aliases point at v2 tokens, so current
-screens pick up the neutral palette and Inter without being restyled. The alias
-block and the POCKET CSS layer are removed in M7b as each screen moves onto v2
-components, and hex values outside `tokens.css` go with them.
+All styles live in `assistant/src/web/app/styles/`: `tokens.css` (the only file
+with colour literals), `base.css` (shared primitives), `components.css`
+(sheets, toasts, loader, standalone pages), and one file per surface
+(`shell`, `views`, `insights`, `ask`, `settings`, `palette`, `landing`,
+`signin`, `footer`). The legacy `app.css` and its token aliases were removed in
+M7b. Layout that depends on available width uses container queries on `.v-view`,
+not viewport breakpoints, because the sidebar changes the content width.

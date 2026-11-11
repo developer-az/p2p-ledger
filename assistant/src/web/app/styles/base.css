@@ -1,0 +1,279 @@
+/* Shared UI primitives on v2 tokens. Imported once from ConsumerApp after
+   tokens.css and before components.css, so primitives stay a stable base. */
+
+/* ---------- Surfaces ---------- */
+
+.app .card {
+  padding: var(--s5);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--surface);
+}
+
+.app .card h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.app .card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-bottom: var(--s4);
+}
+
+.app .card-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Labels and copy ---------- */
+
+.app .eyebrow,
+.app .stat-label {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app .muted {
+  color: var(--muted);
+}
+
+.app .hint {
+  color: var(--muted);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+.app .page-sub {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--muted);
+}
+
+/* ---------- Buttons and links ---------- */
+
+.app .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  min-height: 36px;
+  padding: 0 var(--s4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.app .btn:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.app .btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.app .btn-primary:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.app .btn:disabled {
+  border-color: var(--line);
+  background: var(--surface-3);
+  color: var(--muted);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .app .btn {
+    min-height: 44px;
+  }
+}
+
+.app .btn-sm {
+  min-height: 32px;
+  padding: 0 var(--s3);
+}
+
+.app .link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.app .link-btn:hover {
+  color: var(--ink);
+}
+
+/* ---------- Inputs ---------- */
+
+.app .input,
+.app form :where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="submit"]):not([type="button"]),
+  textarea,
+  select
+) {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--t-sm);
+}
+
+.app .input:focus-visible,
+.app form :where(input, textarea, select):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (max-width: 640px) {
+  .app .input,
+  .app form :where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="submit"]):not([type="button"]),
+    textarea,
+    select
+  ) {
+    min-height: 44px;
+  }
+}
+
+/* ---------- Pills ---------- */
+
+.app .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  padding: 0 var(--s2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.app .pill-good {
+  border-color: var(--pos);
+  color: var(--pos);
+}
+
+.app .pill-bad {
+  border-color: var(--neg);
+  color: var(--neg);
+}
+
+.app .pill-warn {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+/* ---------- Notices ---------- */
+
+.app .notice {
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: var(--t-sm);
+}
+
+.app .notice-warn {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.app .notice-bad {
+  border-color: var(--neg);
+  background: var(--neg-soft);
+}
+
+.app .notice-good {
+  border-color: var(--pos);
+  background: var(--pos-soft);
+}
+
+/* ---------- Page scaffolding ---------- */
+
+.app .main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--s8) var(--s6) 130px;
+}
+
+.app .view {
+  min-width: 0;
+}
+
+.app .row-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+
+/* ---------- Accessibility ---------- */
+
+.app .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app .skip {
+  position: absolute;
+  top: -48px;
+  left: var(--s3);
+  z-index: 100;
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r2);
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.app .skip:focus {
+  top: var(--s3);
+}
+
+.app :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 900px) {
+  .app .main {
+    padding: var(--s5) var(--s4) 132px;
+  }
+}

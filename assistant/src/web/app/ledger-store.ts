@@ -10,8 +10,8 @@ import { api, type AccountView } from '../api.js';
  * on the same toast — the person never sees a number that silently didn't save.
  *
  * The store is deliberately framework-free (a plain class with subscribe/getState)
- * so its behaviour is unit-testable without React, and so the same object can be
- * driven by future P2P rails (see rails.ts) without a UI rewrite.
+ * so its behaviour is unit-testable without React, and so the same object can drive
+ * other write paths without a UI rewrite.
  *
  * Loads are ticket-guarded: a slow response for wallet A can never overwrite a
  * newer response for wallet B (view-as in the demo household, fast tab switching).
@@ -123,10 +123,9 @@ export class LedgerStore {
   /**
    * Apply a local change now, commit it, and reconcile — or roll back.
    *
-   * Order matters for future P2P: a rail hand-off runs inside `commit()` *before*
-   * the optimistic state is trusted by the server, so a failed Zelle deep link or
-   * a rejected on-chain transfer reverts the preview instead of leaving a fake
-   * balance on screen.
+   * Order matters: a hand-off to an external step runs inside `commit()` *before*
+   * the optimistic state is trusted by the server, so a failed write reverts the
+   * preview instead of leaving a fake balance on screen.
    */
   run = async (mutation: OptimisticMutation): Promise<OptimisticResult> => {
     const snapshot = this.state.view;

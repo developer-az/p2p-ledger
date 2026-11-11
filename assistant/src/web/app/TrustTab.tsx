@@ -79,7 +79,7 @@ export function TrustTab({ me, data, embedded = false }: { me: AccountRef; data:
       </section>
 
       {!transferId ? (
-        <div className="notice">Make a deposit first. These checks run against a real ledger entry in your history.</div>
+        <div className="notice">Integrity checks run against ledger entries in your history. This account has none yet.</div>
       ) : null}
 
       <div className="grid-2">

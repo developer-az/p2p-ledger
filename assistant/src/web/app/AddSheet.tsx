@@ -20,12 +20,12 @@ type WalletRun = (mutation: OptimisticMutation) => Promise<OptimisticResult>;
 
 export type AddMode = 'spent' | 'got';
 
-const SOURCES: Record<IncomeSource, { label: string; emoji: string }> = {
-  salary: { label: 'Paycheck', emoji: '💼' },
-  freelance: { label: 'Side work', emoji: '🧰' },
-  gift: { label: 'Gift', emoji: '🎁' },
-  refund: { label: 'Refund', emoji: '↩️' },
-  other: { label: 'Other', emoji: '✨' },
+const SOURCES: Record<IncomeSource, { label: string }> = {
+  salary: { label: 'Paycheck' },
+  freelance: { label: 'Side work' },
+  gift: { label: 'Gift' },
+  refund: { label: 'Refund' },
+  other: { label: 'Other' },
 };
 
 /**
@@ -46,7 +46,6 @@ export function AddSheet({
   walletRun,
   onSpent,
   onIncome,
-  onSplit,
 }: {
   open: boolean;
   onClose: () => void;
@@ -59,7 +58,6 @@ export function AddSheet({
   walletRun?: WalletRun;
   onSpent?: () => void;
   onIncome?: () => void;
-  onSplit?: () => void;
 }) {
   const toast = useToast();
   const reduce = useReducedMotion();
@@ -130,7 +128,7 @@ export function AddSheet({
       }
       pendingSpend.current = null;
       onSpent?.();
-      toast(`${categoryMeta(category).emoji} ${money(amountMinor)} · ${categoryLabel(category)}`, {
+      toast(`Spend logged · ${money(amountMinor)} · ${categoryLabel(category)}`, {
         tone: 'good',
         action: spendId
           ? {
@@ -170,7 +168,7 @@ export function AddSheet({
         await onChanged();
       }
       onIncome?.();
-      toast(`${SOURCES[source].emoji} ${money(amountMinor)} in · ${SOURCES[source].label}`, { tone: 'good' });
+      toast(`Income recorded · ${money(amountMinor)} · ${SOURCES[source].label}`, { tone: 'good' });
       onClose();
     } catch (e) {
       setError((e as Error).message);
@@ -220,7 +218,7 @@ export function AddSheet({
     <Sheet
       open={open}
       title={mode === 'spent' ? 'Add a spend' : 'Add money in'}
-      subtitle="Type it, tap it, done."
+      subtitle="Amount, then category."
       size="wide"
       onClose={() => { if (!saving.current) onClose(); }}
     >
@@ -269,7 +267,6 @@ export function AddSheet({
                 disabled={busy !== null}
                 onClick={() => void saveSpend(entry.amountMinor, entry.category, entry.note ?? undefined)}
               >
-                <span aria-hidden="true">{categoryMeta(entry.category).emoji}</span>
                 {entry.note || categoryLabel(entry.category)}
                 <b>{entry.amount}</b>
               </button>
@@ -281,7 +278,7 @@ export function AddSheet({
           {(mode === 'spent' ? SPEND_CATEGORIES : INCOME_SOURCES).map((choice, i) => {
             const meta = mode === 'spent'
               ? categoryMeta(choice)
-              : { ...SOURCES[choice as IncomeSource], color: '#14804a' };
+              : { label: SOURCES[choice as IncomeSource].label, color: 'var(--pos)' };
             return (
               <m.button
                 key={`${mode}-${choice}`}
@@ -296,7 +293,7 @@ export function AddSheet({
                 transition={{ type: 'spring', stiffness: 420, damping: 26, delay: i * 0.025 }}
                 whileTap={reduce ? undefined : { scale: 0.94 }}
               >
-                <span className="add-tile-emoji" aria-hidden="true">{meta.emoji}</span>
+                <span className="add-tile-dot" aria-hidden="true" style={{ background: meta.color }} />
                 <span>{meta.label}</span>
               </m.button>
             );
@@ -322,7 +319,6 @@ export function AddSheet({
 
         <div className="add-foot">
           <span>Only you see this. It never moves money.</span>
-          {onSplit ? <button type="button" className="link-btn" disabled={busy !== null} onClick={onSplit}>Splitting a bill? →</button> : null}
         </div>
         {/* Enter in the amount field saves with the tile picked earlier. */}
         <button type="submit" className="sr-only" tabIndex={-1}>Save</button>

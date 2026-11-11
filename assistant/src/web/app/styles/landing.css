@@ -92,6 +92,8 @@
 }
 .app .lp-label { grid-column: span 3; display: grid; gap: var(--s2); align-content: start; }
 .app .lp-content { grid-column: span 9; display: grid; gap: var(--s6); align-content: start; min-width: 0; }
+/* Landing emblem: the grid gap is --s6, so pull it back to --s5 below the seal. */
+.app .lp-emblem { margin-bottom: calc(var(--s5) - var(--s6)); }
 .app .lp-num { font-size: var(--t-sm); font-variant-numeric: tabular-nums; color: var(--accent); }
 .app .lp-label-text {
   margin: 0;

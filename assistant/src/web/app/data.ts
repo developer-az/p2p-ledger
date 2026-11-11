@@ -12,7 +12,7 @@ export interface WalletData {
  *
  * The returned shape is unchanged for existing screens, and additionally exposes
  * `run` / `pending` so a screen can apply a local change immediately and reconcile
- * later (the "frictionless" path, and the hook point for future P2P rails).
+ * later (the "frictionless" path).
  */
 export function useWallet(accountId: string) {
   const { view, error, loading, refreshing, pending, reload, run, store } = useLedgerStore(accountId);

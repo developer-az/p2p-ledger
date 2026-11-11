@@ -57,6 +57,26 @@ const ANTHONY: DemoProfile = {
     { daysAgo: 33, hoursAgo: 4, amountMinor: 900, category: 'transport', note: 'Transit' },
     { daysAgo: 36, hoursAgo: 6, amountMinor: 1_500, category: 'health', note: 'Vitamins' },
     { daysAgo: 40, hoursAgo: 5, amountMinor: 3_500, category: 'shopping', note: 'Home supplies' },
+    // Recurring streams for PLAN 5. A little history, one price rise, and two
+    // candidates (a finished trial and a single charge) so SUBSCRIPTIONS is populated.
+    { daysAgo: 6, hoursAgo: 6, amountMinor: 1_799, category: 'entertainment', note: 'Netflix' },
+    { daysAgo: 36, hoursAgo: 6, amountMinor: 1_799, category: 'entertainment', note: 'Netflix' },
+    { daysAgo: 66, hoursAgo: 6, amountMinor: 1_799, category: 'entertainment', note: 'Netflix' },
+    { daysAgo: 96, hoursAgo: 6, amountMinor: 1_549, category: 'entertainment', note: 'Netflix' },
+    { daysAgo: 2, hoursAgo: 7, amountMinor: 1_199, category: 'entertainment', note: 'Spotify' },
+    { daysAgo: 32, hoursAgo: 7, amountMinor: 1_199, category: 'entertainment', note: 'Spotify' },
+    { daysAgo: 62, hoursAgo: 7, amountMinor: 1_199, category: 'entertainment', note: 'Spotify' },
+    { daysAgo: 9, hoursAgo: 5, amountMinor: 299, category: 'other', note: 'iCloud+' },
+    { daysAgo: 39, hoursAgo: 5, amountMinor: 299, category: 'other', note: 'iCloud+' },
+    { daysAgo: 69, hoursAgo: 5, amountMinor: 299, category: 'other', note: 'iCloud+' },
+    { daysAgo: 26, hoursAgo: 4, amountMinor: 6_000, category: 'health', note: 'Equinox Gym' },
+    { daysAgo: 117, hoursAgo: 4, amountMinor: 6_000, category: 'health', note: 'Equinox Gym' },
+    { daysAgo: 208, hoursAgo: 4, amountMinor: 6_000, category: 'health', note: 'Equinox Gym' },
+    { daysAgo: 344, hoursAgo: 3, amountMinor: 15_588, category: 'other', note: 'Adobe Creative Cloud' },
+    { daysAgo: 709, hoursAgo: 3, amountMinor: 15_588, category: 'other', note: 'Adobe Creative Cloud' },
+    { daysAgo: 51, hoursAgo: 5, amountMinor: 100, category: 'entertainment', note: 'Hulu' },
+    { daysAgo: 21, hoursAgo: 5, amountMinor: 1_799, category: 'entertainment', note: 'Hulu' },
+    { daysAgo: 5, hoursAgo: 8, amountMinor: 1_495, category: 'entertainment', note: 'Audible' },
   ],
 };
 

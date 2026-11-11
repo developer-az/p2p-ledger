@@ -1,0 +1,478 @@
+/* Forecast, alerts and reports share one small set of surfaces. Tokens only. */
+
+.app .risk-page {
+  container-type: inline-size;
+}
+
+.app .risk-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s4);
+}
+
+.app .risk-seg,
+.app .risk-month-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s1);
+}
+
+.app .risk-seg {
+  padding: var(--s1);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--surface-2);
+}
+
+.app .risk-seg button {
+  min-height: 30px;
+  padding: 0 var(--s3);
+  border: 0;
+  border-radius: var(--r2);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-sm);
+  cursor: pointer;
+}
+
+.app .risk-seg button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+.app .risk-seg button:focus-visible,
+.app .risk-month-nav a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.app .risk-month-nav span {
+  min-width: 8.5rem;
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  text-align: center;
+}
+
+.app .risk-month-nav a {
+  text-decoration: none;
+}
+
+.app .risk-panel {
+  min-width: 0;
+  padding: var(--s5);
+  border-radius: var(--r3);
+}
+
+.app .risk-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-bottom: var(--s4);
+}
+
+.app .risk-panel-head h2 {
+  margin: var(--s1) 0 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  font-weight: 400;
+  line-height: 1.15;
+}
+
+.app .risk-kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app .risk-grid {
+  display: grid;
+  gap: var(--s4);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 760px) {
+  .app .risk-grid-2 {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+}
+
+/* ---------- Chart ---------- */
+
+.app .risk-chart {
+  position: relative;
+  min-width: 0;
+}
+
+.app .risk-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.app .risk-zero {
+  stroke: var(--line-strong);
+  stroke-dasharray: 4 5;
+  stroke-width: 1;
+}
+
+.app .risk-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.app .risk-dot {
+  fill: var(--surface);
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.app .risk-chart-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-top: var(--s2);
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+}
+
+.app .risk-neg {
+  color: var(--neg) !important;
+}
+
+.app .risk-pos {
+  color: var(--pos) !important;
+}
+
+.app .risk-pill {
+  margin: 0;
+  padding: var(--s1) var(--s3);
+  border-radius: 999px;
+  font-size: var(--t-xs);
+  font-weight: 600;
+}
+
+.app .risk-pill-ok {
+  background: var(--pos-soft);
+  color: var(--pos-ink);
+}
+
+.app .risk-pill-bad {
+  background: var(--neg-soft);
+  color: var(--neg-ink);
+}
+
+.app .risk-stats {
+  display: grid;
+  gap: var(--s3);
+  margin: 0 0 var(--s4);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.app .risk-stats div {
+  min-width: 0;
+}
+
+.app .risk-stats dt {
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
+.app .risk-stats dd {
+  margin: var(--s1) 0 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  white-space: nowrap;
+}
+
+.app .risk-notes {
+  display: grid;
+  gap: var(--s2);
+  margin: 0;
+  padding-left: var(--s4);
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+
+.app .risk-notes li::marker {
+  color: var(--accent);
+}
+
+/* ---------- Lists ---------- */
+
+.app .risk-list,
+.app .risk-alerts,
+.app .report-bars {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app .risk-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding: var(--s3) 0;
+  border-top: 1px solid var(--line);
+}
+
+.app .risk-list li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.app .risk-list span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app .risk-list strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--t-base);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app .risk-list small {
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
+.app .risk-list b {
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ---------- Alerts ---------- */
+
+.app .risk-alerts {
+  gap: var(--s3);
+}
+
+.app .risk-alert {
+  display: grid;
+  grid-template-columns: 4px minmax(0, 1fr) auto;
+  gap: var(--s4);
+  align-items: center;
+  min-width: 0;
+  padding: var(--s4);
+  border-radius: var(--r3);
+}
+
+.app .risk-alert-rail {
+  align-self: stretch;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.app .risk-alert-high .risk-alert-rail {
+  background: var(--neg);
+}
+
+.app .risk-alert-medium .risk-alert-rail {
+  background: var(--warn);
+}
+
+.app .risk-alert-low .risk-alert-rail {
+  background: var(--accent);
+}
+
+.app .risk-alert-body {
+  display: grid;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.app .risk-alert-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.app .risk-severity {
+  padding: 1px var(--s2);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.app .risk-severity-high {
+  background: var(--neg-soft);
+  color: var(--neg-ink);
+}
+
+.app .risk-severity-medium {
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+}
+
+.app .risk-severity-low {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.app .risk-rule,
+.app .risk-when {
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
+.app .risk-when {
+  margin-left: auto;
+  font-family: var(--mono);
+}
+
+.app .risk-alert h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-md);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.app .risk-alert p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  line-height: 1.45;
+}
+
+@container (max-width: 520px) {
+  .app .risk-alert {
+    grid-template-columns: 4px minmax(0, 1fr);
+  }
+
+  .app .risk-alert > .btn {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+/* ---------- Reports ---------- */
+
+.app .report-compare {
+  display: grid;
+  gap: var(--s3);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.app .report-compare > div {
+  display: grid;
+  gap: var(--s1);
+  min-width: 0;
+  padding: var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--surface-2);
+}
+
+.app .report-compare span {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.app .report-compare strong {
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.app .report-compare em {
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.app .report-bars {
+  gap: var(--s3);
+}
+
+.app .report-bars li {
+  display: grid;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.app .report-bar-label {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s3);
+  color: var(--ink);
+  font-size: var(--t-sm);
+}
+
+.app .report-bar-label b {
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.app .report-bar-track {
+  display: block;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-3);
+}
+
+.app .report-bar-track span {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+}
+
+.app .report-bar-out {
+  background: var(--cat-dining);
+}
+
+.app .report-bar-in {
+  background: var(--pos);
+}
+
+@container (max-width: 560px) {
+  .app .report-compare {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app .risk-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

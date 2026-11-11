@@ -1,0 +1,293 @@
+/* Subscriptions view. Loads after views.css and uses the same tokens. */
+
+.app .sub-view {
+  min-width: 0;
+}
+
+.app .sub-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.app .sub-head .v-sub {
+  max-width: 60ch;
+}
+
+.app .sub-panel {
+  overflow: hidden;
+  padding: 0;
+}
+
+.app .sub-panel .v-panel-head {
+  margin: 0;
+  padding: var(--s5) var(--s5) var(--s3);
+}
+
+.app .sub-note {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  line-height: 1.45;
+}
+
+.app .sub-count {
+  flex: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.app .sub-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app .sub-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 118px 88px auto;
+  align-items: center;
+  gap: var(--s3);
+  min-width: 0;
+  padding: var(--s4) var(--s5);
+  border-top: 1px solid var(--line);
+  transition: background-color var(--dur) var(--ease);
+}
+
+.app .sub-row:hover {
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+
+.app .sub-row.is-marked {
+  background: color-mix(in srgb, var(--warn-soft) 62%, transparent);
+}
+
+.app .sub-glyph {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tint, var(--ink)) 16%, transparent);
+  color: color-mix(in srgb, var(--tint, var(--ink)) 65%, var(--ink));
+}
+
+.app .sub-glyph.is-small {
+  width: 30px;
+  height: 30px;
+}
+
+.app .sub-main {
+  display: grid;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+.app .sub-titleline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s1) var(--s2);
+  min-width: 0;
+}
+
+.app .sub-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--t-base);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app .sub-category {
+  line-height: 18px;
+}
+
+.app .sub-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.app .sub-flag.is-warn {
+  background: var(--warn-soft);
+  color: var(--warn-ink);
+}
+
+.app .sub-flag.is-cancel {
+  background: var(--neg-soft);
+  color: var(--neg-ink);
+}
+
+.app .sub-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  line-height: 1.5;
+}
+
+.app .sub-meta span + span::before {
+  content: "·";
+  margin: 0 var(--s2);
+  color: var(--faint);
+}
+
+.app .sub-reminder {
+  margin: 0;
+  color: var(--warn-ink);
+  font-size: var(--t-xs);
+  line-height: 1.45;
+}
+
+.app .sub-spark {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app .sub-spark .spark {
+  height: 30px;
+  margin-top: 0;
+}
+
+.app .sub-spark-label {
+  color: var(--faint);
+  font-size: var(--t-xs);
+  text-align: right;
+}
+
+.app .sub-cost {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  text-align: right;
+}
+
+.app .sub-cost strong {
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.app .sub-cost span {
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
+.app .sub-mark {
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+.app .sub-candidate {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s3) var(--s5);
+  border-top: 1px solid var(--line);
+}
+
+.app .sub-candidate-tag {
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--faint);
+  font-size: var(--t-xs);
+  white-space: nowrap;
+}
+
+.app .sub-alert {
+  --tint: var(--warn);
+  --tint-strength: var(--tint-state);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s4) var(--s5);
+  border-radius: var(--r3);
+}
+
+.app .sub-alert-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  color: var(--warn-ink);
+}
+
+.app .sub-alert h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-md);
+  font-weight: 600;
+}
+
+.app .sub-alert-copy {
+  margin: var(--s1) 0 0;
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+@container (max-width: 840px) {
+  .app .sub-row {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "glyph main cost"
+      "spark spark spark"
+      "mark mark mark";
+    align-items: start;
+    padding: var(--s4);
+  }
+
+  .app .sub-glyph { grid-area: glyph; }
+  .app .sub-main { grid-area: main; }
+  .app .sub-cost { grid-area: cost; }
+  .app .sub-spark {
+    grid-area: spark;
+    padding-top: var(--s2);
+  }
+  .app .sub-spark-label { text-align: left; }
+  .app .sub-mark {
+    grid-area: mark;
+    justify-self: start;
+    min-height: 44px;
+  }
+
+  .app .sub-candidate {
+    padding-inline: var(--s4);
+  }
+}
+
+@container (max-width: 520px) {
+  .app .sub-candidate {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .app .sub-candidate-tag {
+    grid-column: 2;
+    justify-self: start;
+  }
+}

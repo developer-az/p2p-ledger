@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -14,6 +15,14 @@ import type { AccountRef } from '../api.js';
 import { BrandMark } from './BrandMark.js';
 import { displayName, initials } from './format.js';
 import { navigate, routeHref, type AppSection, type Route, type SettingsTab } from './router.js';
+import {
+  DRAWER_MEDIA_QUERY,
+  NO_GESTURE,
+  initialNavDrawer,
+  isDrawerOpen,
+  navDrawerReducer,
+  shouldCloseFromScrim,
+} from './nav-drawer.js';
 import { createShortcutMatcher, formatKeys } from './shortcuts.js';
 import { Icon, type IconName } from './ui.js';
 import { themeLabel, type ThemePref } from './theme.js';
@@ -72,9 +81,9 @@ const GROUPS: { title: string; items: SectionItem[] }[] = [
   {
     title: 'Money',
     items: [
-      { section: 'subscriptions', label: 'Subscriptions', icon: 'repeat', milestone: 'M5' },
-      { section: 'forecast', label: 'Forecast', icon: 'trend', milestone: 'M6' },
-      { section: 'alerts', label: 'Alerts', icon: 'bell', milestone: 'M6' },
+      { section: 'subscriptions', label: 'Subscriptions', icon: 'repeat' },
+      { section: 'forecast', label: 'Forecast', icon: 'trend' },
+      { section: 'alerts', label: 'Alerts', icon: 'bell' },
     ],
   },
   {
@@ -82,7 +91,7 @@ const GROUPS: { title: string; items: SectionItem[] }[] = [
     items: [
       { section: 'imports', label: 'Imports', icon: 'upload' },
       { section: 'rules', label: 'Rules', icon: 'sliders', milestone: 'M4' },
-      { section: 'reports', label: 'Reports', icon: 'file', milestone: 'M6' },
+      { section: 'reports', label: 'Reports', icon: 'file' },
     ],
   },
 ];
@@ -90,7 +99,6 @@ const GROUPS: { title: string; items: SectionItem[] }[] = [
 const SETTINGS_ITEM: SectionItem = { section: 'settings', label: 'Settings', icon: 'settings' };
 
 const RAIL_KEY = 'settle-sidebar';
-const MOBILE_QUERY = '(max-width: 767px)';
 const ACCOUNT_MENU_ID = 'account-menu';
 
 /** Anything modal on screen owns the keyboard; the shell steps back. */
@@ -195,10 +203,13 @@ export function AppShell({
 }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [isMobile, setIsMobile] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia(MOBILE_QUERY).matches,
+    () => typeof window !== 'undefined' && window.matchMedia(DRAWER_MEDIA_QUERY).matches,
   );
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawer, dispatchDrawer] = useReducer(navDrawerReducer, isMobile, initialNavDrawer);
+  const drawerOpen = isDrawerOpen(drawer);
   const [menuOpen, setMenuOpen] = useState(false);
+  /** Sequence number of the current press; see nav-drawer.ts. */
+  const gestureRef = useRef(NO_GESTURE);
 
   const rail = collapsed && !isMobile;
   const section = route.section;
@@ -216,25 +227,40 @@ export function AppShell({
   callbacks.current = { onNew, onOpenPalette, onOpenHelp };
 
   useEffect(() => {
-    const query = window.matchMedia(MOBILE_QUERY);
+    const query = window.matchMedia(DRAWER_MEDIA_QUERY);
     const onChange = () => setIsMobile(query.matches);
     query.addEventListener('change', onChange);
     return () => query.removeEventListener('change', onChange);
   }, []);
 
-  // A wider window turns the drawer back into a docked sidebar.
+  // A wider window turns the drawer back into a docked sidebar, and a narrower
+  // one starts closed instead of restoring a stale open drawer.
   useEffect(() => {
-    if (!isMobile) setDrawerOpen(false);
+    dispatchDrawer({ type: 'viewport', mobile: isMobile });
   }, [isMobile]);
 
-  const closeDrawer = useCallback(() => {
-    setDrawerOpen(false);
+  // Back/forward and palette navigation move the route without a nav tap, so
+  // the drawer follows the route instead of hanging over the new view.
+  useEffect(() => {
+    dispatchDrawer({ type: 'route-change' });
+  }, [route.section, settingsTab]);
+
+  const closeDrawer = useCallback((reason: 'close' | 'escape' | 'navigate' = 'close') => {
+    dispatchDrawer({ type: reason });
     menuButtonRef.current?.focus();
   }, []);
 
   const openDrawer = useCallback(() => {
-    setDrawerOpen(true);
+    dispatchDrawer({ type: 'menu-press', gesture: gestureRef.current });
   }, []);
+
+  // The tap that opens the drawer also produces the click the freshly mounted
+  // scrim receives. A press from that same gesture must not close the drawer,
+  // so the scrim only closes on a press that started after it opened.
+  const onScrimPress = useCallback(() => {
+    if (!shouldCloseFromScrim(drawer, gestureRef.current)) return;
+    closeDrawer();
+  }, [closeDrawer, drawer]);
 
   const toggleSidebar = useCallback(() => {
     if (isMobile) {
@@ -311,7 +337,7 @@ export function AppShell({
         }
         if (drawerOpen) {
           e.preventDefault();
-          closeDrawer();
+          closeDrawer('escape');
         }
         return;
       }
@@ -355,7 +381,7 @@ export function AppShell({
   const onNavClick = (target: AppSection) => (e: ReactMouseEvent<HTMLAnchorElement>) => {
     if (!isPlainClick(e)) return;
     e.preventDefault();
-    if (drawerOpen) closeDrawer();
+    if (drawerOpen) closeDrawer('navigate');
     navigate(appRoute(target));
   };
 
@@ -405,7 +431,20 @@ export function AppShell({
   };
 
   return (
-    <div className={`shell${rail ? ' is-rail' : ''}`}>
+    <div
+      className={`shell${rail ? ' is-rail' : ''}`}
+      onPointerDownCapture={() => {
+        // Every press gets its own number, so the scrim can tell a fresh tap
+        // from the tail of the tap that opened the drawer.
+        gestureRef.current += 1;
+      }}
+    >
+      {/* The scrim comes before the drawer in the DOM and below it in
+          paint order (50 < 60 in shell.css), so it can never cover the nav. */}
+      {drawerOpen ? (
+        <div className="shell-backdrop" aria-hidden="true" onClick={onScrimPress} />
+      ) : null}
+
       <aside
         id="app-sidebar"
         ref={sidebarRef}
@@ -455,7 +494,7 @@ export function AppShell({
                 onClick={(e) => {
                   if (!isPlainClick(e)) return;
                   e.preventDefault();
-                  if (drawerOpen) closeDrawer();
+                  if (drawerOpen) closeDrawer('navigate');
                   if (settingsTab === null) navigate(appRoute('settings'));
                 }}
               >
@@ -543,10 +582,6 @@ export function AppShell({
         </div>
       </aside>
 
-      {drawerOpen ? (
-        <div className="shell-backdrop" aria-hidden="true" onClick={closeDrawer} />
-      ) : null}
-
       <div className="shell-col">
         <header className="shell-top glass">
           <button
@@ -556,7 +591,10 @@ export function AppShell({
             aria-label={drawerOpen ? 'Close navigation' : 'Open navigation'}
             aria-controls="app-sidebar"
             aria-expanded={drawerOpen}
-            onClick={drawerOpen ? closeDrawer : openDrawer}
+            onClick={() => {
+              if (drawerOpen) closeDrawer();
+              else openDrawer();
+            }}
           >
             <Icon name="list" size={18} />
           </button>
@@ -610,7 +648,7 @@ export function AppShell({
 }
 
 /** Sections whose content is only described in the plan. */
-export const PLANNED_SECTIONS = ['subscriptions', 'forecast', 'alerts', 'rules', 'reports'] as const;
+export const PLANNED_SECTIONS = ['rules'] as const;
 
 /** Every section that renders the shared planned empty state. */
 export type PlannedSection = (typeof PLANNED_SECTIONS)[number];

@@ -1,3 +1,15 @@
+import type { SubscriptionReport } from '../server/subscriptions.js';
+
+export type {
+  DuplicateSubscription,
+  SubscriptionCandidate,
+  SubscriptionCadence,
+  SubscriptionCharge,
+  SubscriptionPriceChange,
+  SubscriptionReport,
+  SubscriptionStream,
+} from '../server/subscriptions.js';
+
 export interface AccountRef { id: string; owner: string }
 
 export interface ChainReceipt {
@@ -223,6 +235,7 @@ export interface AccountView {
   summary: AccountSummary;
   habits?: HabitsHome;
   patterns?: SpendingPatterns;
+  subscriptions?: SubscriptionReport;
   moneyProfile?: MoneyProfile;
   finance?: FinanceSnapshot;
   activityFeed?: ActivityFeedRow[];
@@ -376,6 +389,104 @@ export interface SpendingPatterns {
     biggestDay: PatternDay | null;
     topCategory: PatternCategory | null;
     activeDays30d: number;
+  };
+}
+
+export interface ForecastPoint {
+  day: number;
+  date: string;
+  balanceMinor: number;
+}
+
+export interface ForecastMilestone {
+  day: number;
+  date: string;
+  balanceMinor: number;
+  incomeMinor: number;
+  outflowMinor: number;
+}
+
+export interface RecurringStream {
+  key: string;
+  merchant: string;
+  merchantKey: string;
+  direction: 'in' | 'out';
+  category: string | null;
+  amountMinor: number;
+  intervalDays: number;
+  occurrences: number;
+  lastDate: string;
+  nextDate: string;
+  confidence: 'low' | 'medium' | 'high';
+}
+
+export interface CashForecast {
+  generatedAt: string;
+  currency: string;
+  startingBalanceMinor: number;
+  horizonDays: number;
+  points: ForecastPoint[];
+  milestones: ForecastMilestone[];
+  recurringOutflows: RecurringStream[];
+  plannedIncome: { date: string; amountMinor: number; merchant: string }[];
+  averageDiscretionaryMinorPerDay: number;
+  monthlyIncomeMinor: number;
+  monthlyRecurringOutflowMinor: number;
+  lowestBalanceMinor: number;
+  lowestDate: string;
+  shortfall: boolean;
+  assumptions: string[];
+}
+
+export type AlertRule = 'LOW_PROJECTED_BALANCE' | 'LARGE_SPEND' | 'WEEKLY_PLAN_OVERSPEND' | 'UPCOMING_LARGE_CHARGE';
+export type AlertSeverity = 'high' | 'medium' | 'low';
+
+export interface RiskAlert {
+  id: string;
+  rule: AlertRule;
+  severity: AlertSeverity;
+  title: string;
+  detail: string;
+  evidence: Record<string, string | number | null>;
+  occurredAt: string | null;
+}
+
+export interface ReportCategoryRow {
+  key: string;
+  kind: 'spend' | 'income';
+  inMinor: number;
+  outMinor: number;
+  count: number;
+}
+
+export interface ReportMerchantRow {
+  merchant: string;
+  merchantKey: string;
+  spendMinor: number;
+  count: number;
+  sharePct: number;
+}
+
+export interface MonthlyReport {
+  month: string;
+  label: string;
+  start: string;
+  end: string;
+  currency: string;
+  incomeMinor: number;
+  spendMinor: number;
+  netMinor: number;
+  transactionCount: number;
+  byCategory: ReportCategoryRow[];
+  topMerchants: ReportMerchantRow[];
+  previous: { month: string; label: string; incomeMinor: number; spendMinor: number; netMinor: number };
+  change: {
+    incomePct: number | null;
+    spendPct: number | null;
+    netPct: number | null;
+    incomeDeltaMinor: number;
+    spendDeltaMinor: number;
+    netDeltaMinor: number;
   };
 }
 
@@ -888,6 +999,11 @@ export const api = {
     call<CorridorResult>('/api/bank/outbound', { method: 'POST', body: JSON.stringify({ accountId }) }),
   account: (id: string, limit = 50, tzOffsetMinutes = 0) =>
     call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}&limit=${limit}&tzOffset=${encodeURIComponent(String(tzOffsetMinutes))}`),
+  markSubscription: (accountId: string, streamId: string, markedToCancel: boolean) =>
+    call<{ subscriptions: SubscriptionReport }>(`/api/accounts/${encodeURIComponent(accountId)}/subscriptions/${encodeURIComponent(streamId)}/mark`, {
+      method: 'POST',
+      body: JSON.stringify({ markedToCancel }),
+    }),
   habits: (accountId: string) =>
     call<HabitsHome>(`/api/accounts/${encodeURIComponent(accountId)}/habits`),
   recordSpend: (accountId: string, body: { amountMinor: number; category: SpendCategory; note?: string }, key: string = idempotencyKey()) =>
@@ -998,6 +1114,19 @@ export const api = {
     call<{ accountId: string; currency: string; entries: LedgerEntryRow[] }>(
       `/api/accounts/${encodeURIComponent(accountId)}/entries?limit=${limit}`,
     ),
+  forecast: (accountId: string) =>
+    call<CashForecast>(`/api/accounts/${encodeURIComponent(accountId)}/forecast`),
+  alerts: (accountId: string) =>
+    call<{ alerts: RiskAlert[]; generatedAt: string }>(`/api/accounts/${encodeURIComponent(accountId)}/alerts`),
+  dismissAlert: (accountId: string, alertId: string) =>
+    call<{ ok: boolean }>(`/api/accounts/${encodeURIComponent(accountId)}/alerts/${encodeURIComponent(alertId)}/dismiss`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  monthlyReport: (accountId: string, month?: string) =>
+    call<MonthlyReport>(`/api/accounts/${encodeURIComponent(accountId)}/reports/monthly${month ? `?month=${encodeURIComponent(month)}` : ''}`),
+  monthlyReportCsvUrl: (accountId: string, month?: string) =>
+    `/api/accounts/${encodeURIComponent(accountId)}/reports/monthly.csv${month ? `?month=${encodeURIComponent(month)}` : ''}`,
   trail: (accountId: string, transferId: string) =>
     call<PaymentTrail>(`/api/trail?account=${encodeURIComponent(accountId)}&transfer=${encodeURIComponent(transferId)}`),
   integrity: () => call<Integrity>('/api/integrity'),

@@ -13,6 +13,9 @@ import { buildFeed, type FeedItem } from './feed.js';
 import { dayLabel, displayName, money, parseMoney } from './format.js';
 import { Home } from './Home.js';
 import { InsightsTab } from './InsightsTab.js';
+import { ForecastView } from './ForecastView.js';
+import { AlertsView } from './AlertsView.js';
+import { ReportsView } from './ReportsView.js';
 import { clearSession, loadSession, saveSession, type Session } from './session.js';
 import { SetupSheet } from './SetupSheet.js';
 import { AddSheet } from './AddSheet.js';
@@ -470,6 +473,9 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
               />
             ) : null}
             {viewSection === 'ask' ? <AskTab accountId={me.id} boot={boot} seed={askSeed} onSeedUsed={() => setAskSeed(null)} /> : null}
+            {viewSection === 'forecast' ? <ForecastView accountId={me.id} /> : null}
+            {viewSection === 'alerts' ? <AlertsView accountId={me.id} /> : null}
+            {viewSection === 'reports' ? <ReportsView accountId={me.id} /> : null}
             {viewSection === 'settings' ? (
               <SettingsView
                 tab={viewSettingsTab ?? 'profile'}

@@ -26,6 +26,8 @@ import { peerLedgerView } from './peer-ledger.js';
 import { buildActivityFeed, buildPersonalInsights } from './money-insights.js';
 import { buildHabitsFromEntries, buildHabitsHome, SPEND_CATEGORIES, type SpendLogStore } from './spend-log.js';
 import { buildSpendingPatterns } from './spending-patterns.js';
+import { buildCashForecast, buildMonthlyReport, buildRiskAlerts, normalizeTransactions, reportCsv } from './risk.js';
+import { InMemoryAlertDismissalStore, type AlertDismissalStore } from './alert-store.js';
 import {
   buildFinanceSnapshot,
   INCOME_SOURCES,
@@ -228,6 +230,8 @@ export function createApp(deps: {
   practice: PracticeLedger;
   spendLogs: SpendLogStore;
   personalFinance?: PersonalFinanceStore;
+  /** Dismissed alert ids. Defaults to memory; production passes Postgres. */
+  alertDismissals?: AlertDismissalStore;
   paymentRequests?: PaymentRequestStore;
   javaWorkflows?: JavaWorkflows;
   liveLedger?: LedgerWriter & LedgerAuditor;
@@ -259,6 +263,7 @@ export function createApp(deps: {
   const now = deps.now ?? (() => new Date());
   const mfaKey = resolveMfaKey(deps.mfaKey);
   const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
+  const alertDismissals = deps.alertDismissals ?? new InMemoryAlertDismissalStore();
   const paymentRequests = deps.paymentRequests ?? new InMemoryPaymentRequestStore();
   /**
    * Practice demo history lives in memory, so a cold serverless instance that
@@ -286,6 +291,39 @@ export function createApp(deps: {
       });
     practiceSeedInFlight.set(accountId, seeding);
     return seeding;
+  };
+
+  /** Load the rows and settings every forecast, alert and report route needs. */
+  const riskSnapshot = async (accountId: string) => {
+    await ensurePracticeDemoSeeded(accountId);
+    const account = await deps.ledger.getAccount(accountId);
+    if (!account) return null;
+    const at = now();
+    const profile = await personalFinance.getProfile(accountId, account.currency, at);
+    const spends = await deps.spendLogs.list(accountId, { limit: 500 });
+    const incomes = await personalFinance.listIncome(accountId, { limit: 500 });
+    const periodStart = Date.parse(profile.periodStart);
+    const periodIncome = incomes
+      .filter((row) => Date.parse(row.occurredAt) >= periodStart)
+      .reduce((sum, row) => sum + row.amountMinor, 0);
+    const periodSpend = spends
+      .filter((row) => Date.parse(row.occurredAt) >= periodStart)
+      .reduce((sum, row) => sum + row.amountMinor, 0);
+    let currentBalanceMinor = account.balanceMinor;
+    if (profile.walletCashMinor !== null) {
+      currentBalanceMinor = profile.walletCashMinor + periodIncome;
+      if (profile.spendLogsAffectWallet) currentBalanceMinor -= periodSpend;
+    }
+    return {
+      account,
+      at,
+      profile,
+      spends,
+      incomes,
+      patterns: buildSpendingPatterns(spends, incomes, at, profile, 0),
+      transactions: normalizeTransactions(spends, incomes),
+      currentBalanceMinor,
+    };
   };
   const llmGuard = deps.llmGuard ?? new LlmGuard();
   const auth = deps.auth ?? new InMemoryAuthStore();
@@ -911,6 +949,7 @@ export function createApp(deps: {
     await deps.dataKeys?.shred(user.accountId);
     await deps.dataKeys?.shred(user.id);
     await personalFinance.deleteAll(user.accountId);
+    await alertDismissals.deleteAll(user.accountId);
     await deps.spendLogs.deleteAll?.(user.accountId);
     await auth.deleteUser(user.id);
     deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true, httpOnly: true, sameSite: 'Lax' });
@@ -1399,6 +1438,71 @@ export function createApp(deps: {
     if (denied) return denied;
     const accounts = await deps.ledger.accountsByOwner(owner);
     return c.json(accounts.map((a) => ({ id: a.id, owner: a.ownerId })));
+  });
+
+  app.get('/accounts/:id/forecast', async (c) => {
+    const snapshot = await riskSnapshot(c.req.param('id'));
+    if (!snapshot) return c.json({ error: 'Account not found' }, 404);
+    return c.json(buildCashForecast({
+      now: snapshot.at,
+      currentBalanceMinor: snapshot.currentBalanceMinor,
+      transactions: snapshot.transactions,
+      currency: snapshot.account.currency,
+      horizonDays: 90,
+    }));
+  });
+
+  app.get('/accounts/:id/alerts', async (c) => {
+    const accountId = c.req.param('id');
+    const snapshot = await riskSnapshot(accountId);
+    if (!snapshot) return c.json({ error: 'Account not found' }, 404);
+    const dismissed = await alertDismissals.list(accountId);
+    const alerts = buildRiskAlerts({
+      now: snapshot.at,
+      transactions: snapshot.transactions,
+      currentBalanceMinor: snapshot.currentBalanceMinor,
+      weeklyBudgetMinor: snapshot.profile.weeklyBudgetMinor,
+      weeklySpentMinor: snapshot.patterns.week.spentMinor,
+      weekStart: snapshot.patterns.week.start,
+      dismissed,
+    });
+    return c.json({ alerts, generatedAt: snapshot.at.toISOString() });
+  });
+
+  app.post('/accounts/:id/alerts/:alertId/dismiss', async (c) => {
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const accountId = c.req.param('id');
+    const alertId = c.req.param('alertId');
+    if (!alertId || alertId.length > 200) return c.json({ error: 'Invalid alert' }, 400);
+    if (!await deps.ledger.getAccount(accountId)) return c.json({ error: 'Account not found' }, 404);
+    await alertDismissals.dismiss(accountId, alertId, now());
+    return c.json({ ok: true });
+  });
+
+  app.get('/accounts/:id/reports/monthly', async (c) => {
+    const snapshot = await riskSnapshot(c.req.param('id'));
+    if (!snapshot) return c.json({ error: 'Account not found' }, 404);
+    return c.json(buildMonthlyReport({
+      now: snapshot.at,
+      transactions: snapshot.transactions,
+      month: c.req.query('month'),
+      currency: snapshot.account.currency,
+    }));
+  });
+
+  app.get('/accounts/:id/reports/monthly.csv', async (c) => {
+    const snapshot = await riskSnapshot(c.req.param('id'));
+    if (!snapshot) return c.json({ error: 'Account not found' }, 404);
+    const report = buildMonthlyReport({
+      now: snapshot.at,
+      transactions: snapshot.transactions,
+      month: c.req.query('month'),
+      currency: snapshot.account.currency,
+    });
+    return c.body(reportCsv(report), 200, {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="settle-report-${report.month}.csv"`,
+    });
   });
 
   app.post('/accounts', async (c) => {

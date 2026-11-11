@@ -16,16 +16,6 @@ const PLANNED: Record<PlannedSection, { milestone: string; copy: string; icon: I
     icon: 'calendar',
     copy: 'Recurring charges found in your statements, with the next charge date and the yearly cost.',
   },
-  forecast: {
-    milestone: 'M6',
-    icon: 'chart',
-    copy: 'A cash-flow forecast to your next payday, with a P10–P90 band.',
-  },
-  alerts: {
-    milestone: 'M6',
-    icon: 'alert',
-    copy: 'Unusual charges, each with a plain reason code.',
-  },
   imports: {
     milestone: 'M3',
     icon: 'download',
@@ -35,11 +25,6 @@ const PLANNED: Record<PlannedSection, { milestone: string; copy: string; icon: I
     milestone: 'M4',
     icon: 'split',
     copy: 'Rules that set categories by merchant and amount, previewed before they apply.',
-  },
-  reports: {
-    milestone: 'M6',
-    icon: 'list',
-    copy: 'Monthly close, cash flow and net worth, exportable as CSV.',
   },
 };
 

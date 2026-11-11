@@ -110,5 +110,83 @@ export function pgSsl(connectionString: string, env: Env = process.env): PgSsl {
  * options come from `pgSsl`, which reads the original URL and the environment.
  */
 export function pgConfig(connectionString: string, env: Env = process.env): ClientConfig {
-  return { connectionString: stripTlsParams(connectionString), ssl: pgSsl(connectionString, env) };
+  const url = poolerConnectionString(connectionString, env);
+  return { connectionString: stripTlsParams(url), ssl: pgSsl(url, env) };
+}
+
+/* ------------------------------------------------------------------ */
+/* Supabase pooler mode                                                */
+/* ------------------------------------------------------------------ */
+
+const SUPABASE_POOLER_SUFFIX = 'pooler.supabase.com';
+/** Supavisor transaction mode; no session state survives between statements. */
+const SUPABASE_TRANSACTION_PORT = 6543;
+const SUPABASE_SESSION_PORT = 5432;
+
+export type SupabasePoolerMode = 'transaction' | 'session';
+
+/** Logged at most once per mode, so a busy process does not repeat it. */
+const loggedModes = new Set<SupabasePoolerMode>();
+
+function logPoolerMode(mode: SupabasePoolerMode, host: string): void {
+  if (loggedModes.has(mode)) return;
+  loggedModes.add(mode);
+  if (mode === 'transaction') {
+    console.info(
+      `[pg] ${host}: using Supabase pooler transaction mode on port ${SUPABASE_TRANSACTION_PORT} `
+      + '(set PG_SUPABASE_SESSION_MODE=1 to keep session mode on 5432).',
+    );
+  } else {
+    console.info(`[pg] ${host}: using Supabase pooler session mode on port ${SUPABASE_SESSION_PORT}.`);
+  }
+}
+
+/** Host/port of a postgres URL, or null when the string is not a URL. */
+function postgresUrl(connectionString: string): URL | null {
+  try {
+    const url = new URL(connectionString);
+    return url.protocol === 'postgres:' || url.protocol === 'postgresql:' ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Which Supabase pooler mode a connection string asks for.
+ *
+ * Supabase's direct and session-pooler ports (5432) cap the project at
+ * `pool_size` backends no matter how many serverless instances connect, so a
+ * per-instance `PG_POOL_MAX` alone cannot bound sessions. Transaction mode
+ * (6543) multiplexes statements and is the default here unless
+ * PG_SUPABASE_SESSION_MODE=1 explicitly asks for session state.
+ */
+export function supabasePoolerMode(connectionString: string, env: Env = process.env): SupabasePoolerMode | null {
+  const url = postgresUrl(connectionString);
+  if (!url || !url.hostname.toLowerCase().endsWith(SUPABASE_POOLER_SUFFIX)) return null;
+  if (env.PG_SUPABASE_SESSION_MODE === '1') return 'session';
+  // An explicit non-5432 port is already the caller's choice (for example 6543).
+  return url.port === '' || url.port === String(SUPABASE_SESSION_PORT) ? 'transaction' : null;
+}
+
+/**
+ * Rewrites a Supabase session-pooler URL (port 5432, or no port) to Supavisor
+ * transaction mode (6543). Every other URL is returned byte-for-byte.
+ *
+ * Nothing in this server keeps session state across statements outside a
+ * transaction: RLS identity uses `set_config(..., true)`, the audit purge uses
+ * `set local`, and there are no LISTEN/PREPARE/named statements.
+ */
+export function poolerConnectionString(connectionString: string, env: Env = process.env): string {
+  const mode = supabasePoolerMode(connectionString, env);
+  if (mode === null) return connectionString;
+
+  const url = postgresUrl(connectionString)!;
+  if (mode === 'session') {
+    logPoolerMode('session', url.hostname.toLowerCase());
+    return connectionString;
+  }
+
+  url.port = String(SUPABASE_TRANSACTION_PORT);
+  logPoolerMode('transaction', url.hostname.toLowerCase());
+  return url.toString();
 }

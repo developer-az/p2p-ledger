@@ -162,7 +162,7 @@ function ensureSchema(connectionString: string, pool: PgPool): Promise<void> {
     ready = (async () => {
       const client = await pool.connect();
       try {
-        await ensureSchemaOnce(client, 'rate-limits', 1, async () => {
+        await ensureSchemaOnce(client, connectionString, 'rate-limits', 1, async () => {
           await client.query(RATE_LIMIT_DDL);
         });
       } finally {

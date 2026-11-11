@@ -1,8 +1,8 @@
 import type { ClientBase } from 'pg';
 
 /**
- * Run a store's schema DDL at most once per process and once per database
- * version.
+ * Run a store's schema DDL at most once per process, per database and per
+ * schema version.
  *
  * Every process used to run the full `create table if not exists` / `alter
  * table add column if not exists` / `create or replace function` bundle on its
@@ -12,6 +12,11 @@ import type { ClientBase } from 'pg';
  * `app_schema_versions`; only a database that is actually behind runs DDL, and
  * it does so under one transaction-scoped advisory lock so instances serialize
  * instead of colliding.
+ *
+ * The memo is keyed by connection string and effective schema as well as store
+ * name and version. A process that talks to two databases (or two schemas of
+ * one database, for example a private test schema) must run the DDL for each of
+ * them; keying on name/version alone skipped the second target.
  */
 
 const VERSIONS_DDL = `create table if not exists app_schema_versions (
@@ -22,11 +27,41 @@ const VERSIONS_DDL = `create table if not exists app_schema_versions (
 
 const VERSION_SQL = 'select version from app_schema_versions where name = $1';
 
-/** Per-process results, keyed by store name and target version. */
+/** Per-process results, keyed by connection string, schema, store name and version. */
 const applied = new Map<string, Promise<void>>();
 
-function keyFor(name: string, version: number): string {
-  return `${name}\u0000${version}`;
+/** Effective schema per connection string; search_path is fixed by the URL. */
+const schemas = new Map<string, Promise<string>>();
+
+function keyFor(connectionString: string, schema: string, name: string, version: number): string {
+  return `${connectionString}\u0000${schema}\u0000${name}\u0000${version}`;
+}
+
+function isUndefinedTable(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && (error as { code?: unknown }).code === '42P01';
+}
+
+/**
+ * `select current_schema()` for this connection string, cached per process. The
+ * schema comes from the URL (`options=-c search_path=...`), so it does not
+ * change between pooled clients of the same connection string.
+ */
+function effectiveSchema(client: ClientBase, connectionString: string): Promise<string> {
+  const cached = schemas.get(connectionString);
+  if (cached) return cached;
+
+  const pending = (async () => {
+    const result = await client.query('select current_schema() as schema');
+    const row = result.rows[0] as { schema?: string | null } | undefined;
+    return String(row?.schema ?? 'public');
+  })();
+  schemas.set(connectionString, pending);
+  void pending.catch(() => {
+    if (schemas.get(connectionString) === pending) schemas.delete(connectionString);
+  });
+  return pending;
 }
 
 async function currentVersion(client: ClientBase, name: string): Promise<number> {
@@ -35,23 +70,40 @@ async function currentVersion(client: ClientBase, name: string): Promise<number>
   return row?.version === undefined ? 0 : Number(row.version);
 }
 
+/**
+ * Fast-path version read. A missing `app_schema_versions` table is treated as
+ * "version 0": the table is only created after the advisory lock is held, so a
+ * concurrent first startup cannot win a `create table if not exists` race.
+ */
+async function currentVersionOrBehind(client: ClientBase, name: string): Promise<number | null> {
+  try {
+    return await currentVersion(client, name);
+  } catch (error) {
+    if (isUndefinedTable(error)) return null;
+    throw error;
+  }
+}
+
 async function runOnce(
   client: ClientBase,
   name: string,
   version: number,
   ddl: () => Promise<void>,
 ): Promise<void> {
-  // Creating the bookkeeping table is cheap when it already exists and does
-  // not take a strong lock, so it stays on the fast path.
-  await client.query(VERSIONS_DDL);
-  if (await currentVersion(client, name) >= version) return;
+  // Fast path: one select, no transaction, no locks. Only an already-created
+  // bookkeeping table with a current version can skip the work.
+  const known = await currentVersionOrBehind(client, name);
+  if (known !== null && known >= version) return;
 
   await client.query('begin');
   try {
     // One lock name for every store: schema changes are rare, so serializing
     // all of them keeps a startup burst from holding several table locks at
-    // once in different orders.
+    // once in different orders. The lock comes before creating the bookkeeping
+    // table: concurrent `create table if not exists` still races on pg_type and
+    // raises duplicate-key errors.
     await client.query("select pg_advisory_xact_lock(hashtext('settle-schema'))");
+    await client.query(VERSIONS_DDL);
     if (await currentVersion(client, name) < version) {
       await ddl();
       await client.query(
@@ -71,19 +123,22 @@ async function runOnce(
 }
 
 /**
- * Apply `ddl` for `name` at `version` unless this process already did or the
- * database is already at that version.
+ * Apply `ddl` for `name` at `version` unless this process already did for this
+ * database/schema or the database is already at that version.
  *
- * The promise is memoized per name/version. A rejected promise is removed so a
- * later call retries after a transient database failure.
+ * The promise is memoized per connection string, effective schema, name and
+ * version. A rejected promise is removed so a later call retries after a
+ * transient database failure.
  */
-export function ensureSchemaOnce(
+export async function ensureSchemaOnce(
   client: ClientBase,
+  connectionString: string,
   name: string,
   version: number,
   ddl: () => Promise<void>,
 ): Promise<void> {
-  const key = keyFor(name, version);
+  const schema = await effectiveSchema(client, connectionString);
+  const key = keyFor(connectionString, schema, name, version);
   const cached = applied.get(key);
   if (cached) return cached;
 

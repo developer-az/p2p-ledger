@@ -768,7 +768,7 @@ export class PostgresAuthStore implements AuthStore {
   private async ensureSchema(c: import('pg').PoolClient) {
     // Bumped to 2: the schema gained the MFA, session, recovery-code and
     // passkey columns after the first version shipped.
-    await ensureSchemaOnce(c, 'auth', 2, async () => {
+    await ensureSchemaOnce(c, this.connectionString, 'auth', 2, async () => {
       await c.query(AUTH_SCHEMA);
       await c.query(AUDIT_DDL);
     });

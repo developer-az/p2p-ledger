@@ -649,7 +649,7 @@ export class PostgresDataKeyStore extends BaseDataKeyStore {
   }
 
   private async ensureSchema(c: import('pg').PoolClient): Promise<void> {
-    await ensureSchemaOnce(c, 'data-keys', 1, async () => {
+    await ensureSchemaOnce(c, this.connectionString, 'data-keys', 1, async () => {
       await c.query(DATA_KEY_SCHEMA);
     });
   }

@@ -169,7 +169,7 @@ function ensureSchema(connectionString: string, pool: PgPool): Promise<void> {
       const client = await pool.connect();
       try {
         // Bumped to 2: `purpose` and the nullable user_id came after v1.
-        await ensureSchemaOnce(client, 'security-state', 2, async () => {
+        await ensureSchemaOnce(client, connectionString, 'security-state', 2, async () => {
           await client.query(SECURITY_SCHEMA);
         });
       } finally {

@@ -10,7 +10,7 @@
 - Reviews: Codex medium FAIL (2 high, 2 medium) -> fixed; delta FAIL (1 high: concurrent TOTP reuse) -> conditional step claim; delta PASS. Accepted medium: a cached data key can decrypt for up to 5 s after a shred on another instance.
 - Evidence: vitest 686 passed with SETTLE_TEST_DATABASE_URL (local postgres:17-alpine); tsc clean; bundle 242.5/536 kB.
 - Vercel env set: MFA_ENCRYPTION_KEY and DATABASE_CA_CERT (Supabase Root 2021 CA, chain verified with openssl, valid to 2031), Production + Preview. NOT set (blocked by the permission check): DATA_KEK and DATA_KEK_ID; production refuses to encrypt notes without them.
-- Still open: 2.8 BYO keys (plan puts it in M4), 2.10 legal pages (needs the operator's legal name), passkey flow not driven in a real browser (covered by tests with real P-256/RSA keys).
+- Later the same session: DATA_KEK/DATA_KEK_ID set in Vercel (user approved). 2.10 done: Legal.tsx privacy/terms (operator Anthony Zhou, contact via GitHub issues/advisories, template-not-legal-advice note), public/.well-known/security.txt (vercel.json SPA rewrite now skips .well-known), SECURITY.md. The existing support email on AccountAccess/GoogleSignIn was kept. 2.8 BYO keys not needed now: the user already has GEMINI_API_KEY and OPENROUTER_API_KEY set server-side; revisit in M4 if household members need their own. Passkeys not driven in a real browser (tests use real P-256/RSA keys). vitest 688 passed.
 
 ## Session: glass pass 2, M1 docs, M2 security core (2026-11-11), branches feat/v2-glass-2 (PR #37), feat/v2-m1-docs (PR #38), feat/v2-m2-security (stacked on #38)
 

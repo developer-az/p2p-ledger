@@ -22,6 +22,7 @@ import {
   isDrawerOpen,
   navDrawerReducer,
   shouldCloseFromScrim,
+  shouldFocusMenuAfterRouteChange,
 } from './nav-drawer.js';
 import { createShortcutMatcher, formatKeys } from './shortcuts.js';
 import { Icon, type IconName } from './ui.js';
@@ -207,6 +208,9 @@ export function AppShell({
   );
   const [drawer, dispatchDrawer] = useReducer(navDrawerReducer, isMobile, initialNavDrawer);
   const drawerOpen = isDrawerOpen(drawer);
+  /** Latest drawer state for effects that must read it before dispatching. */
+  const drawerStateRef = useRef(drawer);
+  drawerStateRef.current = drawer;
   const [menuOpen, setMenuOpen] = useState(false);
   /** Sequence number of the current press; see nav-drawer.ts. */
   const gestureRef = useRef(NO_GESTURE);
@@ -240,9 +244,16 @@ export function AppShell({
   }, [isMobile]);
 
   // Back/forward and palette navigation move the route without a nav tap, so
-  // the drawer follows the route instead of hanging over the new view.
+  // the drawer follows the route instead of hanging over the new view. Focus
+  // that was inside the drawer moves to the menu button instead of vanishing
+  // with the inert subtree.
   useEffect(() => {
+    const state = drawerStateRef.current;
+    const root = sidebarRef.current;
+    const active = typeof document === 'undefined' ? null : document.activeElement;
+    const focusInside = root !== null && active !== null && root.contains(active);
     dispatchDrawer({ type: 'route-change' });
+    if (shouldFocusMenuAfterRouteChange(state, focusInside)) menuButtonRef.current?.focus();
   }, [route.section, settingsTab]);
 
   const closeDrawer = useCallback((reason: 'close' | 'escape' | 'navigate' = 'close') => {
@@ -256,9 +267,12 @@ export function AppShell({
 
   // The tap that opens the drawer also produces the click the freshly mounted
   // scrim receives. A press from that same gesture must not close the drawer,
-  // so the scrim only closes on a press that started after it opened.
-  const onScrimPress = useCallback(() => {
-    if (!shouldCloseFromScrim(drawer, gestureRef.current)) return;
+  // so the scrim only closes on a press that started after it opened. A click
+  // with no pointer detail behind it (assistive technology, keyboard) has no
+  // gesture to compare, so it always closes.
+  const onScrimPress = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    const gesture = e.detail === 0 ? null : gestureRef.current;
+    if (!shouldCloseFromScrim(drawer, gesture)) return;
     closeDrawer();
   }, [closeDrawer, drawer]);
 

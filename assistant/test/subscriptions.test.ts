@@ -120,7 +120,7 @@ describe('subscription detection (PLAN 5.1)', () => {
     }));
     const report = detectSubscriptions(weekly, NOW);
     expect(report.streams).toHaveLength(1);
-    expect(report.streams[0]).toMatchObject({ cadence: 'weekly', monthlyMinor: 4_333, annualMinor: 51_996 });
+    expect(report.streams[0]).toMatchObject({ cadence: 'weekly', monthlyMinor: 4_333, annualMinor: 52_000 });
   });
 });
 

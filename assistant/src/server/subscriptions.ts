@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { SpendLogEntry } from './spend-log.js';
 
 /**
@@ -181,10 +183,10 @@ function serviceForMerchant(key: string): KnownService | null {
   return null;
 }
 
-function merchantForDescriptor(clean: string, service: KnownService | null): string {
-  const key = normalizeDescriptor(clean);
+function merchantForDescriptor(descriptor: string, service: KnownService | null): string {
+  const key = normalizeDescriptor(descriptor);
   if (service && service.aliases.some((alias) => normalizeDescriptor(alias) === key)) return service.name;
-  return titleCase(clean);
+  return titleCase(key);
 }
 
 /** Normalize logged spends (or future statement rows) into merchant-keyed transactions. */
@@ -197,7 +199,7 @@ export function normalizeSpendTransactions(spends: SpendLogEntry[]): NormalizedT
     const service = serviceForMerchant(clean);
     rows.push({
       id: entry.id,
-      merchant: merchantForDescriptor(entry.note, service),
+      merchant: merchantForDescriptor(clean, service),
       merchantKey: clean,
       serviceKey: service?.key ?? null,
       serviceName: service?.name ?? null,
@@ -319,9 +321,16 @@ function monthlyFor(cadence: SubscriptionCadence, amountMinor: number): number {
   return Math.round(amountMinor / 12);
 }
 
+function annualFor(cadence: SubscriptionCadence, amountMinor: number): number {
+  if (cadence === 'weekly') return amountMinor * 52;
+  if (cadence === 'monthly') return amountMinor * 12;
+  if (cadence === 'quarterly') return amountMinor * 4;
+  return amountMinor;
+}
+
 function streamIdFor(merchantKey: string, cadence: SubscriptionCadence): string {
-  const slug = merchantKey.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'stream';
-  return `sub-${slug}-${cadence}`;
+  const digest = createHash('sha256').update(`${merchantKey}\u0000${cadence}`).digest('base64url');
+  return `sub-${digest}`;
 }
 
 function candidateIdFor(merchantKey: string): string {
@@ -370,6 +379,7 @@ export function detectSubscriptions(transactions: NormalizedTransaction[], now: 
     if (cadence && isStable(billed) && isFresh(cadence, lastCharge.occurredAt, now)) {
       const amountMinor = lastCharge.amountMinor;
       const monthlyMinor = monthlyFor(cadence, amountMinor);
+      const annualMinor = annualFor(cadence, amountMinor);
       const priceChange = findPriceChange(billed);
       streams.push({
         id: streamIdFor(merchantKey, cadence),
@@ -380,7 +390,7 @@ export function detectSubscriptions(transactions: NormalizedTransaction[], now: 
         cadence,
         amountMinor,
         monthlyMinor,
-        annualMinor: monthlyMinor * 12,
+        annualMinor,
         lastChargeAt: lastCharge.occurredAt,
         nextChargeAt: nextChargeAfter(lastCharge.occurredAt, cadence, now),
         charges,
@@ -431,17 +441,19 @@ export function detectSubscriptions(transactions: NormalizedTransaction[], now: 
     if (list.length < 2) continue;
     const first = list[0]!;
     const monthlyMinor = list.reduce((sum, stream) => sum + stream.monthlyMinor, 0);
+    const annualMinor = list.reduce((sum, stream) => sum + stream.annualMinor, 0);
     duplicates.push({
       serviceKey,
       serviceName: first.serviceName ?? first.merchant,
       streamIds: list.map((stream) => stream.id),
       monthlyMinor,
-      annualMinor: monthlyMinor * 12,
+      annualMinor,
     });
   }
   duplicates.sort((a, b) => b.monthlyMinor - a.monthlyMinor || a.serviceName.localeCompare(b.serviceName));
 
   const monthlyRunRateMinor = streams.reduce((sum, stream) => sum + stream.monthlyMinor, 0);
+  const annualRunRateMinor = streams.reduce((sum, stream) => sum + stream.annualMinor, 0);
   return {
     generatedAt: now.toISOString(),
     streams,
@@ -450,7 +462,7 @@ export function detectSubscriptions(transactions: NormalizedTransaction[], now: 
     totals: {
       activeCount: streams.length,
       monthlyRunRateMinor,
-      annualRunRateMinor: monthlyRunRateMinor * 12,
+      annualRunRateMinor,
       candidateCount: candidates.length,
       duplicateCount: duplicates.length,
     },

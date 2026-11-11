@@ -10,16 +10,11 @@ import './styles/shell.css';
 
 const REPO = 'https://github.com/developer-az/p2p-ledger';
 
-const PLANNED: Record<PlannedSection, { milestone: string; copy: string; icon: IconName }> = {
-  rules: {
-    milestone: 'M4',
-    icon: 'split',
-    copy: 'Rules that set categories by merchant and amount, previewed before they apply.',
-  },
-};
+const PLANNED: Record<string, { milestone: string; copy: string; icon: IconName }> = {};
 
 export function PlannedView({ section }: { section: PlannedSection }) {
   const entry = PLANNED[section];
+  if (!entry) return null;
   return (
     <div className="planned-view">
       <span className="planned-mark glass-tint" aria-hidden="true">

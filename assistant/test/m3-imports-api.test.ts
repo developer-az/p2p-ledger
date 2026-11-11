@@ -90,8 +90,9 @@ describe('imports API', () => {
     };
     expect(report.import.stages.parse.status).toBe('passed');
     expect(report.transactions).toHaveLength(3);
-    expect(report.transactions.find((row) => row.descriptorClean === 'blue bottle coffee')!.descriptor).toBe('BLUE BOTTLE COFFEE');
-    expect(report.transactions.find((row) => row.descriptorClean === 'blue bottle coffee')!.amountMinor).toBe(-550);
+    // M4 enrichment cleans imported descriptors to uppercase.
+    expect(report.transactions.find((row) => row.descriptorClean === 'BLUE BOTTLE COFFEE')!.descriptor).toBe('BLUE BOTTLE COFFEE');
+    expect(report.transactions.find((row) => row.descriptorClean === 'BLUE BOTTLE COFFEE')!.amountMinor).toBe(-550);
     expect(report.reconciled).toBe(true);
 
     const account = await app.request(`/api/accounts?id=${ME}`);
@@ -114,7 +115,7 @@ describe('imports API', () => {
     const imports = new InMemoryImportStore(cipher);
     const app = appWith(imports);
     const tooBig = await upload(app, { filename: 'statement.csv', content: 'x'.repeat(2_000_001) });
-    expect(tooBig.status).toBe(400);
+    expect(tooBig.status).toBe(413);
     expect(await tooBig.json()).toMatchObject({ error: 'file_too_large' });
 
     const pdf = await upload(app, { filename: 'statement.pdf', content: '%PDF-1.7' });

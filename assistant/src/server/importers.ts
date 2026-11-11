@@ -57,6 +57,8 @@ export interface ParsedImportRow {
   descriptorRaw: string;
   descriptorClean: string;
   categoryId: SpendCategory;
+  /** Set by M4 enrichment when a merchant alias resolves. */
+  merchantId?: string | null;
   source: ImportSource;
   externalId: string | null;
   raw: Record<string, string>;
@@ -497,7 +499,12 @@ function ofxDate(value: string | null): string | null {
 export function parseOfxImport(text: string): ParseResult {
   if (text.trim() === '') throw new ImportParseError('empty_file');
   if (!/<OFX[\s>]/i.test(text)) throw new ImportParseError('malformed_ofx', 'The file has no OFX header.');
-  const blocks = [...text.matchAll(/<\s*STMTTRN\s*>([\s\S]*?)<\s*\/\s*STMTTRN\s*>/gi)].map((m) => m[1] ?? '');
+  // OFX 1.x SGML omits closing tags for simple elements, so a transaction ends
+  // at the next STMTTRN or at the end of BANKTRANLIST/OFX. XML files close it
+  // with </STMTTRN>. Accept both boundaries.
+  const blocks = [...text.matchAll(
+    /<\s*STMTTRN\s*>([\s\S]*?)(?=<\s*\/\s*STMTTRN\s*>|<\s*STMTTRN\s*>|<\s*\/\s*BANKTRANLIST\s*>|<\s*\/\s*OFX\s*>|$)/gi,
+  )].map((m) => m[1] ?? '');
   if (blocks.length === 0) throw new ImportParseError('no_transactions', 'The statement contains no transactions.');
 
   const currency = (ofxTag(text, 'CURDEF') ?? 'USD').toUpperCase();

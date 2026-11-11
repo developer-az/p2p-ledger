@@ -7,7 +7,9 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { FieldCipher } from './envelope.js';
-import { assignDedupeKeys, splitNewRows } from './import-dedupe.js';
+import { enrichSpendDraft } from './enrichment/service.js';
+import type { EnrichmentStore } from './enrichment/store.js';
+import { assignDedupeKeys, dedupeKeyFor, splitNewRows } from './import-dedupe.js';
 import { importFileHash, ImportParseError, parseImportFile, type ImportColumnMapping, type ImportRejection, type ParsedImportRow } from './importers.js';
 import { reconcileStatement, runQualityGates } from './import-quality.js';
 import { IMPORT_STAGE_IDS, PIPELINE_VERSION, validateTransactionRow, type ImportStageId } from './imports-schema.js';
@@ -29,6 +31,8 @@ export interface RunImportInput {
   expectedRowCount?: number;
   expectedOutflowMinor?: number;
   openingBalanceMinor?: number | null;
+  /** M4 aliases/rules applied to every imported row when available. */
+  enrichment?: EnrichmentStore;
 }
 
 export interface RunImportResult {
@@ -88,8 +92,13 @@ function rejectionFromError(error: unknown): ImportRejection {
 }
 
 async function transactionsFor(store: ImportStore, accountId: string, importId: string): Promise<StoredImportTransaction[]> {
-  const rows = await store.listTransactions(accountId, { limit: 10_000 });
-  return rows.filter((row) => row.importId === importId);
+  const pageSize = 1_000;
+  const all: StoredImportTransaction[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await store.listTransactions(accountId, { importId, limit: pageSize, offset });
+    all.push(...page);
+    if (page.length < pageSize) return all;
+  }
 }
 
 /**
@@ -104,13 +113,17 @@ export async function runImport(
 ): Promise<RunImportResult> {
   const fileHash = importFileHash(input.content);
   const existing = await store.findImportByHash(input.accountId, fileHash);
-  if (existing) {
+  if (existing?.status === 'posted') {
     return {
       import: existing,
       transactions: await transactionsFor(store, input.accountId, existing.id),
       created: false,
     };
   }
+  // A rejected or failed report reflects the options used last time. The same
+  // bytes may be valid after the user corrects a mapping/sign setting, so the
+  // old report is replaced instead of blocking the retry.
+  if (existing) await store.deleteImport(input.accountId, existing.id);
 
   const at = now();
   const stages = initialStages();
@@ -160,7 +173,26 @@ export async function runImport(
     detail: `Read ${parsed.statement.rowCount} rows from ${input.filename}.`,
   }, at);
 
-  const keyed = assignDedupeKeys(input.accountId, parsed.rows);
+  let rows = parsed.rows;
+  if (input.enrichment && rows.length > 0) {
+    const enrichment = input.enrichment;
+    rows = await Promise.all(rows.map(async (row) => {
+      const enriched = await enrichSpendDraft(enrichment, input.accountId, {
+        amountMinor: row.amountMinor,
+        descriptor: row.descriptorRaw,
+        occurredAt: `${row.postedDate}T12:00:00.000Z`,
+        source: 'import',
+      }, at);
+      return {
+        ...row,
+        descriptorClean: enriched.descriptorClean || row.descriptorClean,
+        categoryId: enriched.category,
+        merchantId: enriched.merchantId,
+      };
+    }));
+  }
+
+  const keyed = assignDedupeKeys(input.accountId, rows);
   const validationErrors: ImportRejection[] = [];
   const validated: Array<(typeof keyed)[number] & { idempotencyKey: string }> = [];
   for (const entry of keyed) {
@@ -281,10 +313,21 @@ export async function runImport(
     detail: `Staged ${validated.length} raw rows.`,
   }, at);
 
-  const existingKeys = await store.existingDedupeKeys(
-    input.accountId,
-    validated.map((entry) => entry.dedupeKey),
-  );
+  // Probe one occurrence past each group so splitNewRows can tell "the account
+  // already has more copies than this file" from a plain duplicate.
+  const probes = new Map<string, { next: number; row: ParsedImportRow }>();
+  for (const entry of validated) {
+    if (entry.external) continue;
+    const probe = probes.get(entry.groupKey);
+    const next = entry.occurrenceIndex + 1;
+    if (!probe) probes.set(entry.groupKey, { next, row: entry.row });
+    else probe.next = Math.max(probe.next, next);
+  }
+  const lookupKeys = [
+    ...validated.map((entry) => entry.dedupeKey),
+    ...[...probes.values()].map((probe) => dedupeKeyFor(input.accountId, probe.row, probe.next)),
+  ];
+  const existingKeys = await store.existingDedupeKeys(input.accountId, lookupKeys);
   const deduped = splitNewRows(validated, existingKeys);
   stages.dedupe = stamp({
     status: 'passed',
@@ -305,7 +348,7 @@ export async function runImport(
       currency: entry.row.currency,
       descriptorRaw: entry.row.descriptorRaw,
       descriptorClean: entry.row.descriptorClean,
-      merchantId: null,
+      merchantId: entry.row.merchantId ?? null,
       categoryId: entry.row.categoryId,
       source: entry.row.source,
       externalId: entry.row.externalId,

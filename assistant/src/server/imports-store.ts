@@ -129,10 +129,14 @@ export interface ImportStore {
   listImports(accountId: string, opts?: { limit?: number }): Promise<ImportRecord[]>;
   stageRawRow(input: Omit<RawRowRecord, 'id' | 'createdAt'> & { id?: string }): Promise<RawRowRecord>;
   insertTransaction(input: ImportTransactionInput): Promise<{ inserted: boolean; row: StoredImportTransaction }>;
-  listTransactions(accountId: string, opts?: { limit?: number; from?: string; to?: string }): Promise<StoredImportTransaction[]>;
+  listTransactions(
+    accountId: string,
+    opts?: { limit?: number; offset?: number; from?: string; to?: string; importId?: string },
+  ): Promise<StoredImportTransaction[]>;
   existingDedupeKeys(accountId: string, keys: readonly string[]): Promise<Set<string>>;
   listPresets(accountId: string): Promise<ImportPreset[]>;
   savePreset(accountId: string, preset: Omit<ImportPreset, 'id' | 'createdAt' | 'builtIn'> & { id?: string }): Promise<ImportPreset>;
+  deleteImport(accountId: string, importId: string): Promise<void>;
   deleteAll(accountId: string): Promise<void>;
 }
 
@@ -180,6 +184,28 @@ const EMPTY_RECONCILIATION: Reconciliation = {
 
 function clone<T>(value: T): T {
   return structuredClone(value);
+}
+
+const SEALED_PAYLOAD_KEY = '$encrypted';
+
+/** Raw statement text is sensitive, so the whole staged payload is sealed. */
+async function sealRawPayload(
+  cipher: FieldCipher | undefined,
+  accountId: string,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (!cipher) return clone(payload);
+  return { [SEALED_PAYLOAD_KEY]: await cipher.encryptField(accountId, JSON.stringify(payload)) };
+}
+
+async function openRawPayload(
+  cipher: FieldCipher | undefined,
+  accountId: string,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const sealed = payload[SEALED_PAYLOAD_KEY];
+  if (!cipher || typeof sealed !== 'string') return clone(payload);
+  return asObject(await cipher.decryptField(accountId, sealed), {});
 }
 
 export class InMemoryImportStore implements ImportStore {
@@ -255,14 +281,15 @@ export class InMemoryImportStore implements ImportStore {
     const existing = this.rawRows.find(
       (row) => row.accountId === input.accountId && row.importId === input.importId && row.lineNumber === input.lineNumber,
     );
-    if (existing) return clone(existing);
+    if (existing) return { ...clone(existing), payload: await openRawPayload(this.cipher, input.accountId, existing.payload) };
     const row: RawRowRecord = {
       ...input,
+      payload: await sealRawPayload(this.cipher, input.accountId, input.payload),
       id: input.id ?? randomUUID(),
       createdAt: new Date().toISOString(),
     };
     this.rawRows.push(row);
-    return clone(row);
+    return { ...clone(row), payload: clone(input.payload) };
   }
 
   async insertTransaction(input: ImportTransactionInput): Promise<{ inserted: boolean; row: StoredImportTransaction }> {
@@ -283,14 +310,18 @@ export class InMemoryImportStore implements ImportStore {
 
   async listTransactions(
     accountId: string,
-    opts: { limit?: number; from?: string; to?: string } = {},
+    opts: { limit?: number; offset?: number; from?: string; to?: string; importId?: string } = {},
   ): Promise<StoredImportTransaction[]> {
+    const offset = Math.max(0, opts.offset ?? 0);
     const rows = this.transactions
       .filter((row) => row.accountId === accountId
+        && (!opts.importId || row.importId === opts.importId)
         && (!opts.from || row.postedDate >= opts.from)
         && (!opts.to || row.postedDate <= opts.to))
-      .sort((a, b) => b.postedDate.localeCompare(a.postedDate) || b.createdAt.localeCompare(a.createdAt))
-      .slice(0, opts.limit ?? 500);
+      .sort((a, b) => b.postedDate.localeCompare(a.postedDate)
+        || b.createdAt.localeCompare(a.createdAt)
+        || b.id.localeCompare(a.id))
+      .slice(offset, offset + (opts.limit ?? 500));
     return Promise.all(rows.map(async (row) => ({
       ...clone(row),
       descriptorRaw: this.cipher ? await this.cipher.decryptField(accountId, row.descriptorRaw) : row.descriptorRaw,
@@ -329,6 +360,12 @@ export class InMemoryImportStore implements ImportStore {
     else this.presets.push(saved);
     const { accountId: _id, ...publicPreset } = saved;
     return clone(publicPreset);
+  }
+
+  async deleteImport(accountId: string, importId: string): Promise<void> {
+    this.imports = this.imports.filter((row) => !(row.accountId === accountId && row.id === importId));
+    this.rawRows = this.rawRows.filter((row) => !(row.accountId === accountId && row.importId === importId));
+    this.transactions = this.transactions.filter((row) => !(row.accountId === accountId && row.importId === importId));
   }
 
   async deleteAll(accountId: string): Promise<void> {
@@ -527,6 +564,7 @@ export class PostgresImportStore implements ImportStore {
   }
 
   async stageRawRow(input: Omit<RawRowRecord, 'id' | 'createdAt'> & { id?: string }): Promise<RawRowRecord> {
+    const sealed = await sealRawPayload(this.cipher, input.accountId, input.payload);
     const client = await this.client();
     try {
       await this.ensureSchema(client);
@@ -542,7 +580,7 @@ export class PostgresImportStore implements ImportStore {
             input.accountId,
             input.importId,
             input.lineNumber,
-            JSON.stringify(input.payload),
+            JSON.stringify(sealed),
             input.rejectReason,
           ],
         );
@@ -552,7 +590,7 @@ export class PostgresImportStore implements ImportStore {
           accountId: String(row.account_id),
           importId: String(row.import_id),
           lineNumber: Number(row.line_number),
-          payload: asObject(row.payload, {}),
+          payload: await openRawPayload(this.cipher, input.accountId, asObject(row.payload, {})),
           rejectReason: row.reject_reason == null ? null : String(row.reject_reason),
           createdAt: new Date(String(row.created_at)).toISOString(),
         };
@@ -614,7 +652,7 @@ export class PostgresImportStore implements ImportStore {
 
   async listTransactions(
     accountId: string,
-    opts: { limit?: number; from?: string; to?: string } = {},
+    opts: { limit?: number; offset?: number; from?: string; to?: string; importId?: string } = {},
   ): Promise<StoredImportTransaction[]> {
     const client = await this.client();
     try {
@@ -625,9 +663,17 @@ export class PostgresImportStore implements ImportStore {
            where account_id = $1
              and ($2::date is null or posted_date >= $2::date)
              and ($3::date is null or posted_date <= $3::date)
-           order by posted_date desc, created_at desc
-           limit $4`,
-          [accountId, opts.from ?? null, opts.to ?? null, opts.limit ?? 500],
+             and ($4::uuid is null or import_id = $4::uuid)
+           order by posted_date desc, created_at desc, id desc
+           limit $5 offset $6`,
+          [
+            accountId,
+            opts.from ?? null,
+            opts.to ?? null,
+            opts.importId ?? null,
+            opts.limit ?? 500,
+            Math.max(0, opts.offset ?? 0),
+          ],
         );
         return res.rows.map((row) => rowToTransaction(row as Record<string, unknown>));
       });
@@ -705,6 +751,20 @@ export class PostgresImportStore implements ImportStore {
           builtIn: false,
           createdAt: new Date(String(r.created_at)).toISOString(),
         };
+      });
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteImport(accountId: string, importId: string): Promise<void> {
+    const client = await this.client();
+    try {
+      await this.ensureSchema(client);
+      await withUser(client, accountId, async () => {
+        await client.query('delete from transactions where account_id = $1 and import_id = $2', [accountId, importId]);
+        await client.query('delete from raw_rows where account_id = $1 and import_id = $2', [accountId, importId]);
+        await client.query('delete from imports where account_id = $1 and id = $2', [accountId, importId]);
       });
     } finally {
       client.release();

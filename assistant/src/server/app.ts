@@ -41,6 +41,23 @@ import {
   type PersonalFinanceStore,
 } from './personal-finance.js';
 import { formatMoney } from './money.js';
+import {
+  applyCascade,
+  type UserRule,
+} from './enrichment/categorize.js';
+import {
+  applyRuleRetroactively,
+  enrichedSpendRow,
+  enrichSpendDraft,
+  normalizeSpend,
+  previewRuleForAccount,
+  recordMerchantCorrection,
+} from './enrichment/service.js';
+import {
+  createEnrichmentStore,
+  InMemoryEnrichmentStore,
+  type EnrichmentStore,
+} from './enrichment/store.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
 import type { DataKeyStore } from './envelope.js';
 import { ImportParseError, type ImportColumnMapping } from './importers.js';
@@ -194,9 +211,24 @@ const PRACTICE_REQUEST_IDS = new Set([PRACTICE_REQUEST_GROCERIES, PRACTICE_REQUE
 
 const recordSpendBody = z.object({
   amountMinor: z.number().int().positive().max(MAX_MINOR_UI),
-  category: z.enum(SPEND_CATEGORIES),
+  // Optional: a bare descriptor lets the cascade pick the category.
+  category: z.enum(SPEND_CATEGORIES).optional(),
   note: z.string().max(140).optional(),
+  /** Raw statement text when the person has no note of their own. */
+  descriptor: z.string().max(200).optional(),
   occurredAt: z.string().datetime().optional(),
+});
+
+const ruleDraftBody = z.object({
+  merchantContains: z.string().trim().min(1).max(80),
+  maxAmountMinor: z.number().int().positive().max(MAX_MINOR_UI).nullable().optional(),
+  category: z.enum(SPEND_CATEGORIES),
+});
+
+const merchantCorrectionBody = z.object({
+  transactionId: z.string().min(1).max(100),
+  merchantName: z.string().trim().min(1).max(80),
+  category: z.enum(SPEND_CATEGORIES).optional(),
 });
 
 const financePatchBody = z.object({
@@ -248,6 +280,35 @@ const importPreviewBody = z.object({
   content: z.string().min(1).max(5_000_000),
 });
 
+/** Reject oversized bodies before Hono reads or parses them. */
+function importBodyTooLarge(c: Context): boolean {
+  const raw = c.req.header('content-length');
+  if (!raw) return false;
+  const bytes = Number(raw);
+  return Number.isFinite(bytes) && bytes > IMPORT_MAX_CHARS;
+}
+
+/** Import detail lists every row for one import, paging by import id in the store. */
+async function importTransactions(
+  store: ImportStore,
+  accountId: string,
+  importId: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<Awaited<ReturnType<ImportStore['listTransactions']>>> {
+  const all: Awaited<ReturnType<ImportStore['listTransactions']>> = [];
+  const offset = Math.max(0, opts.offset ?? 0);
+  const max = opts.limit;
+  if (max !== undefined && max <= 0) return all;
+  const pageSize = 1_000;
+  for (let cursor = offset; ; cursor += pageSize) {
+    const take = max === undefined ? pageSize : Math.min(pageSize, max - all.length);
+    if (take <= 0) return all;
+    const page = await store.listTransactions(accountId, { importId, limit: take, offset: cursor });
+    all.push(...page);
+    if (page.length < take) return all;
+  }
+}
+
 /** How long /wake waits on the ledger before answering "still asleep". */
 const WAKE_PROBE_TIMEOUT_MS = 9_000;
 
@@ -298,6 +359,8 @@ export function createApp(deps: {
   personalFinance?: PersonalFinanceStore;
   /** M3 imports. Tests inject memory; production builds Postgres when a DB URL is set. */
   imports?: ImportStore;
+  /** Merchant aliases, rules and category corrections. Defaults to memory. */
+  enrichment?: EnrichmentStore;
   /** Dismissed alert ids. Defaults to memory; production passes Postgres. */
   alertDismissals?: AlertDismissalStore;
   subscriptionMarks?: SubscriptionTrackerStore;
@@ -333,6 +396,7 @@ export function createApp(deps: {
   const mfaKey = resolveMfaKey(deps.mfaKey);
   const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
   const imports = deps.imports ?? new InMemoryImportStore();
+  const enrichment = deps.enrichment ?? new InMemoryEnrichmentStore(now);
   const alertDismissals = deps.alertDismissals ?? new InMemoryAlertDismissalStore();
   const subscriptionMarks = deps.subscriptionMarks ?? new InMemorySubscriptionTrackerStore();
   const paymentRequests = deps.paymentRequests ?? new InMemoryPaymentRequestStore();
@@ -1059,6 +1123,7 @@ export function createApp(deps: {
     await deps.dataKeys?.shred(user.accountId);
     await deps.dataKeys?.shred(user.id);
     await personalFinance.deleteAll(user.accountId);
+    await imports.deleteAll(user.accountId);
     await alertDismissals.deleteAll(user.accountId);
     await deps.spendLogs.deleteAll?.(user.accountId);
     await subscriptionMarks.deleteAll(user.accountId);
@@ -1937,12 +2002,13 @@ export function createApp(deps: {
    * validate, stage, dedupe and post all happen before the response.
    */
   app.post('/accounts/:id/imports/preview', async (c) => {
+    if (importBodyTooLarge(c)) return c.json({ error: 'file_too_large' }, 413);
     const parsed = importPreviewBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'file_too_large' }, 400);
     const filename = parsed.data.filename.toLowerCase();
     if (!/\.(csv|ofx|qfx)$/.test(filename)) return c.json({ error: 'unsupported_type' }, 400);
     if (Buffer.byteLength(parsed.data.content, 'utf8') > IMPORT_MAX_CHARS) {
-      return c.json({ error: 'file_too_large' }, 400);
+      return c.json({ error: 'file_too_large' }, 413);
     }
     if (!filename.endsWith('.csv')) {
       return c.json({ source: filename.endsWith('.qfx') ? 'qfx' : 'ofx', columns: [], suggestedMapping: null, sampleRows: [] });
@@ -1982,24 +2048,29 @@ export function createApp(deps: {
     const accountId = c.req.param('id');
     const record = await imports.getImport(accountId, c.req.param('importId'));
     if (!record) return c.json({ error: 'not_found' }, 404);
-    const transactions = (await imports.listTransactions(accountId, { limit: 10_000 }))
-      .filter((row) => row.importId === record.id)
+    const limit = c.req.query('limit') === undefined
+      ? undefined
+      : Math.min(1_000, Math.max(1, Number(c.req.query('limit')) || 1));
+    const offset = Math.max(0, Number(c.req.query('offset')) || 0);
+    const transactions = (await importTransactions(imports, accountId, record.id, { limit, offset }))
       .map((row) => importTransactionView(row, record.filename));
     return c.json({
       import: record,
       transactions,
+      pagination: { limit: limit ?? null, offset },
       reconciled: record.reconciliation.reconciled,
     });
   });
 
   app.post('/accounts/:id/imports', async (c) => {
     if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (importBodyTooLarge(c)) return c.json({ error: 'file_too_large' }, 413);
     const parsed = importUploadBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'invalid_import' }, 400);
     const filename = parsed.data.filename.toLowerCase();
     if (!/\.(csv|ofx|qfx)$/.test(filename)) return c.json({ error: 'unsupported_type' }, 400);
     if (Buffer.byteLength(parsed.data.content, 'utf8') > IMPORT_MAX_CHARS) {
-      return c.json({ error: 'file_too_large' }, 400);
+      return c.json({ error: 'file_too_large' }, 413);
     }
     const result = await runImport(imports, {
       accountId: c.req.param('id'),
@@ -2011,6 +2082,7 @@ export function createApp(deps: {
       expectedRowCount: parsed.data.expectedRowCount,
       expectedOutflowMinor: parsed.data.expectedOutflowMinor,
       openingBalanceMinor: parsed.data.openingBalanceMinor,
+      enrichment,
     }, now);
     return c.json({
       import: result.import,
@@ -2058,15 +2130,54 @@ export function createApp(deps: {
     if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
     const parsed = recordSpendBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+    const descriptor = parsed.data.descriptor ?? parsed.data.note ?? '';
+    const enriched = await enrichSpendDraft(enrichment, accountId, {
+      amountMinor: parsed.data.amountMinor,
+      descriptor,
+      note: parsed.data.note ?? null,
+      occurredAt: parsed.data.occurredAt ?? now().toISOString(),
+      source: 'manual',
+      category: parsed.data.category ?? null,
+    }, now(), parsed.data.category);
     const event = await deps.spendLogs.record(accountId, {
       ...parsed.data,
+      note: parsed.data.note ?? parsed.data.descriptor,
+      category: enriched.category,
+      descriptorClean: enriched.descriptorClean,
+      merchantId: enriched.merchantId,
+      merchantName: enriched.merchantName,
+      merchantMethod: enriched.merchantMethod,
+      merchantConfidence: enriched.merchantConfidence,
+      categorySource: enriched.categorySource,
+      ruleId: enriched.ruleId,
+      ruleVersion: enriched.ruleVersion,
       currency: account.currency,
       source: 'manual',
     }, now(), c.req.header('Idempotency-Key'));
+    if (event && parsed.data.category) {
+      await enrichment.setOverride(accountId, event.id, {
+        category: parsed.data.category,
+        source: 'manual',
+        ruleId: null,
+        ruleVersion: null,
+        merchantId: enriched.merchantId,
+      }, now());
+    }
+    // Live Java spends keep only note on the wire. Store the raw descriptor
+    // alongside the enrichment rows so a note cannot hide the merchant.
+    if (descriptor.trim()) await enrichment.setDescriptor(accountId, event.id, descriptor, now());
     return c.json({
       id: event.id,
       amountMinor: event.amountMinor,
       category: event.category,
+      categorySource: enriched.categorySource,
+      descriptorClean: enriched.descriptorClean,
+      merchantId: enriched.merchantId,
+      merchantName: enriched.merchantName,
+      merchantMethod: enriched.merchantMethod,
+      merchantConfidence: enriched.merchantConfidence,
+      ruleId: enriched.ruleId,
+      ruleVersion: enriched.ruleVersion,
       note: event.note,
       occurredAt: event.occurredAt,
     }, 201);
@@ -2083,7 +2194,140 @@ export function createApp(deps: {
     if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
     const removed = await deps.spendLogs.remove(accountId, spendId);
     if (!removed) return c.json({ error: 'That log was already removed' }, 404);
+    await enrichment.clearOverride(accountId, spendId);
+    await enrichment.clearDescriptor(accountId, spendId);
     return c.json({ removed: true });
+  });
+
+  app.get('/accounts/:id/rules', async (c) => {
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const denied = await walletAccessError(c, accountId);
+    if (denied) return denied;
+    const [entries, context, versions] = await Promise.all([
+      deps.spendLogs.list(accountId, { limit: 500 }),
+      (async () => {
+        const [merchants, rules, overrides, descriptors] = await Promise.all([
+          enrichment.listMerchants(accountId),
+          enrichment.listRules(accountId),
+          enrichment.getOverrides(accountId),
+          enrichment.getDescriptors(accountId),
+        ]);
+        return { merchants, rules, overrides, descriptors };
+      })(),
+      enrichment.listRuleVersions(accountId),
+    ]);
+    const transactions = entries.map((entry) => enrichedSpendRow(entry, applyCascade(normalizeSpend(entry, context.descriptors.get(entry.id)), {
+      merchants: context.merchants,
+      rules: context.rules,
+      override: context.overrides.get(entry.id) ?? null,
+    })));
+    return c.json({
+      merchants: context.merchants,
+      rules: context.rules,
+      versions,
+      transactions,
+      stats: {
+        transactions: transactions.length,
+        merchants: context.merchants.length,
+        rules: context.rules.length,
+        resolved: transactions.filter((row) => row.merchantId !== null).length,
+        unresolved: transactions.filter((row) => row.merchantId === null).length,
+        autoCategorized: transactions.filter((row) =>
+          row.categorySource === 'merchant_default' || row.categorySource === 'keyword' || row.categorySource === 'user_rule').length,
+        corrected: transactions.filter((row) => row.categorySource === 'user_correction' || row.categorySource === 'manual').length,
+      },
+    });
+  });
+
+  app.post('/accounts/:id/rules/preview', async (c) => {
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const denied = await walletAccessError(c, accountId);
+    if (denied) return denied;
+    const parsed = ruleDraftBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+    const entries = await deps.spendLogs.list(accountId, { limit: 1000 });
+    const preview = await previewRuleForAccount(enrichment, accountId, {
+      merchantContains: parsed.data.merchantContains,
+      maxAmountMinor: parsed.data.maxAmountMinor ?? null,
+      category: parsed.data.category,
+      status: 'active',
+    }, entries);
+    return c.json(preview);
+  });
+
+  app.post('/accounts/:id/rules', async (c) => {
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const denied = await walletAccessError(c, accountId);
+    if (denied) return denied;
+    const parsed = ruleDraftBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+    const rule = await enrichment.createRule(accountId, {
+      merchantContains: parsed.data.merchantContains,
+      maxAmountMinor: parsed.data.maxAmountMinor ?? null,
+      category: parsed.data.category,
+    }, now());
+    return c.json(rule, 201);
+  });
+
+  app.patch('/accounts/:id/rules/:ruleId', async (c) => {
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const denied = await walletAccessError(c, accountId);
+    if (denied) return denied;
+    const parsed = ruleDraftBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+    const rule = await enrichment.updateRule(accountId, c.req.param('ruleId'), {
+      merchantContains: parsed.data.merchantContains,
+      maxAmountMinor: parsed.data.maxAmountMinor ?? null,
+      category: parsed.data.category,
+    }, now());
+    if (!rule) return c.json({ error: 'Rule not found' }, 404);
+    return c.json(rule);
+  });
+
+  app.delete('/accounts/:id/rules/:ruleId', async (c) => {
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const denied = await walletAccessError(c, accountId);
+    if (denied) return denied;
+    const archived = await enrichment.archiveRule(accountId, c.req.param('ruleId'));
+    if (!archived) return c.json({ error: 'Rule not found' }, 404);
+    return c.json({ archived: true });
+  });
+
+  app.post('/accounts/:id/rules/:ruleId/apply', async (c) => {
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const denied = await walletAccessError(c, accountId);
+    if (denied) return denied;
+    const rule: UserRule | undefined = (await enrichment.listRules(accountId))
+      .find((row) => row.ruleId === c.req.param('ruleId'));
+    if (!rule) return c.json({ error: 'Rule not found' }, 404);
+    const entries = await deps.spendLogs.list(accountId, { limit: 1000 });
+    const result = await applyRuleRetroactively(enrichment, accountId, rule, entries, now());
+    return c.json({ applied: result.affected, skipped: result.skipped, overrides: result.overrides });
+  });
+
+  app.post('/accounts/:id/merchants/corrections', async (c) => {
+    const accountId = c.req.param('id');
+    if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
+    const denied = await walletAccessError(c, accountId);
+    if (denied) return denied;
+    const parsed = merchantCorrectionBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
+    const entries = await deps.spendLogs.list(accountId, { limit: 1000 });
+    try {
+      const result = await recordMerchantCorrection(enrichment, accountId, entries, parsed.data, now());
+      return c.json(result);
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Transaction not found') {
+        return c.json({ error: 'Transaction not found' }, 404);
+      }
+      throw error;
+    }
   });
 
   app.get('/accounts/:id/habits', async (c) => {

@@ -203,12 +203,18 @@ export function SettingsView({
             <section className="v-panel set-panel glass" aria-labelledby="set-categories">
               <h2 id="set-categories">Categories &amp; rules</h2>
               <p className="set-copy">
-                Category rules by merchant and amount, previewed before they apply.
-                {' '}<span className="planned">Planned · M4</span>
+                Rules set a category when the descriptor contains a merchant and, optionally, when the amount is under a cap.
               </p>
               <p className="set-copy">
-                <a className="set-link" href="https://github.com/developer-az/p2p-ledger/blob/main/PLAN.md" target="_blank" rel="noreferrer">Read the plan</a>
+                Preview the affected spends before saving, then apply the rule to past spends in one step. Earlier versions stay in history.
               </p>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => navigate({ kind: 'app', section: 'rules' })}
+              >
+                Open rules
+              </button>
             </section>
           ) : null}
 

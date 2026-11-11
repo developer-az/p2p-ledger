@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { googleConfig, installGoogleAuth } from './google-auth.js';
 import type { JavaWorkflows } from './java-workflows.js';
 import { Hono, type Context } from 'hono';
@@ -67,6 +67,17 @@ import {
   verifyPassword,
   type AuthStore,
 } from './auth.js';
+import {
+  base32Encode,
+  decryptSecret,
+  devMfaKey,
+  encryptSecret,
+  generateRecoveryCodes,
+  hashRecoveryCode,
+  otpauthUri,
+  verifyRecoveryCode,
+  verifyTotp,
+} from './totp.js';
 
 const openAccountBody = z.object({
   ownerId: z.string().min(1).max(64),
@@ -85,6 +96,15 @@ const registerBody = z.object({
 const loginBody = z.object({
   email: z.string().trim().email().max(254),
   password: z.string().min(1).max(72),
+});
+const mfaCodeBody = z.object({ code: z.string().trim().min(1).max(64) });
+const mfaVerifyBody = z.object({
+  challenge: z.string().trim().min(1).max(200),
+  code: z.string().trim().min(1).max(64),
+});
+const stepUpBody = z.object({
+  code: z.string().trim().min(1).max(64).optional(),
+  password: z.string().min(1).max(72).optional(),
 });
 
 const depositBody = z.object({ amountMinor: z.number().int().positive().max(MAX_MINOR_UI) });
@@ -156,6 +176,10 @@ const recordIncomeBody = z.object({
 /** How long /wake waits on the ledger before answering "still asleep". */
 const WAKE_PROBE_TIMEOUT_MS = 9_000;
 
+/** Sign-in second-factor challenge lifetime and the step-up window. */
+const MFA_CHALLENGE_TTL_MS = 5 * 60_000;
+const STEP_UP_MS = 10 * 60_000;
+
 /**
  * Rate limiters are built once per app instance (see rate-limit-store.ts). The
  * chat limiter guards the paid LLM quota; the rest guard writes. All of them
@@ -186,11 +210,20 @@ export function createApp(deps: {
   llmGuard?: LlmGuard;
   /** Shared hit counters. Production passes Postgres so limits span instances; tests default to memory. */
   rateLimitStore?: RateLimitStore;
+  /** 32-byte AES key that encrypts stored TOTP secrets. Defaults to MFA_ENCRYPTION_KEY. */
+  mfaKey?: Buffer;
   now?: () => Date;
   /** HIBP password check. Tests inject a fake; VITEST defaults to no network. */
   breachedPassword?: (password: string) => Promise<boolean>;
 }) {
   const now = deps.now ?? (() => new Date());
+  const mfaKey = resolveMfaKey(deps.mfaKey);
+  /**
+   * Pending second-factor challenges for password sign-in. This map is per
+   * process: a multi-instance deploy (Vercel, several Node workers) needs these
+   * rows in Postgres so a challenge survives a request landing elsewhere.
+   */
+  const mfaChallenges = new Map<string, { userId: string; expiresAt: number; attempts: number }>();
   const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
   const paymentRequests = deps.paymentRequests ?? new InMemoryPaymentRequestStore();
   /**
@@ -421,6 +454,21 @@ export function createApp(deps: {
     });
   });
 
+  const rotateSession = async (c: Context, userId: string) => {
+    // Drop the current token and every other session, then hand out a fresh one.
+    await auth.deleteSessionsForUser(userId);
+    await issueSession(c, userId);
+  };
+
+  const consumeRecoveryCode = async (userId: string, code: string, at: Date): Promise<boolean> => {
+    for (const stored of await auth.listRecoveryCodes(userId)) {
+      if (await verifyRecoveryCode(code, stored.codeHash)) {
+        return await auth.useRecoveryCode(userId, stored.id, at);
+      }
+    }
+    return false;
+  };
+
   app.post('/auth/register', async (c) => {
     if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
     const parsed = registerBody.safeParse(await c.req.json().catch(() => null));
@@ -494,6 +542,20 @@ export function createApp(deps: {
     }
     accountThrottle.succeed(accountKey);
     ipThrottle.succeed(ipKey);
+    const mfa = await auth.getMfaState(user.id);
+    if (mfa.secret) {
+      const at = now().getTime();
+      for (const [token, challenge] of mfaChallenges) {
+        if (challenge.expiresAt <= at) mfaChallenges.delete(token);
+      }
+      const challenge = randomBytes(32).toString('base64url');
+      mfaChallenges.set(challenge, {
+        userId: user.id,
+        expiresAt: at + MFA_CHALLENGE_TTL_MS,
+        attempts: 0,
+      });
+      return c.json({ mfaRequired: true, challenge });
+    }
     await issueSession(c, user.id);
     return c.json({
       user: { email: user.email, displayName: user.displayName },
@@ -558,6 +620,136 @@ export function createApp(deps: {
     if (token) await auth.deleteSession(hashSessionToken(token));
     deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true, httpOnly: true, sameSite: 'Lax' });
     return c.json({ ok: true });
+  });
+
+  // TOTP MFA: a pending secret is encrypted until the first valid code confirms
+  // it. Enabling/disabling rotates the session and signs out every other device.
+  app.get('/auth/mfa', async (c) => {
+    const user = await sessionUser(c);
+    if (!user) return c.json({ error: 'Sign in first.' }, 401);
+    const state = await auth.getMfaState(user.id);
+    return c.json({
+      enabled: state.secret !== null,
+      recoveryCodesLeft: state.recoveryCodesLeft,
+    });
+  });
+
+  app.post('/auth/mfa/setup', async (c) => {
+    const user = await sessionUser(c);
+    if (!user) return c.json({ error: 'Sign in first.' }, 401);
+    if (!mfaKey) return c.json({ error: 'mfa_unavailable' }, 503);
+    const secret = randomBytes(20);
+    await auth.saveMfaPendingSecret(user.id, encryptSecret(secret, mfaKey));
+    return c.json({ secret: base32Encode(secret), otpauthUri: otpauthUri(secret, user.email) });
+  });
+
+  app.post('/auth/mfa/enable', async (c) => {
+    const user = await sessionUser(c);
+    if (!user) return c.json({ error: 'Sign in first.' }, 401);
+    if (!mfaKey) return c.json({ error: 'mfa_unavailable' }, 503);
+    const parsed = mfaCodeBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'invalid_code' }, 400);
+    const state = await auth.getMfaState(user.id);
+    if (!state.pendingSecret) return c.json({ error: 'invalid_code' }, 400);
+    const secret = decryptSecret(state.pendingSecret, mfaKey);
+    const verdict = verifyTotp(secret, parsed.data.code, now().getTime());
+    if (!verdict.ok) return c.json({ error: 'invalid_code' }, 400);
+    const recoveryCodes = generateRecoveryCodes();
+    const hashes = await Promise.all(recoveryCodes.map(hashRecoveryCode));
+    await auth.enableMfa(user.id, state.pendingSecret, hashes, verdict.step ?? null);
+    await rotateSession(c, user.id);
+    return c.json({ recoveryCodes });
+  });
+
+  /** Password sign-in stopped after the first factor; this finishes it. */
+  app.post('/auth/mfa/verify', async (c) => {
+    const parsed = mfaVerifyBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'invalid_code' }, 400);
+    const pending = mfaChallenges.get(parsed.data.challenge);
+    if (!pending) return c.json({ error: 'invalid_code' }, 400);
+    const at = now();
+    if (pending.expiresAt <= at.getTime()) {
+      mfaChallenges.delete(parsed.data.challenge);
+      return c.json({ error: 'challenge_expired' }, 400);
+    }
+    const user = await auth.findById(pending.userId);
+    const state = user ? await auth.getMfaState(user.id) : null;
+    if (!user || !state?.secret || !mfaKey) {
+      mfaChallenges.delete(parsed.data.challenge);
+      return c.json({ error: 'invalid_code' }, 400);
+    }
+    const secret = decryptSecret(state.secret, mfaKey);
+    const verdict = verifyTotp(secret, parsed.data.code, at.getTime(),
+      { lastUsedStep: state.lastUsedStep });
+    let accepted = verdict.ok;
+    if (accepted) {
+      if (verdict.step != null) await auth.recordMfaStep(user.id, verdict.step);
+    } else {
+      accepted = await consumeRecoveryCode(user.id, parsed.data.code, at);
+    }
+    if (accepted) {
+      mfaChallenges.delete(parsed.data.challenge);
+      await issueSession(c, user.id);
+      return c.json({ ok: true });
+    }
+    pending.attempts += 1;
+    if (pending.attempts >= 5) mfaChallenges.delete(parsed.data.challenge);
+    return c.json({ error: 'invalid_code' }, 400);
+  });
+
+  app.post('/auth/mfa/disable', async (c) => {
+    const user = await sessionUser(c);
+    if (!user) return c.json({ error: 'Sign in first.' }, 401);
+    if (!mfaKey) return c.json({ error: 'mfa_unavailable' }, 503);
+    const parsed = mfaCodeBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'invalid_code' }, 400);
+    const state = await auth.getMfaState(user.id);
+    if (!state.secret) return c.json({ error: 'invalid_code' }, 400);
+    const at = now();
+    const verdict = verifyTotp(decryptSecret(state.secret, mfaKey), parsed.data.code, at.getTime(),
+      { lastUsedStep: state.lastUsedStep });
+    let accepted = verdict.ok;
+    if (accepted) {
+      if (verdict.step != null) await auth.recordMfaStep(user.id, verdict.step);
+    } else {
+      accepted = await consumeRecoveryCode(user.id, parsed.data.code, at);
+    }
+    if (!accepted) return c.json({ error: 'invalid_code' }, 400);
+    await auth.disableMfa(user.id);
+    await rotateSession(c, user.id);
+    return c.json({ ok: true });
+  });
+
+  /** Opens a ten-minute window for sensitive actions; later steps use requireStepUp. */
+  app.post('/auth/step-up', async (c) => {
+    const user = await sessionUser(c);
+    if (!user) return c.json({ error: 'Sign in first.' }, 401);
+    const parsed = stepUpBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'invalid_credentials' }, 400);
+    const at = now();
+    const state = await auth.getMfaState(user.id);
+    let accepted = false;
+    if (state.secret) {
+      if (!mfaKey) return c.json({ error: 'mfa_unavailable' }, 503);
+      if (parsed.data.code) {
+        const verdict = verifyTotp(decryptSecret(state.secret, mfaKey), parsed.data.code, at.getTime(),
+          { lastUsedStep: state.lastUsedStep });
+        accepted = verdict.ok;
+        if (accepted) {
+          if (verdict.step != null) await auth.recordMfaStep(user.id, verdict.step);
+        } else {
+          accepted = await consumeRecoveryCode(user.id, parsed.data.code, at);
+        }
+      }
+    } else if (parsed.data.password) {
+      accepted = await verifyPassword(parsed.data.password, user.passwordHash);
+    }
+    if (!accepted) return c.json({ error: 'invalid_credentials' }, 400);
+    const token = getCookie(c, SESSION_COOKIE);
+    if (!token) return c.json({ error: 'Sign in first.' }, 401);
+    const until = new Date(at.getTime() + STEP_UP_MS);
+    await auth.setSessionStepUp(hashSessionToken(token), until);
+    return c.json({ ok: true, until: until.toISOString() });
   });
 
   // Password reset. The request step answers the same way whether or not the email has an account,
@@ -1339,6 +1531,28 @@ export function createApp(deps: {
   });
 
   return app;
+}
+
+let warnedDevMfaKey = false;
+
+/** Resolves the AES key for TOTP secrets; null means MFA setup is unavailable. */
+function resolveMfaKey(injected?: Buffer): Buffer | null {
+  if (injected) {
+    if (injected.length !== 32) throw new Error('mfaKey must be 32 bytes');
+    return injected;
+  }
+  const configured = (process.env.MFA_ENCRYPTION_KEY ?? '').trim();
+  if (configured) {
+    const key = Buffer.from(configured, 'base64');
+    if (key.length !== 32) throw new Error('MFA_ENCRYPTION_KEY must decode to 32 bytes');
+    return key;
+  }
+  if (process.env.NODE_ENV === 'production') return null;
+  if (!warnedDevMfaKey) {
+    warnedDevMfaKey = true;
+    console.warn('[mfa] MFA_ENCRYPTION_KEY is not set; using a development-only key.');
+  }
+  return devMfaKey();
 }
 
 function tzOffsetFrom(c: { req: { query(name: string): string | undefined } }): number {

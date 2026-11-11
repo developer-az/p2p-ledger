@@ -43,6 +43,21 @@ export interface SessionMeta {
   ipPrefix?: string | null;
 }
 
+/** Encrypted MFA material. Secrets are AES-GCM blobs, never plaintext. */
+export interface MfaState {
+  /** Encrypted secret once MFA is enabled. */
+  secret: string | null;
+  /** Encrypted secret awaiting confirmation with the first valid code. */
+  pendingSecret: string | null;
+  lastUsedStep: number | null;
+  recoveryCodesLeft: number;
+}
+
+export interface StoredRecoveryCode {
+  id: string;
+  codeHash: string;
+}
+
 export interface AuthStore {
   unlinkGoogle(userId: string): Promise<void>;
   findByGoogleSubject(subject: string): Promise<AuthRecord | null>;
@@ -51,6 +66,7 @@ export interface AuthStore {
   readonly persistent: boolean;
   allowAuthAttempt(bucket: string, now: Date, limit?: number): Promise<boolean>;
   findByEmail(email: string): Promise<AuthRecord | null>;
+  findById(userId: string): Promise<AuthRecord | null>;
   findByAccountId(accountId: string): Promise<AuthRecord | null>;
   insert(user: AuthRecord): Promise<void>;
   provision(input: { email: string; password: string; displayName: string },
@@ -69,6 +85,19 @@ export interface AuthStore {
   consumeResetToken(tokenHash: string, now: Date): Promise<string | null>;
   updatePassword(userId: string, passwordHash: string): Promise<void>;
   completeReset(tokenHash: string, now: Date, passwordHash: string): Promise<string | null>;
+  getMfaState(userId: string): Promise<MfaState>;
+  saveMfaPendingSecret(userId: string, encryptedSecret: string): Promise<void>;
+  /** Promotes the pending secret, replaces recovery codes, and records the used step. */
+  enableMfa(userId: string, encryptedSecret: string, recoveryCodeHashes: string[],
+    lastUsedStep: number | null): Promise<void>;
+  disableMfa(userId: string): Promise<void>;
+  /** Remembers the newest accepted TOTP step so it cannot be replayed. */
+  recordMfaStep(userId: string, step: number): Promise<void>;
+  listRecoveryCodes(userId: string): Promise<StoredRecoveryCode[]>;
+  /** Single use: returns false when the code was already spent. */
+  useRecoveryCode(userId: string, id: string, now: Date): Promise<boolean>;
+  getSessionStepUp(tokenHash: string): Promise<Date | null>;
+  setSessionStepUp(tokenHash: string, until: Date): Promise<void>;
 }
 
 export const RESET_TOKEN_TTL_SEC = 30 * 60;
@@ -189,7 +218,13 @@ export class InMemoryAuthStore implements AuthStore {
   private readonly byId = new Map<string, AuthRecord>();
   private readonly sessions = new Map<string, {
     userId: string; createdAt: number; lastSeenAt: number; expiresAt: number;
-    publicId: string; device: string; ipPrefix: string | null;
+    publicId: string; device: string; ipPrefix: string | null; stepUpUntil: number | null;
+  }>();
+  private readonly mfa = new Map<string, {
+    secret: string | null; pendingSecret: string | null; lastUsedStep: number | null;
+  }>();
+  private readonly recoveryCodes = new Map<string, {
+    userId: string; codeHash: string; usedAt: number | null;
   }>();
 
   private readonly attempts = new Map<string, { window: number; count: number }>();
@@ -227,6 +262,10 @@ export class InMemoryAuthStore implements AuthStore {
     return this.byEmail.get(email) ?? null;
   }
 
+  async findById(userId: string): Promise<AuthRecord | null> {
+    return this.byId.get(userId) ?? null;
+  }
+
   async findByAccountId(accountId: string): Promise<AuthRecord | null> {
     for (const user of this.byId.values()) {
       if (user.accountId === accountId) return user;
@@ -250,6 +289,7 @@ export class InMemoryAuthStore implements AuthStore {
       publicId: randomUUID(),
       device: normalizeDevice(meta?.device),
       ipPrefix: meta?.ipPrefix ?? null,
+      stepUpUntil: null,
     });
   }
 
@@ -333,6 +373,70 @@ export class InMemoryAuthStore implements AuthStore {
     this.byId.set(userId, next);
     this.byEmail.set(next.email, next);
   }
+
+  async getMfaState(userId: string): Promise<MfaState> {
+    const entry = this.mfa.get(userId);
+    let recoveryCodesLeft = 0;
+    for (const code of this.recoveryCodes.values()) {
+      if (code.userId === userId && code.usedAt === null) recoveryCodesLeft++;
+    }
+    return {
+      secret: entry?.secret ?? null,
+      pendingSecret: entry?.pendingSecret ?? null,
+      lastUsedStep: entry?.lastUsedStep ?? null,
+      recoveryCodesLeft,
+    };
+  }
+
+  async saveMfaPendingSecret(userId: string, encryptedSecret: string): Promise<void> {
+    const entry = this.mfa.get(userId) ?? { secret: null, pendingSecret: null, lastUsedStep: null };
+    this.mfa.set(userId, { ...entry, pendingSecret: encryptedSecret });
+  }
+
+  async enableMfa(userId: string, encryptedSecret: string, recoveryCodeHashes: string[],
+    lastUsedStep: number | null): Promise<void> {
+    this.mfa.set(userId, { secret: encryptedSecret, pendingSecret: null, lastUsedStep });
+    for (const [id, code] of this.recoveryCodes) if (code.userId === userId) this.recoveryCodes.delete(id);
+    for (const codeHash of recoveryCodeHashes) {
+      this.recoveryCodes.set(randomUUID(), { userId, codeHash, usedAt: null });
+    }
+  }
+
+  async disableMfa(userId: string): Promise<void> {
+    this.mfa.delete(userId);
+    for (const [id, code] of this.recoveryCodes) if (code.userId === userId) this.recoveryCodes.delete(id);
+  }
+
+  async recordMfaStep(userId: string, step: number): Promise<void> {
+    const entry = this.mfa.get(userId);
+    if (!entry) return;
+    entry.lastUsedStep = Math.max(entry.lastUsedStep ?? 0, step);
+  }
+
+  async listRecoveryCodes(userId: string): Promise<StoredRecoveryCode[]> {
+    const codes: StoredRecoveryCode[] = [];
+    for (const [id, code] of this.recoveryCodes) {
+      if (code.userId === userId && code.usedAt === null) codes.push({ id, codeHash: code.codeHash });
+    }
+    return codes;
+  }
+
+  async useRecoveryCode(userId: string, id: string, now: Date): Promise<boolean> {
+    const code = this.recoveryCodes.get(id);
+    if (!code || code.userId !== userId || code.usedAt !== null) return false;
+    code.usedAt = now.getTime();
+    return true;
+  }
+
+  async getSessionStepUp(tokenHash: string): Promise<Date | null> {
+    const session = this.sessions.get(tokenHash);
+    return session?.stepUpUntil == null ? null : new Date(session.stepUpUntil);
+  }
+
+  async setSessionStepUp(tokenHash: string, until: Date): Promise<void> {
+    const session = this.sessions.get(tokenHash);
+    if (session) session.stepUpUntil = until.getTime();
+  }
 }
 
 const AUTH_SCHEMA = `
@@ -381,6 +485,17 @@ create index if not exists app_password_resets_user_idx on app_password_resets (
 create table if not exists app_google_identities (
   subject text primary key, user_id uuid unique not null references app_users(id) on delete cascade
 );
+alter table app_users add column if not exists mfa_secret text;
+alter table app_users add column if not exists mfa_pending text;
+alter table app_users add column if not exists mfa_last_step bigint;
+create table if not exists app_recovery_codes (
+    id        bigserial primary key,
+    user_id   uuid        not null references app_users (id) on delete cascade,
+    code_hash text        not null,
+    used_at   timestamptz
+);
+create index if not exists app_recovery_codes_user_idx on app_recovery_codes (user_id) where used_at is null;
+alter table app_sessions add column if not exists step_up_until timestamptz;
 `;
 
 export class PostgresAuthStore implements AuthStore {
@@ -509,6 +624,16 @@ export class PostgresAuthStore implements AuthStore {
     } finally {
       await c.end();
     }
+  }
+
+  async findById(userId: string): Promise<AuthRecord | null> {
+    return this.run(async (c) => {
+      const res = await c.query(
+        `select id, email, password_hash, display_name, account_id, owner_id from app_users where id = $1`,
+        [userId],
+      );
+      return res.rows[0] ? this.row(res.rows[0] as Record<string, unknown>) : null;
+    });
   }
 
   async insert(user: AuthRecord): Promise<void> {
@@ -666,6 +791,112 @@ export class PostgresAuthStore implements AuthStore {
 
   async updatePassword(userId: string, passwordHash: string): Promise<void> {
     await this.run((c) => c.query(`update app_users set password_hash = $2 where id = $1`, [userId, passwordHash]));
+  }
+
+  async getMfaState(userId: string): Promise<MfaState> {
+    return this.run(async (c) => {
+      const res = await c.query(
+        `select mfa_secret, mfa_pending, mfa_last_step,
+                (select count(*) from app_recovery_codes r
+                  where r.user_id = app_users.id and r.used_at is null) as recovery_left
+           from app_users where id = $1`,
+        [userId],
+      );
+      const row = res.rows[0] as Record<string, unknown> | undefined;
+      if (!row) return { secret: null, pendingSecret: null, lastUsedStep: null, recoveryCodesLeft: 0 };
+      return {
+        secret: row.mfa_secret == null ? null : String(row.mfa_secret),
+        pendingSecret: row.mfa_pending == null ? null : String(row.mfa_pending),
+        lastUsedStep: row.mfa_last_step == null ? null : Number(row.mfa_last_step),
+        recoveryCodesLeft: Number(row.recovery_left ?? 0),
+      };
+    });
+  }
+
+  async saveMfaPendingSecret(userId: string, encryptedSecret: string): Promise<void> {
+    await this.run((c) => c.query(
+      `update app_users set mfa_pending = $2 where id = $1`,
+      [userId, encryptedSecret],
+    ));
+  }
+
+  async enableMfa(userId: string, encryptedSecret: string, recoveryCodeHashes: string[],
+    lastUsedStep: number | null): Promise<void> {
+    await this.run(async (c) => {
+      await c.query('begin');
+      try {
+        await c.query(
+          `update app_users set mfa_secret = $2, mfa_pending = null, mfa_last_step = $3 where id = $1`,
+          [userId, encryptedSecret, lastUsedStep],
+        );
+        await c.query(`delete from app_recovery_codes where user_id = $1`, [userId]);
+        for (const codeHash of recoveryCodeHashes) {
+          await c.query(`insert into app_recovery_codes (user_id, code_hash) values ($1, $2)`,
+            [userId, codeHash]);
+        }
+        await c.query('commit');
+      } catch (error) {
+        await c.query('rollback');
+        throw error;
+      }
+    });
+  }
+
+  async disableMfa(userId: string): Promise<void> {
+    await this.run(async (c) => {
+      await c.query('begin');
+      try {
+        await c.query(
+          `update app_users set mfa_secret = null, mfa_pending = null, mfa_last_step = null where id = $1`,
+          [userId],
+        );
+        await c.query(`delete from app_recovery_codes where user_id = $1`, [userId]);
+        await c.query('commit');
+      } catch (error) {
+        await c.query('rollback');
+        throw error;
+      }
+    });
+  }
+
+  async recordMfaStep(userId: string, step: number): Promise<void> {
+    await this.run((c) => c.query(
+      `update app_users set mfa_last_step = greatest(coalesce(mfa_last_step, 0), $2) where id = $1`,
+      [userId, step],
+    ));
+  }
+
+  async listRecoveryCodes(userId: string): Promise<StoredRecoveryCode[]> {
+    const res = await this.run((c) => c.query(
+      `select id, code_hash from app_recovery_codes where user_id = $1 and used_at is null`,
+      [userId],
+    ));
+    return res.rows.map((row) => ({ id: String(row.id), codeHash: String(row.code_hash) }));
+  }
+
+  async useRecoveryCode(userId: string, id: string, now: Date): Promise<boolean> {
+    const res = await this.run((c) => c.query(
+      `update app_recovery_codes set used_at = $3
+        where id = $1 and user_id = $2 and used_at is null returning id`,
+      [id, userId, now.toISOString()],
+    ));
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  async getSessionStepUp(tokenHash: string): Promise<Date | null> {
+    const res = await this.run((c) => c.query(
+      `select step_up_until from app_sessions where token_hash = $1`,
+      [tokenHash],
+    ));
+    const value = res.rows[0]?.step_up_until;
+    return value == null ? null : new Date(value as string | Date);
+  }
+
+  async setSessionStepUp(tokenHash: string, until: Date): Promise<void> {
+    await this.run((c) => c.query(
+      `update app_sessions set step_up_until = $2 where token_hash = $1`,
+      [tokenHash, until.toISOString()],
+    ));
   }
 }
 

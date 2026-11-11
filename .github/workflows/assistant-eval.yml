@@ -19,9 +19,14 @@ defaults:
   run:
     working-directory: assistant
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   eval:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       ALLOW_LIVE_LLM_EVAL: "1"
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

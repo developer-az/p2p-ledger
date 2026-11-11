@@ -452,6 +452,9 @@ export function RulesView({ accountId, onChanged }: { accountId: string; onChang
             <div className="rules-preview-figs">
               <div><span>Matching spends</span><strong>{preview.result.affected}</strong></div>
               <div><span>Categories touched</span><strong>{preview.result.byCategory.length}</strong></div>
+              {preview.result.skipped > 0 ? (
+                <div><span>Left alone (already corrected)</span><strong>{preview.result.skipped}</strong></div>
+              ) : null}
             </div>
             {preview.result.transactions.length === 0 ? (
               <EmptyState icon="search" title="No past spends match">

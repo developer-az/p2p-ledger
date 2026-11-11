@@ -65,26 +65,28 @@ export interface EnrichedContext {
   merchants: MerchantRecord[];
   rules: UserRule[];
   overrides: Map<string, CategoryOverride>;
+  descriptors: Map<string, string>;
 }
 
 export async function loadEnrichmentContext(
   store: EnrichmentStore,
   accountId: string,
 ): Promise<EnrichedContext> {
-  const [merchants, rules, overrides] = await Promise.all([
+  const [merchants, rules, overrides, descriptors] = await Promise.all([
     store.listMerchants(accountId),
     store.listRules(accountId),
     store.getOverrides(accountId),
+    store.getDescriptors(accountId),
   ]);
-  return { merchants, rules, overrides };
+  return { merchants, rules, overrides, descriptors };
 }
 
-export function normalizeSpend(entry: SpendLogEntry): NormalizedTransaction {
+export function normalizeSpend(entry: SpendLogEntry, descriptor?: string | null): NormalizedTransaction {
   return {
     id: entry.id,
     accountId: entry.accountId,
     amountMinor: entry.amountMinor,
-    descriptor: entry.descriptorClean || entry.note || '',
+    descriptor: descriptor?.trim() || entry.descriptorClean || entry.note || '',
     occurredAt: entry.occurredAt,
     category: entry.category,
     source: entry.source,
@@ -114,7 +116,7 @@ export async function enrichSpendEntries(
 ): Promise<EnrichedSpendRow[]> {
   const context = await loadEnrichmentContext(store, accountId);
   return entries.map((entry) =>
-    enrichedSpendRow(entry, applyCascade(normalizeSpend(entry), {
+    enrichedSpendRow(entry, applyCascade(normalizeSpend(entry, context.descriptors.get(entry.id)), {
       merchants: context.merchants,
       rules: context.rules,
       override: context.overrides.get(entry.id) ?? null,
@@ -169,7 +171,7 @@ export async function previewRuleForAccount(
   entries: readonly SpendLogEntry[],
 ): Promise<RulePreview> {
   const context = await loadEnrichmentContext(store, accountId);
-  return previewRule(draft, entries.map(normalizeSpend), context.merchants, {
+  return previewRule(draft, entries.map((entry) => normalizeSpend(entry, context.descriptors.get(entry.id))), context.merchants, {
     rules: context.rules,
     overrides: context.overrides,
   });
@@ -192,14 +194,14 @@ export async function applyRuleRetroactively(
   let skipped = 0;
   const overrides: CategoryOverride[] = [];
   for (const entry of entries) {
-    const tx = normalizeSpend(entry);
+    const tx = normalizeSpend(entry, context.descriptors.get(entry.id));
+    const merchant = resolveMerchant(tx.descriptor, context.merchants);
+    if (!ruleMatches(rule, tx, merchant.merchant)) continue;
     const existing = context.overrides.get(entry.id);
     if (existing?.source === 'manual' || existing?.source === 'user_correction') {
       skipped += 1;
       continue;
     }
-    const merchant = resolveMerchant(tx.descriptor, context.merchants);
-    if (!ruleMatches(rule, tx, merchant.merchant)) continue;
     const override: CategoryOverride = {
       category: rule.category,
       source: 'user_rule',
@@ -230,11 +232,12 @@ export async function recordMerchantCorrection(
   if (!entry) throw new Error('Transaction not found');
 
   const merchants = await store.listMerchants(accountId);
+  const descriptors = await store.getDescriptors(accountId);
   const wanted = input.merchantName.trim();
   const existing = merchantByAlias(merchants, wanted)
     ?? merchants.find((merchant) => normalizeMerchantName(merchant.name) === normalizeMerchantName(wanted))
     ?? null;
-  const descriptor = entry.descriptorClean || entry.note || '';
+  const descriptor = descriptors.get(entry.id) ?? entry.descriptorClean ?? entry.note ?? '';
   const merchant = existing ?? await store.createMerchant(accountId, {
     name: wanted,
     defaultCategory: input.category ?? null,
@@ -258,7 +261,7 @@ export async function recordMerchantCorrection(
 
   const refreshed = await store.listMerchants(accountId);
   const resolved = refreshed.find((row) => row.id === merchant.id) ?? merchant;
-  const result = applyCascade(normalizeSpend(entry), {
+  const result = applyCascade(normalizeSpend(entry, descriptor), {
     merchants: refreshed,
     rules: await store.listRules(accountId),
     override,

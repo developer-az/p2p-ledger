@@ -282,6 +282,7 @@ export interface RulePreviewRowView {
 
 export interface RulePreviewView {
   affected: number;
+  skipped: number;
   transactions: RulePreviewRowView[];
   byCategory: { category: SpendCategory; count: number; amountMinor: number }[];
 }

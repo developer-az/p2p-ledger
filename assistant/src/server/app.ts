@@ -1794,7 +1794,7 @@ export function createApp(deps: {
       currency: account.currency,
       source: 'manual',
     }, now(), c.req.header('Idempotency-Key'));
-    if (parsed.data.category) {
+    if (event && parsed.data.category) {
       await enrichment.setOverride(accountId, event.id, {
         category: parsed.data.category,
         source: 'manual',
@@ -1803,6 +1803,9 @@ export function createApp(deps: {
         merchantId: enriched.merchantId,
       }, now());
     }
+    // Live Java spends keep only note on the wire. Store the raw descriptor
+    // alongside the enrichment rows so a note cannot hide the merchant.
+    if (descriptor.trim()) await enrichment.setDescriptor(accountId, event.id, descriptor, now());
     return c.json({
       id: event.id,
       amountMinor: event.amountMinor,
@@ -1832,6 +1835,7 @@ export function createApp(deps: {
     const removed = await deps.spendLogs.remove(accountId, spendId);
     if (!removed) return c.json({ error: 'That log was already removed' }, 404);
     await enrichment.clearOverride(accountId, spendId);
+    await enrichment.clearDescriptor(accountId, spendId);
     return c.json({ removed: true });
   });
 
@@ -1843,16 +1847,17 @@ export function createApp(deps: {
     const [entries, context, versions] = await Promise.all([
       deps.spendLogs.list(accountId, { limit: 500 }),
       (async () => {
-        const [merchants, rules, overrides] = await Promise.all([
+        const [merchants, rules, overrides, descriptors] = await Promise.all([
           enrichment.listMerchants(accountId),
           enrichment.listRules(accountId),
           enrichment.getOverrides(accountId),
+          enrichment.getDescriptors(accountId),
         ]);
-        return { merchants, rules, overrides };
+        return { merchants, rules, overrides, descriptors };
       })(),
       enrichment.listRuleVersions(accountId),
     ]);
-    const transactions = entries.map((entry) => enrichedSpendRow(entry, applyCascade(normalizeSpend(entry), {
+    const transactions = entries.map((entry) => enrichedSpendRow(entry, applyCascade(normalizeSpend(entry, context.descriptors.get(entry.id)), {
       merchants: context.merchants,
       rules: context.rules,
       override: context.overrides.get(entry.id) ?? null,

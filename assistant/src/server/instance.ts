@@ -36,6 +36,7 @@ export function createAssistantApi() {
     isLiveLedgerUp,
     spendLogs,
     personalFinance,
+    enrichment,
     paymentRequests,
     javaWorkflows,
     dataKeys,

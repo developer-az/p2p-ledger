@@ -106,6 +106,8 @@ export interface RulePreviewRow {
 
 export interface RulePreview {
   affected: number;
+  /** Matches left alone because a person already categorized them. */
+  skipped: number;
   transactions: RulePreviewRow[];
   byCategory: { category: SpendCategory; count: number; amountMinor: number }[];
 }
@@ -274,6 +276,7 @@ export function previewRule(
   context: { rules?: readonly UserRule[]; overrides?: ReadonlyMap<string, CategoryOverride> } = {},
 ): RulePreview {
   const rows: RulePreviewRow[] = [];
+  let skipped = 0;
   const wholeRule = 'accountId' in rule
     ? rule as UserRule
     : {
@@ -288,10 +291,18 @@ export function previewRule(
   for (const tx of transactions) {
     const merchant = resolveMerchant(tx.descriptor, merchants);
     if (!ruleMatches(wholeRule, tx, merchant.merchant)) continue;
+    const override = context.overrides?.get(tx.id) ?? null;
+    // Applying the rule refuses to overwrite a manual category or a correction.
+    // The preview must not promise those rows either, or the apply count drops
+    // without explanation.
+    if (override?.source === 'manual' || override?.source === 'user_correction') {
+      skipped += 1;
+      continue;
+    }
     const before = applyCascade(tx, {
       merchants,
       rules: context.rules ?? [],
-      override: context.overrides?.get(tx.id) ?? null,
+      override,
     });
     rows.push({
       transactionId: tx.id,
@@ -314,6 +325,7 @@ export function previewRule(
   }
   return {
     affected: rows.length,
+    skipped,
     transactions: rows,
     byCategory: [...totals.entries()].map(([category, value]) => ({ category, ...value })),
   };

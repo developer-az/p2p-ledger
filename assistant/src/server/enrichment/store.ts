@@ -34,6 +34,10 @@ export interface EnrichmentStore {
   getOverrides(accountId: string): Promise<Map<string, CategoryOverride>>;
   setOverride(accountId: string, transactionId: string, override: CategoryOverride, now?: Date): Promise<void>;
   clearOverride(accountId: string, transactionId: string): Promise<void>;
+  /** Raw statement descriptors, keyed by spend id. The ledger may not return them. */
+  getDescriptors(accountId: string): Promise<Map<string, string>>;
+  setDescriptor(accountId: string, transactionId: string, descriptor: string, now?: Date): Promise<void>;
+  clearDescriptor(accountId: string, transactionId: string): Promise<void>;
   deleteAll?(accountId: string): Promise<void>;
 }
 
@@ -62,6 +66,7 @@ export class InMemoryEnrichmentStore implements EnrichmentStore {
   private readonly merchants = new Map<string, MerchantRecord[]>();
   private readonly rules = new Map<string, UserRule[]>();
   private readonly overrides = new Map<string, Map<string, CategoryOverride>>();
+  private readonly descriptors = new Map<string, Map<string, string>>();
   private readonly now: () => Date;
 
   constructor(now: () => Date = () => new Date()) {
@@ -200,10 +205,30 @@ export class InMemoryEnrichmentStore implements EnrichmentStore {
     this.overrides.get(accountId)?.delete(transactionId);
   }
 
+  async getDescriptors(accountId: string): Promise<Map<string, string>> {
+    return new Map(this.descriptors.get(accountId) ?? []);
+  }
+
+  async setDescriptor(accountId: string, transactionId: string, descriptor: string, _now = this.now()): Promise<void> {
+    const clean = descriptor.trim();
+    if (!clean) {
+      await this.clearDescriptor(accountId, transactionId);
+      return;
+    }
+    const rows = this.descriptors.get(accountId) ?? new Map<string, string>();
+    rows.set(transactionId, clean);
+    this.descriptors.set(accountId, rows);
+  }
+
+  async clearDescriptor(accountId: string, transactionId: string): Promise<void> {
+    this.descriptors.get(accountId)?.delete(transactionId);
+  }
+
   async deleteAll(accountId: string): Promise<void> {
     this.merchants.delete(accountId);
     this.rules.delete(accountId);
     this.overrides.delete(accountId);
+    this.descriptors.delete(accountId);
   }
 }
 
@@ -255,6 +280,14 @@ create table if not exists categorization_overrides (
     updated_at     timestamptz not null,
     primary key (account_id, transaction_id)
 );
+
+create table if not exists spend_descriptors (
+    account_id     uuid not null,
+    transaction_id text not null,
+    descriptor     text not null,
+    updated_at     timestamptz not null,
+    primary key (account_id, transaction_id)
+);
 `;
 
 const ENRICHMENT_RLS_DDL = `
@@ -266,6 +299,8 @@ alter table if exists categorization_rules enable row level security;
 alter table if exists categorization_rules force row level security;
 alter table if exists categorization_overrides enable row level security;
 alter table if exists categorization_overrides force row level security;
+alter table if exists spend_descriptors enable row level security;
+alter table if exists spend_descriptors force row level security;
 
 drop policy if exists merchants_owner on merchants;
 create policy merchants_owner on merchants
@@ -287,6 +322,11 @@ create policy categorization_overrides_owner on categorization_overrides
     using (account_id::text = current_setting('app.user_id', true))
     with check (account_id::text = current_setting('app.user_id', true));
 
+drop policy if exists spend_descriptors_owner on spend_descriptors;
+create policy spend_descriptors_owner on spend_descriptors
+    using (account_id::text = current_setting('app.user_id', true))
+    with check (account_id::text = current_setting('app.user_id', true));
+
 do $$
 begin
     if not exists (select 1 from pg_roles where rolname = 'settle_app') then
@@ -296,6 +336,7 @@ begin
     grant select, insert, update, delete on merchant_aliases to settle_app;
     grant select, insert, update, delete on categorization_rules to settle_app;
     grant select, insert, update, delete on categorization_overrides to settle_app;
+    grant select, insert, update, delete on spend_descriptors to settle_app;
 exception
     when insufficient_privilege then
         raise notice 'settle_app role setup skipped: %', sqlerrm;
@@ -336,7 +377,7 @@ export class PostgresEnrichmentStore implements EnrichmentStore {
   }
 
   private async ensureSchema(c: import('pg').PoolClient) {
-    await ensureSchemaOnce(c, this.connectionString, 'enrichment', 1, async () => {
+    await ensureSchemaOnce(c, this.connectionString, 'enrichment', 2, async () => {
       await c.query(SCHEMA_SQL);
       await c.query(ENRICHMENT_RLS_DDL);
     });
@@ -661,11 +702,71 @@ export class PostgresEnrichmentStore implements EnrichmentStore {
     }
   }
 
+  async getDescriptors(accountId: string): Promise<Map<string, string>> {
+    const c = await this.client();
+    try {
+      await this.ensureSchema(c);
+      return await withUser(c, accountId, async () => {
+        const res = await c.query(
+          'select transaction_id, descriptor from spend_descriptors where account_id = $1',
+          [accountId],
+        );
+        const out = new Map<string, string>();
+        for (const row of res.rows) {
+          const value = row as Record<string, unknown>;
+          out.set(String(value.transaction_id), String(value.descriptor));
+        }
+        return out;
+      });
+    } finally {
+      c.release();
+    }
+  }
+
+  async setDescriptor(accountId: string, transactionId: string, descriptor: string, now = new Date()): Promise<void> {
+    const clean = descriptor.trim();
+    if (!clean) {
+      await this.clearDescriptor(accountId, transactionId);
+      return;
+    }
+    const c = await this.client();
+    try {
+      await this.ensureSchema(c);
+      await withUser(c, accountId, async () => {
+        await c.query(
+          `insert into spend_descriptors (account_id, transaction_id, descriptor, updated_at)
+           values ($1, $2, $3, $4)
+           on conflict (account_id, transaction_id) do update
+             set descriptor = excluded.descriptor, updated_at = excluded.updated_at`,
+          [accountId, transactionId, clean, now.toISOString()],
+        );
+      });
+    } finally {
+      c.release();
+    }
+  }
+
+  async clearDescriptor(accountId: string, transactionId: string): Promise<void> {
+    const c = await this.client();
+    try {
+      await this.ensureSchema(c);
+      await withUser(c, accountId, async () => {
+        await c.query(
+          'delete from spend_descriptors where account_id = $1 and transaction_id = $2',
+          [accountId, transactionId],
+        );
+      });
+    } finally {
+      c.release();
+    }
+  }
+
   async deleteAll(accountId: string): Promise<void> {
     const c = await this.client();
     try {
       await this.ensureSchema(c);
       await withUser(c, accountId, async () => {
+        await c.query('delete from spend_descriptors where account_id = $1', [accountId]);
         await c.query('delete from categorization_overrides where account_id = $1', [accountId]);
         await c.query('delete from categorization_rules where account_id = $1', [accountId]);
         await c.query('delete from merchant_aliases where account_id = $1', [accountId]);

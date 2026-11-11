@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 
 /** Sidebar sections, in navigation order. */
 export const APP_SECTIONS = [
@@ -139,12 +140,8 @@ type ViewTransitionDocument = Document & {
   startViewTransition?: (update: () => void | Promise<void>) => ViewTransitionLike;
 };
 
-/** Two frames: React commits its state update before the new snapshot is taken. */
-function afterPaint(): Promise<void> {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-  });
-}
+
+let syncNavigation = false;
 
 /** Pushes (or replaces) history and notifies route listeners. */
 export function navigate(route: Route, opts: { replace?: boolean; search?: string } = {}): void {
@@ -154,8 +151,17 @@ export function navigate(route: Route, opts: { replace?: boolean; search?: strin
   if (opts.replace) window.history.replaceState(null, '', href);
   else window.history.pushState(null, '', href);
 
+  // Route listeners commit synchronously (flushSync in useRoute), so the new
+  // view is in the DOM when the update callback returns. Rendering is paused
+  // inside a view-transition callback, so waiting for animation frames there
+  // would stall until the browser's DOM-update timeout.
   const update = () => {
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    syncNavigation = true;
+    try {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    } finally {
+      syncNavigation = false;
+    }
   };
   const reduced = typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -172,15 +178,13 @@ export function navigate(route: Route, opts: { replace?: boolean; search?: strin
   // resulting rejections are expected, so swallow both.
   let transition: ViewTransitionLike | undefined;
   try {
-    transition = start.call(document, () => {
-      update();
-      return afterPaint();
-    });
+    transition = start.call(document, update);
   } catch {
     update();
     return;
   }
   transition?.finished?.catch(() => undefined);
+  (transition as { ready?: Promise<void> } | undefined)?.ready?.catch(() => undefined);
   transition?.updateCallbackDone?.catch(() => undefined);
 }
 
@@ -192,7 +196,11 @@ export function useRoute(): Route {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const onPopState = () => setRoute(parseRoute(window.location.pathname));
+    const onPopState = () => {
+      const next = parseRoute(window.location.pathname);
+      if (syncNavigation) flushSync(() => setRoute(next));
+      else setRoute(next);
+    };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);

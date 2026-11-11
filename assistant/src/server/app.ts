@@ -13,7 +13,7 @@ import { answerFromLedger } from './fallback.js';
 import { LedgerError, type LedgerAuditor, type LedgerReader, type LedgerWriter } from './ledger.js';
 import { isModelOutage } from './providers/retry.js';
 import type { LlmProvider } from './providers/types.js';
-import { PRACTICE_ANTHONY, PRACTICE_JORDAN, PRACTICE_SAM, type CompositeLedger, type PracticeLedger } from './practice-ledger.js';
+import { PRACTICE_ACCOUNT_IDS, PRACTICE_ANTHONY, PRACTICE_JORDAN, PRACTICE_SAM, runInPracticeScope, type CompositeLedger, type PracticeLedger } from './practice-ledger.js';
 import { LEDGER_CAPABILITIES } from './personas.js';
 import { formatLedgerStatement } from './statement-export.js';
 import {
@@ -357,6 +357,16 @@ const FORECAST_LOOKBACK_DAYS = 90;
 const DAY_MS = 86_400_000;
 
 /**
+ * Cookie that names one visitor's private copy of the practice household.
+ * Issued by POST /demo/practice; the value is opaque and only ever keys an
+ * in-process copy, so a forged value buys a caller nothing but their own copy.
+ */
+const DEMO_SESSION_COOKIE = 'settle_practice';
+const DEMO_SESSION_TTL_SEC = 12 * 60 * 60;
+/** Bound per-instance demo copies so random cookies cannot grow memory without limit. */
+const DEMO_COPY_LIMIT = 128;
+
+/**
  * First row a risk snapshot needs: the selected month, its comparison month and
  * the forecast's discretionary lookback. The profile period start is added by
  * the caller because period totals are computed from the same rows.
@@ -421,6 +431,13 @@ export function createApp(deps: {
   breachedPassword?: (password: string) => Promise<boolean>;
 }) {
   const now = deps.now ?? (() => new Date());
+  const auth = deps.auth ?? new InMemoryAuthStore();
+  /**
+   * Production (or any deployment with a persistent identity store) publishes
+   * the shared sample household to anonymous visitors. That fixture is
+   * read-only there; the demo works on a private per-session copy instead.
+   */
+  const enforceWalletAuth = deps.enforceWalletAuth ?? (auth.persistent || process.env.NODE_ENV === 'production');
   const mfaKey = resolveMfaKey(deps.mfaKey);
   const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
   const imports = deps.imports ?? new InMemoryImportStore();
@@ -428,6 +445,8 @@ export function createApp(deps: {
   const alertDismissals = deps.alertDismissals ?? new InMemoryAlertDismissalStore();
   const subscriptionMarks = deps.subscriptionMarks ?? new InMemorySubscriptionTrackerStore();
   const paymentRequests = deps.paymentRequests ?? new InMemoryPaymentRequestStore();
+  /** Private practice copies, keyed by the demo session cookie. LRU-bounded. */
+  const demoCopies = new Map<string, PracticeLedger>();
   /**
    * Practice demo history lives in memory, so a cold serverless instance that
    * never saw POST /demo/practice would render an empty demo. Every read path
@@ -441,13 +460,36 @@ export function createApp(deps: {
     [PRACTICE_JORDAN]: 'jordan',
   };
   const practiceSeedInFlight = new Map<string, Promise<void>>();
-  const ensurePracticeDemoSeeded = (accountId: string): Promise<void> => {
+  /** Accounts whose stored demo history was checked in a non-enforced (dev/test) app. */
+  const practiceSeedChecked = new Set<string>();
+  /**
+   * @param force re-check the stored history even if it was already checked;
+   *   POST /demo/practice passes true so a demo start is never stale.
+   */
+  const ensurePracticeDemoSeeded = (accountId: string, force = false): Promise<void> => {
     const persona = PRACTICE_DEMO_PERSONAS[accountId];
     if (!persona) return Promise.resolve();
+    /**
+     * Writes from older builds (smoke runs, the public sample) could move a
+     * shared practice balance. In production the shared fixture cannot be
+     * written any more, so any drift is leftover state and is restored here
+     * before a visitor reads it. Private demo copies are never touched.
+     */
+    if (enforceWalletAuth) deps.practice.restoreIfDrifted();
+    /*
+     * Production re-checks on every read: a demo session's spend/finance writes
+     * still land in the shared stores, and the fixture must heal rather than
+     * serve those numbers to the next visitor. Dev and tests keep the cheaper
+     * once-per-instance check so a local practice wallet stays writable.
+     */
+    if (!force && !enforceWalletAuth && practiceSeedChecked.has(accountId)) return Promise.resolve();
     const inFlight = practiceSeedInFlight.get(accountId);
     if (inFlight) return inFlight;
     const seeding = seedDemoHabits(deps.spendLogs, personalFinance, accountId, persona, now())
-      .then(() => undefined)
+      .then(() => {
+        practiceSeedChecked.add(accountId);
+        practiceSeedInFlight.delete(accountId);
+      })
       .catch((e: unknown) => {
         practiceSeedInFlight.delete(accountId);
         throw e;
@@ -528,7 +570,6 @@ export function createApp(deps: {
     };
   };
   const llmGuard = deps.llmGuard ?? new LlmGuard();
-  const auth = deps.auth ?? new InMemoryAuthStore();
   const securityState = deps.securityState ?? createSecurityStateStore(auth);
   /** Issues a short-lived second-factor challenge in the shared state store. */
   const newMfaChallenge = async (userId: string): Promise<string> => {
@@ -579,7 +620,6 @@ export function createApp(deps: {
   };
   const mailer = deps.mailer ?? createMailer();
   const appUrl = (deps.appUrl ?? process.env.APP_URL ?? '').trim().replace(/\/$/, '');
-  const enforceWalletAuth = deps.enforceWalletAuth ?? (auth.persistent || process.env.NODE_ENV === 'production');
   const app = new Hono().basePath('/api');
   app.use('*', async (c, next) => {
     c.header('Cache-Control', 'no-store');
@@ -672,6 +712,61 @@ export function createApp(deps: {
     await next();
   };
   app.use('*', securityHeaders(API_HEADERS));
+
+  /**
+   * The shared practice household is a fixture, not a scratch ledger. In
+   * production any mutating request that names one of its ids (URL or body,
+   * including the seeded demo requests) is refused unless the caller is in a
+   * practice demo session — and a demo session writes to its own copy, so no
+   * visitor can move the fixture another visitor reads. Local tests and dev
+   * servers run without wallet auth and keep the old writable fixture.
+   */
+  const demoCopyFor = (c: Context): PracticeLedger | null => {
+    const sessionId = getCookie(c, DEMO_SESSION_COOKIE);
+    if (!sessionId) return null;
+    const existing = demoCopies.get(sessionId);
+    if (existing) {
+      /* Refresh insertion order so the LRU keeps active sessions. */
+      demoCopies.delete(sessionId);
+      demoCopies.set(sessionId, existing);
+      return existing;
+    }
+    const copy = deps.practice.fork();
+    demoCopies.set(sessionId, copy);
+    if (demoCopies.size > DEMO_COPY_LIMIT) {
+      const oldest = demoCopies.keys().next().value;
+      if (oldest) demoCopies.delete(oldest);
+    }
+    return copy;
+  };
+  /** Ids of the shared fixture named by the request URL or its JSON body. */
+  const practiceTargets = async (c: Context): Promise<string[]> => {
+    /*
+     * The import routes stream the body themselves (readImportBody), so they
+     * are not readable here; their account is always in the path. Every other
+     * mutating route has a small body we can inspect: Hono caches req.text()
+     * and the handler's req.json() reuses that cache, whatever the caller set
+     * as content-type.
+     */
+    const body = c.req.path.includes('/imports')
+      ? ''
+      : await c.req.text().catch(() => '');
+    const haystack = `${c.req.url}\n${body}`;
+    const ids: string[] = PRACTICE_ACCOUNT_IDS.filter((id) => haystack.includes(id));
+    for (const id of PRACTICE_REQUEST_IDS) if (haystack.includes(id)) ids.push(id);
+    return ids;
+  };
+  app.use('*', async (c, next) => {
+    const copy = demoCopyFor(c);
+    if (copy) return runInPracticeScope(copy, next);
+    const method = c.req.method.toUpperCase();
+    if (!enforceWalletAuth || method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next();
+    if ((await practiceTargets(c)).length === 0) return next();
+    return c.json({
+      error: 'The sample household is read-only. Open the practice demo to make changes to your own copy.',
+    }, 403);
+  });
+
   app.use('/accounts/:id', protectWalletPath);
   app.use('/accounts/:id/*', protectWalletPath);
 
@@ -2480,15 +2575,35 @@ export function createApp(deps: {
     return c.json(seeded);
   });
 
-  /** Guided demo in practice mode: the fixed household plus a personal history to explore. */
+  /**
+   * Guided demo in practice mode: the fixed household plus a personal history to
+   * explore. This is the only route that hands out a writable copy of the
+   * fixture; the shared household stays read-only for everyone else.
+   */
   app.post('/demo/practice', async (c) => {
     if (!await allowSeed(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const boot = deps.practice.bootstrap();
     await Promise.all([
-      ensurePracticeDemoSeeded(PRACTICE_ANTHONY),
-      ensurePracticeDemoSeeded(PRACTICE_SAM),
-      ensurePracticeDemoSeeded(PRACTICE_JORDAN),
+      ensurePracticeDemoSeeded(PRACTICE_ANTHONY, true),
+      ensurePracticeDemoSeeded(PRACTICE_SAM, true),
+      ensurePracticeDemoSeeded(PRACTICE_JORDAN, true),
     ]);
+    /* Fresh session id: each demo start gets a clean copy of the household. */
+    const sessionId = randomBytes(18).toString('base64url');
+    const copy = deps.practice.fork();
+    demoCopies.delete(sessionId);
+    demoCopies.set(sessionId, copy);
+    if (demoCopies.size > DEMO_COPY_LIMIT) {
+      const oldest = demoCopies.keys().next().value;
+      if (oldest) demoCopies.delete(oldest);
+    }
+    setCookie(c, DEMO_SESSION_COOKIE, sessionId, {
+      httpOnly: true,
+      sameSite: 'Lax',
+      path: '/',
+      maxAge: DEMO_SESSION_TTL_SEC,
+      secure: process.env.NODE_ENV === 'production',
+    });
     return c.json({
       accounts: boot.accounts.map(({ id, owner }) => ({ id, owner })),
       focusAccountId: boot.focusAccountId,

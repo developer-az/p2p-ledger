@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { RENT_AMOUNT_MINOR, RENT_MEMO } from './demo.js';
 import type {
@@ -20,6 +21,23 @@ export const PRACTICE_SAM = '01111111-1111-7111-8111-111111111102';
 export const PRACTICE_JORDAN = '01111111-1111-7111-8111-111111111103';
 const FUNDING = '00000000-0000-7000-8000-000000000001';
 export const PRACTICE_RENT_TRANSFER = '01111111-1111-7111-8111-111111111201';
+/** The fixed sample household. Every visitor reads the same seed; nobody writes it. */
+export const PRACTICE_ACCOUNT_IDS = [PRACTICE_ANTHONY, PRACTICE_SAM, PRACTICE_JORDAN] as const;
+
+/**
+ * Practice writes are routed to the caller's own demo copy, never to the shared
+ * seed. The demo session middleware enters this scope for its requests; every
+ * other request reads the seeded fixture.
+ */
+const practiceScope = new AsyncLocalStorage<PracticeLedger>();
+
+export function runInPracticeScope<T>(ledger: PracticeLedger, run: () => T): T {
+  return practiceScope.run(ledger, run);
+}
+
+function scopedPractice(fallback: PracticeLedger): PracticeLedger {
+  return practiceScope.getStore() ?? fallback;
+}
 
 const NEW_ACCOUNT_LIMIT_MINOR = 100_000;
 const NEW_ACCOUNT_MAX_AGE_MS = 86_400_000;
@@ -130,12 +148,45 @@ export interface PracticeBootstrap {
 export class PracticeLedger implements LedgerReader, LedgerWriter {
   private accounts: Account[];
   private transfers: Transfer[];
+  /** The immutable fixture this instance was built from. */
+  private readonly seedAccounts: Account[];
+  private readonly seedTransfers: Transfer[];
   private readonly idempotency = new Map<string, Transfer>();
 
   constructor() {
     const data = buildPracticeData();
-    this.accounts = data.accounts.map((a) => ({ ...a }));
-    this.transfers = [...data.transfers];
+    this.seedAccounts = data.accounts.map((a) => ({ ...a }));
+    this.seedTransfers = data.transfers.map((t) => ({ ...t }));
+    this.accounts = this.seedAccounts.map((a) => ({ ...a }));
+    this.transfers = this.seedTransfers.map((t) => ({ ...t }));
+  }
+
+  /** A private copy of the fixture for one demo session. */
+  fork(): PracticeLedger {
+    return new PracticeLedger();
+  }
+
+  /**
+   * True when a write moved a seeded balance or added a transfer. Older builds
+   * let this happen to the shared fixture (smoke runs, public demo writes);
+   * production reads use it to detect and undo that drift.
+   */
+  hasDrifted(): boolean {
+    if (this.accounts.length !== this.seedAccounts.length) return true;
+    if (this.transfers.length !== this.seedTransfers.length) return true;
+    return this.seedAccounts.some((seed) => {
+      const current = this.account(seed.id);
+      return !current || current.balanceMinor !== seed.balanceMinor;
+    });
+  }
+
+  /** Restore the fixture when a write changed it. Returns true when it had drifted. */
+  restoreIfDrifted(): boolean {
+    if (!this.hasDrifted()) return false;
+    this.accounts = this.seedAccounts.map((a) => ({ ...a }));
+    this.transfers = this.seedTransfers.map((t) => ({ ...t }));
+    this.idempotency.clear();
+    return true;
   }
 
   bootstrap(): PracticeBootstrap {
@@ -350,14 +401,19 @@ export class CompositeLedger implements LedgerReader, LedgerWriter, LedgerAudito
     private readonly liveAvailable: () => Promise<boolean>,
   ) {}
 
+  /** The demo session's own copy when the request is in one, else the shared seed. */
+  private practiceLedger(): PracticeLedger {
+    return scopedPractice(this.practice);
+  }
+
   async getAccount(id: string) {
-    const practiceAccount = await this.practice.getAccount(id);
+    const practiceAccount = await this.practiceLedger().getAccount(id);
     if (practiceAccount) return practiceAccount;
     return this.live.getAccount(id);
   }
 
   async accountsByOwner(ownerId: string) {
-    const fromPractice = await this.practice.accountsByOwner(ownerId);
+    const fromPractice = await this.practiceLedger().accountsByOwner(ownerId);
     const fromLive = await this.live.accountsByOwner(ownerId);
     const seen = new Set<string>();
     return [...fromPractice, ...fromLive].filter((a) => {
@@ -368,54 +424,59 @@ export class CompositeLedger implements LedgerReader, LedgerWriter, LedgerAudito
   }
 
   async getTransfer(id: string) {
-    const practiceTransfer = await this.practice.getTransfer(id);
+    const practiceTransfer = await this.practiceLedger().getTransfer(id);
     if (practiceTransfer) return practiceTransfer;
     return this.live.getTransfer(id);
   }
 
   async transfersForAccount(accountId: string, limit: number) {
-    const practiceAccount = await this.practice.getAccount(accountId);
-    if (practiceAccount) return this.practice.transfersForAccount(accountId, limit);
+    const practice = this.practiceLedger();
+    const practiceAccount = await practice.getAccount(accountId);
+    if (practiceAccount) return practice.transfersForAccount(accountId, limit);
     return this.live.transfersForAccount(accountId, limit);
   }
 
   async entries(accountId: string, limit: number) {
-    const practiceAccount = await this.practice.getAccount(accountId);
-    if (practiceAccount) return this.practice.entries(accountId, limit);
+    const practice = this.practiceLedger();
+    const practiceAccount = await practice.getAccount(accountId);
+    if (practiceAccount) return practice.entries(accountId, limit);
     return this.live.entries(accountId, limit);
   }
 
   async openAccount(ownerId: string, currency: string) {
     if (await this.liveAvailable()) return this.live.openAccount(ownerId, currency);
-    return this.practice.openAccount(ownerId, currency);
+    return this.practiceLedger().openAccount(ownerId, currency);
   }
 
   async deposit(accountId: string, amountMinor: number, idempotencyKey: string, memo?: string) {
-    if (await this.practice.getAccount(accountId)) {
-      return this.practice.deposit(accountId, amountMinor, idempotencyKey, memo);
+    const practice = this.practiceLedger();
+    if (await practice.getAccount(accountId)) {
+      return practice.deposit(accountId, amountMinor, idempotencyKey, memo);
     }
     return this.live.deposit(accountId, amountMinor, idempotencyKey, memo);
   }
 
   async transfer(req: Parameters<LedgerWriter['transfer']>[0], idempotencyKey: string) {
-    if (await this.practice.getAccount(req.sourceAccountId)) {
-      return this.practice.transfer(req, idempotencyKey);
+    const practice = this.practiceLedger();
+    if (await practice.getAccount(req.sourceAccountId)) {
+      return practice.transfer(req, idempotencyKey);
     }
     return this.live.transfer(req, idempotencyKey);
   }
 
   practicePeers(exceptId: string) {
-    return this.practice.listPeers(exceptId);
+    return this.practiceLedger().listPeers(exceptId);
   }
 
   isPracticeAccount(id: string): boolean {
-    return this.practice.isPracticeAccount(id);
+    return this.practiceLedger().isPracticeAccount(id);
   }
 
   async trail(transferId: string) {
     const t = await this.getTransfer(transferId);
     if (!t) return null;
-    if (await this.practice.getAccount(t.sourceAccountId) || await this.practice.getAccount(t.destinationAccountId)) {
+    const practice = this.practiceLedger();
+    if (await practice.getAccount(t.sourceAccountId) || await practice.getAccount(t.destinationAccountId)) {
       return null;
     }
     return this.live.trail(transferId);
@@ -459,13 +520,13 @@ export class CompositeLedger implements LedgerReader, LedgerWriter, LedgerAudito
         throw e;
       }
     }
-    return { ...this.practice.practiceIntegritySnapshot(), source: 'practice', auditAvailable: false };
+    return { ...this.practiceLedger().practiceIntegritySnapshot(), source: 'practice', auditAvailable: false };
   }
 
   async tamperChecks(transferId: string): Promise<TamperReport | null> {
     const t = await this.getTransfer(transferId);
     if (!t) return null;
-    if (await this.practice.getAccount(t.sourceAccountId)) {
+    if (await this.practiceLedger().getAccount(t.sourceAccountId)) {
       return {
         transferId,
         accountId: t.sourceAccountId,
@@ -481,8 +542,9 @@ export class CompositeLedger implements LedgerReader, LedgerWriter, LedgerAudito
   }
 
   async postTransfer(req: TransferRequest, idempotencyKey: string): Promise<WriteResult> {
-    if (await this.practice.getAccount(req.sourceAccountId)) {
-      const transfer = await this.practice.transfer(req, idempotencyKey);
+    const practice = this.practiceLedger();
+    if (await practice.getAccount(req.sourceAccountId)) {
+      const transfer = await practice.transfer(req, idempotencyKey);
       return { status: 201, replayed: false, transfer };
     }
     return this.live.postTransfer(req, idempotencyKey);
@@ -493,8 +555,9 @@ export class CompositeLedger implements LedgerReader, LedgerWriter, LedgerAudito
     body: { amountMinor: number; memo?: string },
     idempotencyKey: string,
   ): Promise<WriteResult> {
-    if (await this.practice.getAccount(accountId)) {
-      const transfer = await this.practice.deposit(accountId, body.amountMinor, idempotencyKey, body.memo);
+    const practice = this.practiceLedger();
+    if (await practice.getAccount(accountId)) {
+      const transfer = await practice.deposit(accountId, body.amountMinor, idempotencyKey, body.memo);
       return { status: 201, replayed: false, transfer };
     }
     return this.live.postDeposit(accountId, body, idempotencyKey);

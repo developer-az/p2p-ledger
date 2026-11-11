@@ -6,6 +6,7 @@ import {
   PRACTICE_ANTHONY,
   PRACTICE_SAM,
 } from '../src/server/practice-ledger.js';
+import { demoSeedCashMinor } from '../src/server/demo-habits.js';
 
 const base = (process.env.ASSISTANT_URL ?? process.argv[2] ?? '').replace(/\/$/, '');
 /** The practice persona was renamed Alex → Anthony; a deployment from before the rename still says alex. */
@@ -118,6 +119,23 @@ const checks: Check[] = [
     },
   },
   {
+    /*
+     * The shared practice household must stay at the seed. Older runs of this
+     * script deposited and transferred against it, which is why the sample net
+     * position drifted; the write checks below only touch the smoke account.
+     */
+    name: 'GET /api/accounts/:id shows the sample household at seed cash',
+    run: async () => {
+      const { res, json } = await fetchJson(`/api/accounts/${PRACTICE_ANTHONY}`);
+      if (res.status !== 200) throw new Error(`status ${res.status}`);
+      const cash = (json as { moneyProfile?: { walletCashMinor?: number | null } }).moneyProfile?.walletCashMinor;
+      const expected = demoSeedCashMinor('anthony');
+      if (cash !== expected) {
+        throw new Error(`sample cash ${String(cash)} != seed ${expected}; practice writes leaked into the fixture`);
+      }
+    },
+  },
+  {
     name: 'GET /api/peers for live wallet (owner session, no practice bleed)',
     run: async () => {
       const email = process.env.SMOKE_EMAIL;
@@ -168,38 +186,34 @@ const checks: Check[] = [
     },
   },
   {
-    name: 'POST /api/accounts/:id/deposits',
+    name: 'POST /api/accounts/:id/deposits on the smoke wallet',
     run: async () => {
-      const { res, json } = await fetchJson(`/api/accounts/${PRACTICE_ANTHONY}/deposits`, {
+      const email = process.env.SMOKE_EMAIL;
+      const password = process.env.SMOKE_PASSWORD;
+      if (!email || !password) return 'skipped: set SMOKE_EMAIL and SMOKE_PASSWORD for a registered smoke account';
+      const login = await fetchJson('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amountMinor: 1 }),
+        body: JSON.stringify({ email, password }),
+      });
+      if (login.res.status !== 200) throw new Error(`login ${login.res.status}`);
+      const cookie = login.res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+      if (!cookie) throw new Error('login set no session cookie');
+      const id = (login.json as { account?: { id?: string } }).account?.id;
+      if (!id) throw new Error('login returned no account id');
+      if (id.startsWith('01111111-1111-7111-8111-')) throw new Error('smoke account must not be a practice id');
+
+      const { res, json } = await fetchJson(`/api/accounts/${id}/deposits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ amountMinor: 1, memo: 'smoke' }),
       });
       if (res.status !== 201) throw new Error(`status ${res.status} body ${JSON.stringify(json)}`);
       const row = json as { kind?: string; status?: string };
       if (row.kind !== 'DEPOSIT' || row.status !== 'COMPLETED') {
         throw new Error(`unexpected transfer ${JSON.stringify(json)}`);
       }
-    },
-  },
-  {
-    name: 'POST /api/transfers',
-    run: async () => {
-      const { res, json } = await fetchJson('/api/transfers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sourceAccountId: PRACTICE_ANTHONY,
-          destinationAccountId: PRACTICE_SAM,
-          amountMinor: 1,
-          currency: 'USD',
-        }),
-      });
-      if (res.status !== 201) throw new Error(`status ${res.status} body ${JSON.stringify(json)}`);
-      const row = json as { kind?: string; status?: string };
-      if (row.kind !== 'TRANSFER' || row.status !== 'COMPLETED') {
-        throw new Error(`unexpected transfer ${JSON.stringify(json)}`);
-      }
+      await fetchJson('/api/auth/logout', { method: 'POST', headers: { cookie } }).catch(() => undefined);
     },
   },
 ];

@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { pgConfig } from './db-tls.js';
 import type { FieldCipher } from './envelope.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
 import { formatMoney } from './money.js';
+import { sharedPool } from './pg-pool.js';
 import { RLS_DDL, withUser } from './rls.js';
+import { ensureSchemaOnce } from './schema-gate.js';
 import type { SpendLogEntry } from './spend-log.js';
 
 export const INCOME_SOURCES = ['salary', 'freelance', 'gift', 'refund', 'other'] as const;
@@ -315,8 +316,6 @@ create index if not exists income_logs_account_id_idx on income_logs (account_id
 `;
 
 export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
-  private schemaReady = false;
-
   constructor(
     private readonly connectionString: string,
     private readonly cipher?: FieldCipher,
@@ -333,19 +332,18 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
   }
 
   private async client() {
-    const { default: pg } = await import('pg');
-    const client = new pg.Client(pgConfig(this.connectionString));
-    await client.connect();
-    return client;
+    return sharedPool(this.connectionString).connect();
   }
 
-  private async ensureSchema(c: import('pg').Client) {
-    if (this.schemaReady) return;
-    await c.query(SCHEMA_SQL);
-    // FORCE RLS applies to the owner too, so every row query below must run
-    // through withUser(). Policies are dropped and recreated to stay idempotent.
-    await c.query(RLS_DDL);
-    this.schemaReady = true;
+  private async ensureSchema(c: import('pg').PoolClient) {
+    // Bumped to 2: weekly_budget_minor was added after the first version.
+    await ensureSchemaOnce(c, 'personal-finance', 2, async () => {
+      await c.query(SCHEMA_SQL);
+      // FORCE RLS applies to the owner too, so every row query below must run
+      // through withUser(). The policies are dropped and recreated only when
+      // the DDL actually runs (once per database version, not every start).
+      await c.query(RLS_DDL);
+    });
   }
 
   private rowToProfile(row: Record<string, unknown>): MoneyProfile {
@@ -397,7 +395,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
         return p;
       });
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -455,7 +453,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
         return this.rowToProfile(res.rows[0] as Record<string, unknown>);
       });
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -492,7 +490,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
         );
       });
     } finally {
-      await c.end();
+      c.release();
     }
     return {
       id,
@@ -536,7 +534,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
         })));
       });
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -549,7 +547,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
         await c.query(`delete from money_profiles where account_id = $1`, [accountId]);
       });
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -580,7 +578,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
         })));
       });
     } finally {
-      await c.end();
+      c.release();
     }
   }
 }

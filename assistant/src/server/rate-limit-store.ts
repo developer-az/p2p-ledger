@@ -18,9 +18,10 @@
  */
 
 import { createHash } from 'node:crypto';
-import { pgConfig } from './db-tls.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
+import { sharedPool } from './pg-pool.js';
 import { rateLimiter, type Limiter } from './rate-limit.js';
+import { ensureSchemaOnce } from './schema-gate.js';
 
 export interface RateLimitStore {
   /**
@@ -57,7 +58,7 @@ export class PostgresRateLimitStore implements RateLimitStore {
   constructor(private readonly connectionString: string) {}
 
   async hit(bucket: string, windowStart: number): Promise<{ current: number; previous: number }> {
-    const pool = await poolFor(this.connectionString);
+    const pool = sharedPool(this.connectionString);
     await ensureSchema(this.connectionString, pool);
     // Never store a raw IP: the bucket name (`write:1.2.3.4`) is hashed.
     const key = createHash('sha256').update(bucket).digest('hex');
@@ -145,37 +146,30 @@ function counterKey(bucket: string, windowStart: number): string {
 
 type PgPool = import('pg').Pool;
 
-/**
- * One pool per connection string, created once per process. `max: 2` keeps a
- * serverless instance from opening a pool per request.
- */
-const pools = new Map<string, Promise<PgPool>>();
-const schemas = new Map<string, Promise<void>>();
+const RATE_LIMIT_DDL = `create table if not exists app_rate_limits (
+    bucket       text    not null,
+    window_start bigint  not null,
+    hits         integer not null,
+    primary key (bucket, window_start)
+)`;
 
-function poolFor(connectionString: string): Promise<PgPool> {
-  let pool = pools.get(connectionString);
-  if (!pool) {
-    pool = (async () => {
-      const { default: pg } = await import('pg');
-      return new pg.Pool({ ...pgConfig(connectionString), max: 2, idleTimeoutMillis: 10_000 });
-    })();
-    pools.set(connectionString, pool);
-  }
-  return pool;
-}
+/** Schema readiness per connection string; the pool itself is shared per process. */
+const schemas = new Map<string, Promise<void>>();
 
 function ensureSchema(connectionString: string, pool: PgPool): Promise<void> {
   let ready = schemas.get(connectionString);
   if (!ready) {
-    ready = pool
-      .query(`create table if not exists app_rate_limits (
-        bucket text not null,
-        window_start bigint not null,
-        hits integer not null,
-        primary key (bucket, window_start)
-      )`)
-      .then(() => undefined);
-    // A failed create may be transient (database still waking); allow a retry
+    ready = (async () => {
+      const client = await pool.connect();
+      try {
+        await ensureSchemaOnce(client, 'rate-limits', 1, async () => {
+          await client.query(RATE_LIMIT_DDL);
+        });
+      } finally {
+        client.release();
+      }
+    })();
+    // A failed check may be transient (database still waking); allow a retry
     // on the next hit instead of caching the rejection forever.
     void ready.catch(() => schemas.delete(connectionString));
     schemas.set(connectionString, ready);

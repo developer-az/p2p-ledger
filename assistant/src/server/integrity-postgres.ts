@@ -1,5 +1,5 @@
-import { pgConfig } from './db-tls.js';
 import type { Integrity } from './ledger.js';
+import { sharedPool } from './pg-pool.js';
 
 /** Same DB as ledger-service (Supabase / Render JDBC). Optional on Vercel when Java audit route is old. */
 export function databaseUrlFromEnv(env: NodeJS.ProcessEnv = process.env): string | undefined {
@@ -12,9 +12,7 @@ type Row = Record<string, string | number | null>;
 
 export async function integrityFromPostgres(connectionString: string): Promise<Integrity | null> {
   try {
-    const { default: pg } = await import('pg');
-    const client = new pg.Client(pgConfig(connectionString));
-    await client.connect();
+    const client = await sharedPool(connectionString).connect();
     try {
       const entry = await one(client, `
         select count(*)::bigint as entry_count,
@@ -70,7 +68,7 @@ export async function integrityFromPostgres(connectionString: string): Promise<I
         balanced,
       };
     } finally {
-      await client.end();
+      client.release();
     }
   } catch (e) {
     console.error('integrityFromPostgres failed', e);
@@ -78,7 +76,7 @@ export async function integrityFromPostgres(connectionString: string): Promise<I
   }
 }
 
-async function one(client: import('pg').Client, sql: string): Promise<Row> {
+async function one(client: import('pg').PoolClient, sql: string): Promise<Row> {
   const { rows } = await client.query(sql);
   return (rows[0] ?? {}) as Row;
 }

@@ -24,7 +24,7 @@ function queryKey(pair: string): string {
 
 /**
  * Query parameters that pg itself consumes. `pg-connection-string` turns these
- * into an `ssl` value that overrides the object we pass to `new pg.Client(...)`,
+ * into an `ssl` value that overrides the object passed to pg,
  * so they are removed from the URL and handled by `pgSsl` instead.
  */
 function isTlsParam(pair: string): boolean {

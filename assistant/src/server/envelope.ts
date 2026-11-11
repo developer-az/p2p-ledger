@@ -19,8 +19,9 @@ import {
   randomBytes,
   scryptSync,
 } from 'node:crypto';
-import { pgConfig } from './db-tls.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
+import { sharedPool } from './pg-pool.js';
+import { ensureSchemaOnce } from './schema-gate.js';
 
 const CIPHER_PREFIX = 'v1:';
 const IV_BYTES = 12;
@@ -636,8 +637,6 @@ create table if not exists app_data_keys (
 `;
 
 export class PostgresDataKeyStore extends BaseDataKeyStore {
-  private schemaReady = false;
-
   constructor(
     private readonly connectionString: string,
     wrapper: KeyWrapper,
@@ -646,16 +645,13 @@ export class PostgresDataKeyStore extends BaseDataKeyStore {
   }
 
   private async client() {
-    const { default: pg } = await import('pg');
-    const client = new pg.Client(pgConfig(this.connectionString));
-    await client.connect();
-    return client;
+    return sharedPool(this.connectionString).connect();
   }
 
-  private async ensureSchema(c: import('pg').Client): Promise<void> {
-    if (this.schemaReady) return;
-    await c.query(DATA_KEY_SCHEMA);
-    this.schemaReady = true;
+  private async ensureSchema(c: import('pg').PoolClient): Promise<void> {
+    await ensureSchemaOnce(c, 'data-keys', 1, async () => {
+      await c.query(DATA_KEY_SCHEMA);
+    });
   }
 
   protected async loadRow(userId: string): Promise<StoredKeyRow | null> {
@@ -678,7 +674,7 @@ export class PostgresDataKeyStore extends BaseDataKeyStore {
           : new Date(String(row.shredded_at)).toISOString(),
       };
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -699,7 +695,7 @@ export class PostgresDataKeyStore extends BaseDataKeyStore {
       );
       return res.rowCount === 1;
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -714,7 +710,7 @@ export class PostgresDataKeyStore extends BaseDataKeyStore {
       );
       if (res.rowCount !== 1) throw new ShreddedKeyError(userId);
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -731,7 +727,7 @@ export class PostgresDataKeyStore extends BaseDataKeyStore {
         [userId, at],
       );
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -749,7 +745,7 @@ export class PostgresDataKeyStore extends BaseDataKeyStore {
         kekId: String(row.kek_id),
       }));
     } finally {
-      await c.end();
+      c.release();
     }
   }
 

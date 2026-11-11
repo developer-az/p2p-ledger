@@ -58,6 +58,40 @@ export interface StoredRecoveryCode {
   codeHash: string;
 }
 
+/** Security events worth keeping after the fact. The log is append-only. */
+export type AuditType =
+  | 'login'
+  | 'login_failed'
+  | 'logout'
+  | 'mfa_challenge'
+  | 'mfa_enabled'
+  | 'mfa_disabled'
+  | 'recovery_code_used'
+  | 'step_up'
+  | 'session_revoked'
+  | 'password_changed'
+  | 'password_reset_requested'
+  | 'export'
+  | 'account_deleted';
+
+export interface AuditInput {
+  userId: string;
+  type: AuditType;
+  at: Date;
+  ipPrefix: string | null;
+  device: string | null;
+  detail?: Record<string, string | number | boolean>;
+}
+
+export interface AuditEvent {
+  id: string;
+  type: AuditType;
+  at: Date;
+  ipPrefix: string | null;
+  device: string | null;
+  detail?: Record<string, string | number | boolean>;
+}
+
 export interface AuthStore {
   unlinkGoogle(userId: string): Promise<void>;
   findByGoogleSubject(subject: string): Promise<AuthRecord | null>;
@@ -98,6 +132,10 @@ export interface AuthStore {
   useRecoveryCode(userId: string, id: string, now: Date): Promise<boolean>;
   getSessionStepUp(tokenHash: string): Promise<Date | null>;
   setSessionStepUp(tokenHash: string, until: Date): Promise<void>;
+  /** Append-only: there is deliberately no update or delete counterpart. */
+  appendAudit(event: AuditInput): Promise<void>;
+  /** Newest first. Defaults to the fifty most recent events. */
+  listAudit(userId: string, limit?: number): Promise<AuditEvent[]>;
 }
 
 export const RESET_TOKEN_TTL_SEC = 30 * 60;
@@ -226,6 +264,8 @@ export class InMemoryAuthStore implements AuthStore {
   private readonly recoveryCodes = new Map<string, {
     userId: string; codeHash: string; usedAt: number | null;
   }>();
+  /** The only audit storage is an append list; reads hand out deep copies. */
+  private readonly audit: Array<AuditEvent & { userId: string }> = [];
 
   private readonly attempts = new Map<string, { window: number; count: number }>();
   async allowAuthAttempt(bucket: string, now: Date, limit = 10): Promise<boolean> {
@@ -437,6 +477,35 @@ export class InMemoryAuthStore implements AuthStore {
     const session = this.sessions.get(tokenHash);
     if (session) session.stepUpUntil = until.getTime();
   }
+
+  async appendAudit(event: AuditInput): Promise<void> {
+    this.audit.push({
+      id: randomUUID(),
+      userId: event.userId,
+      type: event.type,
+      at: new Date(event.at.getTime()),
+      ipPrefix: event.ipPrefix,
+      device: event.device,
+      ...(event.detail ? { detail: { ...event.detail } } : {}),
+    });
+  }
+
+  async listAudit(userId: string, limit = 50): Promise<AuditEvent[]> {
+    const max = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 50;
+    return this.audit
+      .map((event, index) => ({ event, index }))
+      .filter(({ event }) => event.userId === userId)
+      .sort((a, b) => b.event.at.getTime() - a.event.at.getTime() || b.index - a.index)
+      .slice(0, max)
+      .map(({ event }) => ({
+        id: event.id,
+        type: event.type,
+        at: new Date(event.at.getTime()),
+        ipPrefix: event.ipPrefix,
+        device: event.device,
+        ...(event.detail ? { detail: { ...event.detail } } : {}),
+      }));
+  }
 }
 
 const AUTH_SCHEMA = `
@@ -498,6 +567,39 @@ create index if not exists app_recovery_codes_user_idx on app_recovery_codes (us
 alter table app_sessions add column if not exists step_up_until timestamptz;
 `;
 
+/**
+ * Security audit log. Writes only: the trigger rejects UPDATE and DELETE with
+ * the same wording as the ledger's append-only guard. There is intentionally no
+ * foreign key to app_users; step 2.7 account deletion will remove a user's audit
+ * rows explicitly as part of its retention policy (a cascade would fight the
+ * trigger).
+ */
+export const AUDIT_DDL = `
+create table if not exists app_audit_log (
+    id        bigserial primary key,
+    user_id   uuid        not null,
+    type      text        not null,
+    at        timestamptz not null default now(),
+    ip_prefix text,
+    device    text,
+    detail    jsonb
+);
+create index if not exists app_audit_log_user_at_idx on app_audit_log (user_id, at desc);
+
+create or replace function reject_audit_mutation() returns trigger
+    language plpgsql as
+$$
+begin
+    raise exception 'app_audit_log is append-only';
+end
+$$;
+
+drop trigger if exists app_audit_log_append_only on app_audit_log;
+create trigger app_audit_log_append_only
+    before update or delete on app_audit_log
+    for each row execute function reject_audit_mutation();
+`;
+
 export class PostgresAuthStore implements AuthStore {
   async unlinkGoogle(userId: string): Promise<void> {
     await this.run(async c => {
@@ -540,6 +642,7 @@ export class PostgresAuthStore implements AuthStore {
     try {
       await c.query("select pg_advisory_xact_lock(hashtextextended('settle:identity-schema', 0))");
       await c.query(AUTH_SCHEMA);
+      await c.query(AUDIT_DDL);
       await c.query('commit');
       this.schemaReady = true;
     } catch (error) { await c.query('rollback'); throw error; }
@@ -897,6 +1000,34 @@ export class PostgresAuthStore implements AuthStore {
       `update app_sessions set step_up_until = $2 where token_hash = $1`,
       [tokenHash, until.toISOString()],
     ));
+  }
+
+  async appendAudit(event: AuditInput): Promise<void> {
+    await this.run((c) => c.query(
+      `insert into app_audit_log (user_id, type, at, ip_prefix, device, detail)
+       values ($1, $2, $3, $4, $5, $6)`,
+      [event.userId, event.type, event.at.toISOString(), event.ipPrefix, event.device,
+        event.detail ? JSON.stringify(event.detail) : null],
+    ));
+  }
+
+  async listAudit(userId: string, limit = 50): Promise<AuditEvent[]> {
+    const max = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 50;
+    const res = await this.run((c) => c.query(
+      `select id, type, at, ip_prefix, device, detail
+         from app_audit_log where user_id = $1 order by at desc, id desc limit $2`,
+      [userId, max],
+    ));
+    return res.rows.map((row) => ({
+      id: String(row.id),
+      type: String(row.type) as AuditType,
+      at: new Date(row.at as string | Date),
+      ipPrefix: row.ip_prefix == null ? null : String(row.ip_prefix),
+      device: row.device == null ? null : String(row.device),
+      ...(row.detail == null ? {} : {
+        detail: (typeof row.detail === 'string' ? JSON.parse(row.detail) : row.detail) as Record<string, string | number | boolean>,
+      }),
+    }));
   }
 }
 

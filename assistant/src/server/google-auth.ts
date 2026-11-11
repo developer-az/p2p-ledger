@@ -21,7 +21,9 @@ export function googleConfig() {
 
 export function installGoogleAuth(app: Hono, auth: AuthStore,
   issueSession: (c: Context, id: string) => Promise<void>,
-  provision: (email: string, name: string, password: string) => Promise<AuthRecord>) {
+  provision: (email: string, name: string, password: string) => Promise<AuthRecord>,
+  /** Returns a second-factor challenge when the account requires one. */
+  startMfa?: (userId: string) => Promise<string | null>) {
   app.get('/auth/google/start', async c => {
     const config = googleConfig();
     if (!config || !auth.persistent) return c.json({ error: 'Google sign-in is not configured.' }, 503);
@@ -88,6 +90,12 @@ export function installGoogleAuth(app: Hono, auth: AuthStore,
         const reservationPassword = createHmac('sha256', config.secret).update('google-provision:' + payload.sub).digest('base64url');
         user = await provision(email, typeof payload.name === 'string' ? payload.name.slice(0, 40) : 'Google user', reservationPassword);
         await auth.linkGoogleSubject(payload.sub, user.id);
+      }
+      // A Google sign-in for an MFA account stops here; the challenge is
+      // completed through the normal POST /api/auth/mfa/verify route.
+      if (!flow.link) {
+        const challenge = await startMfa?.(user.id);
+        if (challenge) return c.redirect(config.origin + '/signin?mfa=' + encodeURIComponent(challenge));
       }
       await issueSession(c, user.id);
       return c.redirect(config.origin + '/?authComplete=google');

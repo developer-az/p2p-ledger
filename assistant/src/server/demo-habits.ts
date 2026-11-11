@@ -3,7 +3,6 @@ import type { SpendCategory, SpendLogStore } from './spend-log.js';
 
 const MS_DAY = 86_400_000;
 const MS_HOUR = 3_600_000;
-const DEMO_SEED_TTL_MS = 24 * MS_HOUR;
 
 export type DemoPersona = 'anthony' | 'sam' | 'jordan';
 
@@ -127,49 +126,6 @@ function at(now: Date, daysAgo: number, hoursAgo = 0): string {
   return new Date(now.getTime() - daysAgo * MS_DAY - hoursAgo * MS_HOUR).toISOString();
 }
 
-/** Cash balance the demo seed writes; the smoke check compares against it. */
-export function demoSeedCashMinor(persona: DemoPersona): number {
-  return PROFILES[persona].cashMinor;
-}
-
-async function clearSpendLogs(spendLogs: SpendLogStore, accountId: string): Promise<void> {
-  if (spendLogs.deleteAll) {
-    await spendLogs.deleteAll(accountId);
-    return;
-  }
-  for (;;) {
-    const rows = await spendLogs.list(accountId, { limit: 500 });
-    if (rows.length === 0) return;
-    let removed = 0;
-    for (const row of rows) if (await spendLogs.remove(accountId, row.id)) removed++;
-    if (removed === 0) return;
-  }
-}
-
-/**
- * Daily reset for the shared demo wallet. The seed timestamp lives on the money
- * profile, so it survives with the rest of the demo data. Reads inside the day
- * leave a visitor's demo writes alone; after 24 hours the history is wiped and
- * written from the fixture again.
- */
-export async function resetDemoHabitsIfStale(
-  spendLogs: SpendLogStore,
-  finance: PersonalFinanceStore,
-  accountId: string,
-  persona: DemoPersona,
-  now = new Date(),
-): Promise<boolean> {
-  const profile = await finance.getProfile(accountId, 'USD', now);
-  const seededAt = profile.demoSeededAt ? Date.parse(profile.demoSeededAt) : Number.NaN;
-  if (Number.isFinite(seededAt) && now.getTime() - seededAt < DEMO_SEED_TTL_MS) {
-    /* Still fill a cold instance's empty history, but never wipe within the day. */
-    return seedDemoHabits(spendLogs, finance, accountId, persona, now);
-  }
-  await clearSpendLogs(spendLogs, accountId);
-  await finance.deleteAll(accountId);
-  return seedDemoHabits(spendLogs, finance, accountId, persona, now);
-}
-
 /**
  * Gives a demo wallet a believable personal history so the product has something
  * to teach with on first open. Idempotent: a wallet with any spend log is left alone.
@@ -189,7 +145,6 @@ export async function seedDemoHabits(
     creditOwedMinor: profile.creditMinor,
     weeklyBudgetMinor: profile.weeklyBudgetMinor,
     spendLogsAffectWallet: true,
-    demoSeededAt: now.toISOString(),
   }, now);
   await finance.recordIncome(accountId, {
     amountMinor: profile.incomeMinor,

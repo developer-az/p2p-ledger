@@ -26,8 +26,6 @@ export interface MoneyProfile {
    * When false, walletCash is already “after spending” — logs are for history/insight only.
    */
   spendLogsAffectWallet: boolean;
-  /** When the demo fixture for this wallet was last written; null for live wallets. */
-  demoSeededAt: string | null;
   updatedAt: string;
 }
 
@@ -57,7 +55,6 @@ export interface MoneyProfilePatch {
   spendLogsAffectWallet?: boolean;
   periodLabel?: string;
   periodStart?: string;
-  demoSeededAt?: string | null;
 }
 
 export interface FinancePeriodTotals {
@@ -114,7 +111,6 @@ export function defaultMoneyProfile(accountId: string, currency: string, now = n
     creditOwedMinor: 0,
     weeklyBudgetMinor: null,
     spendLogsAffectWallet: true,
-    demoSeededAt: null,
     updatedAt: now.toISOString(),
   };
 }
@@ -237,7 +233,6 @@ export class InMemoryPersonalFinanceStore implements PersonalFinanceStore {
       spendLogsAffectWallet: patch.spendLogsAffectWallet ?? base.spendLogsAffectWallet,
       periodLabel: patch.periodLabel ?? base.periodLabel,
       periodStart: patch.periodStart ?? base.periodStart,
-      demoSeededAt: patch.demoSeededAt !== undefined ? patch.demoSeededAt : base.demoSeededAt,
       updatedAt: now.toISOString(),
     };
     this.profiles.set(accountId, next);
@@ -305,11 +300,9 @@ create table if not exists money_profiles (
     credit_owed_minor       bigint      not null default 0,
     weekly_budget_minor     bigint,
     spend_logs_affect_wallet boolean    not null default true,
-    demo_seeded_at          timestamptz,
     updated_at              timestamptz not null default now()
 );
 alter table money_profiles add column if not exists weekly_budget_minor bigint;
-alter table money_profiles add column if not exists demo_seeded_at timestamptz;
 create table if not exists income_logs (
     id            uuid primary key,
     account_id    uuid        not null,
@@ -362,8 +355,8 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
   }
 
   private async ensureSchema(c: import('pg').PoolClient) {
-    // Bumped to 3: demo_seeded_at records the daily demo reset deadline.
-    await ensureSchemaOnce(c, this.connectionString, 'personal-finance', 3, async () => {
+    // Bumped to 2: weekly_budget_minor was added after the first version.
+    await ensureSchemaOnce(c, this.connectionString, 'personal-finance', 2, async () => {
       await c.query(SCHEMA_SQL);
       // FORCE RLS applies to the owner too, so every row query below must run
       // through withUser(). The policies are dropped and recreated only when
@@ -386,9 +379,6 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
         ? null
         : Number(row.weekly_budget_minor),
       spendLogsAffectWallet: Boolean(row.spend_logs_affect_wallet),
-      demoSeededAt: row.demo_seeded_at === null || row.demo_seeded_at === undefined
-        ? null
-        : new Date(String(row.demo_seeded_at)).toISOString(),
       updatedAt: new Date(String(row.updated_at)).toISOString(),
     };
   }
@@ -400,16 +390,15 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
       return await withUser(c, accountId, async () => {
         const res = await c.query(
           `select account_id, currency, period_label, period_start, wallet_cash_minor, credit_owed_minor,
-                  weekly_budget_minor, spend_logs_affect_wallet, demo_seeded_at, updated_at
-             from money_profiles where account_id = $1`,
+                  weekly_budget_minor, spend_logs_affect_wallet, updated_at from money_profiles where account_id = $1`,
           [accountId],
         );
         if (res.rows[0]) return this.rowToProfile(res.rows[0] as Record<string, unknown>);
         const p = defaultMoneyProfile(accountId, currency, now);
         await c.query(
           `insert into money_profiles (account_id, currency, period_label, period_start, wallet_cash_minor,
-           credit_owed_minor, weekly_budget_minor, spend_logs_affect_wallet, demo_seeded_at, updated_at)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+           credit_owed_minor, weekly_budget_minor, spend_logs_affect_wallet, updated_at)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [
             accountId,
             currency,
@@ -419,7 +408,6 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
             0,
             null,
             true,
-            null,
             now.toISOString(),
           ],
         );
@@ -439,7 +427,6 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
       spendLogsAffectWallet: patch.spendLogsAffectWallet ?? current.spendLogsAffectWallet,
       periodLabel: patch.periodLabel ?? current.periodLabel,
       periodStart: patch.periodStart ?? current.periodStart,
-      demoSeededAt: patch.demoSeededAt !== undefined ? patch.demoSeededAt : current.demoSeededAt,
     }, now);
     return next;
   }
@@ -453,7 +440,6 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
       spendLogsAffectWallet: boolean;
       periodLabel: string;
       periodStart: string;
-      demoSeededAt: string | null;
     },
     now: Date,
   ): Promise<MoneyProfile> {
@@ -469,8 +455,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
              credit_owed_minor = $5,
              weekly_budget_minor = $6,
              spend_logs_affect_wallet = $7,
-             demo_seeded_at = $8,
-             updated_at = $9
+             updated_at = $8
            where account_id = $1`,
           [
             accountId,
@@ -480,7 +465,6 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
             fields.creditOwedMinor,
             fields.weeklyBudgetMinor,
             fields.spendLogsAffectWallet,
-            fields.demoSeededAt,
             now.toISOString(),
           ],
         );

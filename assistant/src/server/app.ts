@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { runAssistant, type AssistantReply } from './agent.js';
 import { booksCheck, paymentTrail, racePayment, replayPayment, tamperWithPayment } from './console.js';
 import { seedDemo } from './demo.js';
-import { resetDemoHabitsIfStale, seedDemoHabits, type DemoPersona } from './demo-habits.js';
+import { seedDemoHabits, type DemoPersona } from './demo-habits.js';
 import { normalizeProviderId } from './env-normalize.js';
 import { answerFromLedger } from './fallback.js';
 import { LedgerError, type LedgerAuditor, type LedgerReader, type LedgerWriter } from './ledger.js';
@@ -431,9 +431,9 @@ export function createApp(deps: {
   /**
    * Practice demo history lives in memory, so a cold serverless instance that
    * never saw POST /demo/practice would render an empty demo. Every read path
-   * for a PRACTICE_* wallet seeds lazily instead. A read seeds an empty demo and
-   * resets a seed older than a day; the map below collapses concurrent calls for
-   * the same wallet within one instance so a burst of reads cannot double-seed.
+   * for a PRACTICE_* wallet seeds lazily instead. seedDemoHabits is idempotent;
+   * the map below collapses concurrent calls for the same wallet within one
+   * instance so a burst of reads cannot double-seed.
    */
   const PRACTICE_DEMO_PERSONAS: Record<string, DemoPersona> = {
     [PRACTICE_ANTHONY]: 'anthony',
@@ -446,11 +446,8 @@ export function createApp(deps: {
     if (!persona) return Promise.resolve();
     const inFlight = practiceSeedInFlight.get(accountId);
     if (inFlight) return inFlight;
-    const seeding = resetDemoHabitsIfStale(deps.spendLogs, personalFinance, accountId, persona, now())
-      .then(() => {
-        /* Re-check on the next read: a demo can expire while the process is up. */
-        practiceSeedInFlight.delete(accountId);
-      })
+    const seeding = seedDemoHabits(deps.spendLogs, personalFinance, accountId, persona, now())
+      .then(() => undefined)
       .catch((e: unknown) => {
         practiceSeedInFlight.delete(accountId);
         throw e;

@@ -1,0 +1,130 @@
+/* Design system v2 tokens. See docs/DESIGN.md. Colours only come from here. */
+
+.app, .app-preloader {
+  --bg: #fafaf9;
+  --surface: #ffffff;
+  --surface-2: #f4f4f2;
+  --surface-3: #ebebe8;
+  --line: #e6e6e2;
+  --line-strong: #d4d4cf;
+  --ink: #17181a;
+  --ink-2: #2c2e33;
+  --muted: #5f636b;
+  --faint: #6b6f77;
+  --accent: #2d4fc4;
+  --accent-hover: #2442a8;
+  --accent-ink: #ffffff;
+  --accent-soft: #eef1fb;
+  --pos: #1a7f4b;
+  --pos-soft: #e7f4ec;
+  --neg: #c8372d;
+  --neg-soft: #fbecea;
+  --warn: #a15c07;
+  --warn-soft: #fbf1e0;
+  --shadow: 0 1px 2px rgb(0 0 0 / 4%), 0 1px 1px rgb(0 0 0 / 3%);
+  --shadow-lg: 0 12px 32px -12px rgb(0 0 0 / 18%), 0 2px 6px rgb(0 0 0 / 6%);
+  color-scheme: light;
+
+  /* Spacing: a 4px grid. */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
+  --s8: 32px;
+  --s10: 40px;
+  --s12: 48px;
+  --s16: 64px;
+
+  /* Radii. */
+  --r1: 4px;
+  --r2: 6px;
+  --r3: 8px;
+
+  /* Type scale. */
+  --t-xs: 12px;
+  --t-sm: 13px;
+  --t-base: 14px;
+  --t-md: 16px;
+  --t-lg: 20px;
+  --t-xl: 28px;
+  --t-2xl: 40px;
+  --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Motion. */
+  --dur: 120ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Density: comfortable by default, compact via [data-density]. */
+  --row-h: 40px;
+  --pad: 16px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .app, :root:not([data-theme="light"]) .app-preloader {
+    --bg: #0f1012;
+    --surface: #16171a;
+    --surface-2: #1c1d21;
+    --surface-3: #24262b;
+    --line: #2a2c31;
+    --line-strong: #3a3d44;
+    --ink: #ececea;
+    --ink-2: #d4d4d1;
+    --muted: #a0a3aa;
+    --faint: #8f939b;
+    --accent: #8aa2ff;
+    --accent-hover: #a3b6ff;
+    --accent-ink: #0f1012;
+    --accent-soft: #1d2440;
+    --pos: #4cc38a;
+    --pos-soft: #13261c;
+    --neg: #ff7a70;
+    --neg-soft: #2c1715;
+    --warn: #f0b84a;
+    --warn-soft: #2a2110;
+    --shadow: 0 0 0 1px var(--line);
+    --shadow-lg: 0 16px 40px -16px rgb(0 0 0 / 70%), 0 0 0 1px var(--line);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] .app, :root[data-theme="dark"] .app-preloader {
+  --bg: #0f1012;
+  --surface: #16171a;
+  --surface-2: #1c1d21;
+  --surface-3: #24262b;
+  --line: #2a2c31;
+  --line-strong: #3a3d44;
+  --ink: #ececea;
+  --ink-2: #d4d4d1;
+  --muted: #a0a3aa;
+  --faint: #8f939b;
+  --accent: #8aa2ff;
+  --accent-hover: #a3b6ff;
+  --accent-ink: #0f1012;
+  --accent-soft: #1d2440;
+  --pos: #4cc38a;
+  --pos-soft: #13261c;
+  --neg: #ff7a70;
+  --neg-soft: #2c1715;
+  --warn: #f0b84a;
+  --warn-soft: #2a2110;
+  --shadow: 0 0 0 1px var(--line);
+  --shadow-lg: 0 16px 40px -16px rgb(0 0 0 / 70%), 0 0 0 1px var(--line);
+  color-scheme: dark;
+}
+
+[data-density="compact"] .app, [data-density="compact"] .app-preloader {
+  --row-h: 32px;
+  --pad: 12px;
+}
+
+html:has(.app), html:has(.app-preloader) { background: #fafaf9; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):has(.app), html:not([data-theme="light"]):has(.app-preloader) { background: #0f1012; }
+}
+html[data-theme="dark"]:has(.app), html[data-theme="dark"]:has(.app-preloader) { background: #0f1012; }
+
+.app .num, .app-preloader .num { font-variant-numeric: tabular-nums; }

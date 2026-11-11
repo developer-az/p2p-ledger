@@ -14,8 +14,8 @@ export const THEME_KEY = 'settle-theme';
 
 export type ThemeStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
-const LIGHT_COLOR = '#f4f3ee';
-const DARK_COLOR = '#0b0b0c';
+const LIGHT_COLOR = '#fafaf9';
+const DARK_COLOR = '#0f1012';
 
 const PREFS: readonly ThemePref[] = ['system', 'light', 'dark'];
 

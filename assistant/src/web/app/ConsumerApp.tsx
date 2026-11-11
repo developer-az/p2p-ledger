@@ -17,14 +17,15 @@ import { AddMoneySheet } from './SimpleSheets.js';
 import { AddSheet } from './AddSheet.js';
 import { NeedsYouCard, SettleUpSheet } from './SettleUp.js';
 import { WalletTab } from './WalletTab.js';
-import { Avatar, Confetti, ErrorNotice, Icon, ToastProvider, type IconName } from './ui.js';
+import { Avatar, ErrorNotice, Icon, ToastProvider, useToast, type IconName } from './ui.js';
 import { FloatingDock, useSwipeNav } from './dock.js';
 import { AppPreloader } from './Preloader.js';
 import { bootProgress, useBootProgress } from './boot-progress.js';
 import { LoadingSteps } from './LoadingSteps.js';
 import { Welcome } from './Welcome.js';
-import { SkyBackdrop } from './AuthSky.js';
-import { Mascot } from './Mascot.js';
+import { SignIn } from './SignIn.js';
+import { navigate, useRoute } from './router.js';
+import { BrandMark } from './BrandMark.js';
 import { READINESS_POLL_CAP_MS, readinessPollDelays, runReadinessPoll } from './readiness-poll.js';
 import { SiteFooter } from './SiteFooter.js';
 import { applyTheme, nextTheme, readTheme, saveTheme, themeLabel, type ThemePref } from './theme.js';
@@ -82,6 +83,11 @@ export function ConsumerApp() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(() => loadSession());
   const [bootReady, setBootReady] = useState(false);
+  const route = useRoute();
+  // start() is passed to children with a stable identity, so it reads the route
+  // from a ref instead of capturing this render's value.
+  const routeRef = useRef(route);
+  useEffect(() => { routeRef.current = route; }, [route]);
 
   // A sleeping ledger can fail the initial readiness probe. Poll the capabilities
   // after it wakes so the form does not stay disabled until a reload. Only worth
@@ -137,17 +143,19 @@ export function ConsumerApp() {
   }, []);
 
   useEffect(() => {
-    if (!session) document.title = 'Settle · know your money, keep the habit';
+    if (!session) document.title = 'Settle · transaction intelligence you run yourself';
   }, [session]);
 
   const start = useCallback((next: Session) => {
     saveSession(next);
     setSession(next);
+    if (routeRef.current.kind !== 'app') navigate({ kind: 'app', section: 'overview' }, { replace: true });
   }, []);
   const signOut = useCallback(() => {
     void api.logout().catch(() => undefined);
     clearSession();
     setSession(null);
+    navigate({ kind: 'landing' }, { replace: true });
   }, []);
 
   useEffect(() => {
@@ -156,7 +164,7 @@ export function ConsumerApp() {
     void api.authSession().then((body) => {
       if (!body.user || !body.account) return;
       start({ account: body.account, household: [], demo: false, user: body.user });
-      if (oauthComplete) window.history.replaceState(null, '', '/');
+      if (oauthComplete) navigate({ kind: 'app', section: 'overview' }, { replace: true });
     }).catch(() => undefined);
   }, [start]);
 
@@ -165,16 +173,23 @@ export function ConsumerApp() {
       <ToastProvider>
         <AppPreloader visible={!bootReady} />
         <div className={`app${bootReady ? ' app-ready' : ''}`}>
-          <SkyBackdrop />
           <a className="skip" href="#main">Skip to content</a>
           {session && boot ? (
             <Signed boot={boot} session={session} onSwitch={start} onSignOut={signOut} />
+          ) : route.kind === 'signin' || route.kind === 'signup' ? (
+            <main id="main" className="main">
+              <SignIn
+                key={route.kind}
+                mode={route.kind === 'signup' ? 'create' : 'signin'}
+                boot={boot}
+                bootError={bootError}
+                onStart={start}
+              />
+            </main>
           ) : (
-            <>
-              <main id="main" className="main main-welcome">
-                <Welcome boot={boot} bootError={bootError} onStart={start} />
-              </main>
-            </>
+            <main id="main" className="main main-welcome">
+              <Welcome boot={boot} bootError={bootError} onStart={start} />
+            </main>
           )}
           <SiteFooter variant={session && boot ? 'compact' : 'full'} boot={boot} session={session} />
         </div>
@@ -196,7 +211,7 @@ function Brand({ onHome }: { onHome?: () => void }) {
         onHome();
       } : undefined}
     >
-      <Mascot size={28} track={false} idle={false} mood="happy" />
+      <BrandMark size={28} />
       <span className="brand-word">settle</span>
     </a>
   );
@@ -248,10 +263,28 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   const [addMode, setAddMode] = useState<'spent' | 'got'>('spent');
   const [settleMode, setSettleMode] = useState<'ask' | 'settle'>('ask');
   const [askSeed, setAskSeed] = useState<string | null>(null);
-  const [burst, setBurst] = useState(0);
   const [menu, setMenu] = useState(false);
   const [theme, setTheme] = useState<ThemePref>(() => readTheme());
   const menuRef = useRef<HTMLDivElement>(null);
+  const toast = useToast();
+  const route = useRoute();
+
+  // OAuth failures can land on any signed-in URL, not just the ones that expect
+  // them. Say what happened, then drop the query so a reload stays quiet.
+  useEffect(() => {
+    const authError = new URLSearchParams(window.location.search).get('authError');
+    if (!authError) return;
+    const message = authError === 'google-link' || authError === 'google'
+      ? 'Google could not be connected or signed in. Try again from Account access.'
+      : authError === 'link-required'
+        ? 'That Google account matches an existing email. Sign in with your password, then connect Google from Account access.'
+        : 'Sign-in did not complete. Try again.';
+    toast(message, { tone: 'bad' });
+    if (route.kind === 'app') navigate(route, { replace: true });
+    else navigate({ kind: 'app', section: 'overview' }, { replace: true });
+    // Mount only: later failures are handled by the sign-in and account screens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     // Re-apply the saved theme if the pre-paint script did not run.
@@ -334,7 +367,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   // Swipe-driven navigation on the main pane. Vertical scrolling still wins.
   const swipe = useSwipeNav(TAB_IDS, tab, go);
   const closeSheet = () => setSheet(null);
-  const celebrate = () => setBurst(Date.now());
   const openSettle = (mode: 'ask' | 'settle' = 'ask') => {
     setSettleMode(mode);
     setSheet('settle');
@@ -389,9 +421,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
       onDismiss={() => setShowDemoGuide(false)}
       onExit={() => {
         onSignOut();
-        window.setTimeout(() => {
-          document.getElementById('own-wallet')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 450);
+        navigate({ kind: 'signup' });
       }}
       onPatterns={() => go('patterns')}
     />
@@ -481,7 +511,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
                 name={session.user?.displayName}
                 data={data}
                 guide={demoGuide}
-                cheer={burst}
                 actions={{
                   addMoney: () => setSheet('add'),
                   logSpend: openLog,
@@ -544,8 +573,8 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         initialAmount={logPreset.amountMinor}
         onChanged={reload}
         walletRun={walletRun}
-        onSpent={() => { celebrate(); markDemo('log'); }}
-        onIncome={() => { celebrate(); markDemo('income'); }}
+        onSpent={() => markDemo('log')}
+        onIncome={() => markDemo('income')}
         onSplit={() => openSettle('ask')}
       />
       <SetupSheet
@@ -564,7 +593,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
       />
       <ActivitySheet item={item} accountId={me.id} onClose={() => setItem(null)} onChanged={reload} />
       <SettleUpSheet open={sheet === 'settle'} onClose={closeSheet} me={me} onChanged={reload} initialMode={settleMode} />
-      <Confetti burst={burst} />
     </>
   );
 }

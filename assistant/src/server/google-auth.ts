@@ -35,7 +35,7 @@ export function installGoogleAuth(app: Hono, auth: AuthStore,
     const linking = c.req.query('link') === '1';
     if (!linking && c.req.query('accepted') !== '1') return c.redirect(config.origin + '/google-signin');
     if (linking && (!session || !await auth.userForToken(hashSessionToken(session), new Date())))
-      return c.redirect(config.origin + '/?authError=link-required#account');
+      return c.redirect(config.origin + '/signin?authError=link-required');
     const link = linking && session ? hashSessionToken(session) : null;
     await setSignedCookie(c, cookie, JSON.stringify({ state, nonce, verifier, link, expires: Date.now() + 600_000 }), config.secret,
       { httpOnly: true, secure: true, sameSite: 'Lax', path: '/api/auth/google', maxAge: 600 });
@@ -48,38 +48,41 @@ export function installGoogleAuth(app: Hono, auth: AuthStore,
     const config = googleConfig();
     if (!config || !auth.persistent) return c.json({ error: 'Google sign-in is not configured.' }, 503);
     c.header('Referrer-Policy', 'no-referrer');
-    const fail = () => c.redirect(config.origin + '/?authError=google#account');
+    const fail = () => c.redirect(config.origin + '/signin?authError=google');
+    let failFlow = fail;
     try {
       const raw = await getSignedCookie(c, config.secret, cookie);
       deleteCookie(c, cookie, { path: '/api/auth/google', secure: true });
       if (!raw) return fail();
       const flow = JSON.parse(raw);
+      // A linking failure must land where the signed-in user can see it; /signin renders the app.
+      failFlow = flow?.link ? () => c.redirect(config.origin + '/account-access?authError=google-link') : fail;
       const code = c.req.query('code');
-      if (flow.expires < Date.now() || flow.state !== c.req.query('state') || !code || code.length > 4096) return fail();
-      if (!await auth.allowAuthAttempt('google-code:' + hashSessionToken(code), new Date(), 1)) return fail();
+      if (flow.expires < Date.now() || flow.state !== c.req.query('state') || !code || code.length > 4096) return failFlow();
+      if (!await auth.allowAuthAttempt('google-code:' + hashSessionToken(code), new Date(), 1)) return failFlow();
       const response = await fetch('https://oauth2.googleapis.com/token', { method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(15_000),
         body: new URLSearchParams({ code, client_id: config.clientId, client_secret: config.secret,
           redirect_uri: config.redirect, grant_type: 'authorization_code', code_verifier: flow.verifier }) });
-      if (!response.ok) return fail();
+      if (!response.ok) return failFlow();
       const tokens = await response.json() as { id_token?: string };
-      if (!tokens.id_token) return fail();
+      if (!tokens.id_token) return failFlow();
       const { payload } = await jwtVerify(tokens.id_token, keys, { audience: config.clientId,
         issuer: ['https://accounts.google.com', 'accounts.google.com'], algorithms: ['RS256'], maxTokenAge: '10m',
         requiredClaims: ['sub', 'exp', 'iat', 'nonce', 'email', 'email_verified'] });
       if (!payload.sub || payload.nonce !== flow.nonce || payload.email_verified !== true || typeof payload.email !== 'string'
-        || (payload.azp !== undefined && payload.azp !== config.clientId)) return fail();
+        || (payload.azp !== undefined && payload.azp !== config.clientId)) return failFlow();
       let user = await auth.findByGoogleSubject(payload.sub);
       if (flow.link) {
         const session = getCookie(c, SESSION_COOKIE);
-        if (!session || hashSessionToken(session) !== flow.link) return fail();
+        if (!session || hashSessionToken(session) !== flow.link) return failFlow();
         const current = await auth.userForToken(flow.link, new Date());
-        if (!current || (user && user.id !== current.id)) return fail();
+        if (!current || (user && user.id !== current.id)) return failFlow();
         if (!user) await auth.linkGoogleSubject(payload.sub, current.id);
         user = current;
       } else if (!user) {
         const email = payload.email.toLowerCase();
-        if (await auth.findByEmail(email)) return c.redirect(config.origin + '/?authError=link-required#account');
+        if (await auth.findByEmail(email)) return c.redirect(config.origin + '/signin?authError=link-required');
         // Stable, secret-derived reservation credential allows retries after a ledger
         // outage. It is never disclosed and cannot be computed from the public subject.
         const reservationPassword = createHmac('sha256', config.secret).update('google-provision:' + payload.sub).digest('base64url');
@@ -88,6 +91,6 @@ export function installGoogleAuth(app: Hono, auth: AuthStore,
       }
       await issueSession(c, user.id);
       return c.redirect(config.origin + '/?authComplete=google');
-    } catch { return fail(); }
+    } catch { return failFlow(); }
   });
 }

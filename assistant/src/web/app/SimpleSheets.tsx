@@ -40,7 +40,7 @@ export function AddMoneySheet({
     try {
       await api.deposit(me.id, minor);
       await onChanged();
-      toast(`Added ${money(minor)} to your Settle wallet`, { tone: 'good' });
+      toast(`Money added · ${money(minor)}`, { tone: 'good' });
       onClose();
     } catch (e) {
       setError((e as Error).message);

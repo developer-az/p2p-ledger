@@ -1,15 +1,16 @@
 import './app.css';
+import './styles/footer.css';
 import type { BootstrapResponse } from '../api.js';
-import { Mascot } from './Mascot.js';
+import { BrandMark } from './BrandMark.js';
 import type { Session } from './session.js';
 
 /**
  * The two footers Settle shows.
  *
- * `full` is the evening-ink band under the landing page and the legal pages:
- * brand, product links, resources, legal, and the status of the live ledger.
- * `compact` is the slim bar under a signed-in wallet, which keeps the dock
- * clear on small screens.
+ * `full` sits under the landing page and the legal pages: the mark, the link
+ * groups and the fine print, in the same paper-and-hairline language as the
+ * landing page. `compact` is the slim bar under a signed-in wallet, which keeps
+ * the dock clear on small screens.
  */
 
 type FooterLink = { label: string; href: string; external?: boolean };
@@ -79,15 +80,15 @@ export function SiteFooter({ boot, session, variant }: {
   return (
     <footer className="site-footer site-footer-full">
       <div className="site-footer-inner">
-        <div className="site-footer-grid">
+        <div className="site-footer-row">
           <div className="site-footer-brand">
             <a className="site-footer-logo" href="/" aria-label="Settle home">
-              <Mascot size={36} track={false} idle={false} mood="happy" />
-              <span>settle</span>
+              <BrandMark size={16} />
+              <span>Settle</span>
             </a>
-            <p className="site-footer-pitch">Know your money. Keep the habit.</p>
+            <p className="site-footer-pitch">Transaction intelligence you run yourself.</p>
             {boot ? (
-              <p className={`site-footer-pill${boot.live ? ' is-live' : ''}`}>
+              <p className={`site-footer-status${boot.live ? ' is-live' : ''}`}>
                 <span className="site-footer-dot" aria-hidden="true" />
                 {boot.live ? 'Ledger online' : 'Ledger waking up'}
               </p>
@@ -96,10 +97,12 @@ export function SiteFooter({ boot, session, variant }: {
           <Column
             title="Product"
             links={[
-              { label: 'How it works', href: `${root}#how` },
-              { label: 'Ask', href: `${root}#ask` },
-              { label: 'Security', href: `${root}#trust` },
-              { label: 'Create account', href: `${root}#account` },
+              { label: 'Overview', href: `${root}#overview` },
+              { label: 'Pipeline', href: `${root}#pipeline` },
+              { label: 'Sample data', href: `${root}#figures` },
+              { label: 'Security', href: `${root}#security` },
+              { label: 'Run it', href: `${root}#run` },
+              { label: 'Create account', href: '/signup' },
             ]}
           />
           <Column
@@ -119,7 +122,7 @@ export function SiteFooter({ boot, session, variant }: {
             ]}
           />
         </div>
-        <div className="site-footer-bottom">
+        <div className="site-footer-fine">
           <p>{'©'} 2026 Settle. All rights reserved.</p>
           <p>Settle is not a bank. Balances are records you enter.</p>
         </div>

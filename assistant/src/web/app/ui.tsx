@@ -34,7 +34,6 @@ const PATHS = {
   chevronDown: 'M6 9l6 6 6-6',
   download: 'M12 4v11M7 11l5 5 5-5M5 20h14',
   logout: 'M10 4H5v16h5M15 8l4 4-4 4M19 12H9',
-  flame: 'M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z',
   income: 'M17 7L7 17M7 9v8h8',
   swap: 'M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7',
   sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3zM19 16l.9 2.1L22 19l-2.1.9L19 22l-.9-2.1L16 19l2.1-.9L19 16z',
@@ -280,29 +279,6 @@ export function ProgressRing({
         />
       </svg>
       <div className="ring-center">{children}</div>
-    </div>
-  );
-}
-
-/* Chrome flakes, not party confetti — the celebration has to look like the house. */
-const CONFETTI_COLORS = ['#ffffff', '#d9d9d5', '#b9b9b3', '#8f8f8a', '#fdfdfb', '#6f6f6a'];
-
-/** A short, CSS-only celebration. Key it with a changing number to replay. */
-export function Confetti({ burst }: { burst: number }) {
-  if (!burst) return null;
-  return (
-    <div className="confetti" aria-hidden="true" key={burst}>
-      {Array.from({ length: 22 }, (_, i) => (
-        <span
-          key={i}
-          style={{
-            left: `${8 + ((i * 37) % 84)}%`,
-            background: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-            animationDelay: `${(i % 7) * 35}ms`,
-            transform: `rotate(${(i * 47) % 360}deg)`,
-          }}
-        />
-      ))}
     </div>
   );
 }

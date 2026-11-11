@@ -4,7 +4,7 @@ try {
   if (theme === 'light' || theme === 'dark') {
     document.documentElement.dataset.theme = theme;
     document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
-      meta.setAttribute('content', theme === 'light' ? '#f4f3ee' : '#0b0b0c');
+      meta.setAttribute('content', theme === 'light' ? '#fafaf9' : '#0f1012');
     });
   }
 } catch {

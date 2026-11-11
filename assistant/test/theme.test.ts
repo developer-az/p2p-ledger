@@ -208,10 +208,10 @@ describe('applyTheme', () => {
 
     const lightMetas = [fakeMeta('(prefers-color-scheme: light)'), fakeMeta('(prefers-color-scheme: dark)')];
     applyTheme('light', fakeDoc(lightMetas));
-    expect(lightMetas.map((m) => m.content)).toEqual(['#f4f3ee', '#f4f3ee']);
+    expect(lightMetas.map((m) => m.content)).toEqual(['#fafaf9', '#fafaf9']);
 
     applyTheme('dark', fakeDoc(metas));
-    expect(metas.map((m) => m.content)).toEqual(['#0b0b0c', '#0b0b0c']);
+    expect(metas.map((m) => m.content)).toEqual(['#0f1012', '#0f1012']);
   });
 
   it('follows each meta media query for system', () => {
@@ -221,9 +221,9 @@ describe('applyTheme', () => {
 
     applyTheme('system', fakeDoc([light, dark, noMedia]));
 
-    expect(light.content).toBe('#f4f3ee');
-    expect(dark.content).toBe('#0b0b0c');
-    expect(noMedia.content).toBe('#f4f3ee');
+    expect(light.content).toBe('#fafaf9');
+    expect(dark.content).toBe('#0f1012');
+    expect(noMedia.content).toBe('#fafaf9');
   });
 });
 

@@ -8,7 +8,6 @@ import {
   type SettleRail,
 } from '../api.js';
 import { displayName, money, plural } from './format.js';
-import { Mascot } from './Mascot.js';
 import { applyResolvedOverlay, rememberResolved, type ResolvedMark } from './settle-overlay.js';
 import { Avatar, Icon, Sheet, useToast } from './ui.js';
 
@@ -186,8 +185,7 @@ function BalanceSummary({
   if (square) {
     return (
       <div className={`settle-balance is-square${compact ? ' is-compact' : ''}`} role="status">
-        <Mascot size={compact ? 44 : 56} mood="happy" still track={false} />
-        <p className="settle-square-text">All square. Nobody owes anybody.</p>
+        <p className="settle-square-text">No open requests.</p>
       </div>
     );
   }
@@ -500,7 +498,7 @@ export function SettleUpSheet({
       await api.createRequests(body, pendingSplit.current.key);
       await Promise.all([reload(), onChanged()]);
       pendingSplit.current = null;
-      toast(`Asked for ${money(minor)}`, { tone: 'good' });
+      toast(`Request sent · ${money(minor)}`, { tone: 'good' });
       setPicked([]);
       setText('');
       setMemo('');

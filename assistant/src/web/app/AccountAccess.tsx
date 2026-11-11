@@ -2,12 +2,14 @@ import { useState } from 'react';
 import './app.css';
 
 export function AccountAccess() {
+  const [authError] = useState(() => typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('authError'));
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   return <div className="app"><main className="main" style={{ maxWidth: 640, padding: '48px 24px' }}>
     <a href="/">Back to Settle</a>
     <h1>Account access</h1>
+    {authError === 'google-link' && <p role="alert">Google could not be connected to this account. Try Connect Google again.</p>}
     <p>Connect Google to your signed-in account, or disconnect it using your Settle password.</p>
     <p><a href="/api/auth/google/start?link=1">Connect Google</a></p>
     <form onSubmit={async event => {

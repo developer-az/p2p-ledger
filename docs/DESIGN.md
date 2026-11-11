@@ -1,58 +1,193 @@
-# Settle consumer UI — design system
+# Settle design system v2
 
-Anchored to [PRODUCT.md](./PRODUCT.md). **Operate** surfaces use standard app chrome; the visual world only changes type, palette, density, and one signature move (Impeccable `mode-operate`).
+Anchored to [PRODUCT.md](./PRODUCT.md). Tokens live in
+`assistant/src/web/app/styles/tokens.css`. Colours come from there and nowhere
+else; screens read tokens, never hex values.
 
-## Visual world: "Sky" (daylight, white glass, ink, one volt accent)
+## Principles
 
-| Token / element | Rule |
-|-----------------|------|
-| Ground | One sky behind every screen: `SkyBackdrop` (in `AuthSky.tsx`) is a fixed layer with the sky gradient (`--sky-top` to `--sky-low`), a sun glow and two depths of slowly drifting clouds. The welcome hero and the sign-in scene fade into it at their edges; the footer stands on the cloud floor. Dark mode is a night sky with a few stars. |
-| Surfaces | White cloud-glass cards (near-opaque white, lit top edge, sky-tinted float shadow), radius 22px. No `backdrop-filter` on cards: the clouds behind them move. |
-| Dusk | The one dark material is an evening-sky blue (`--dusk`, `--dusk-flat`): the Settle card (with a few stars), the Ask card, ink stat tiles, the welcome Ask tile, toasts, the dock and its "+" ring. Nothing on the page is black. |
-| Ink | `#111726`. Primary buttons are ink. |
-| Volt (the only accent) | Lime `#c8f53b`, Pip's colour, used as a **fill** with ink text (dock "+", active tab, ring, habit dots). Never lime text on a light ground. |
-| Type | **Bricolage Grotesque** (display), **Geist** (UI), **Geist Mono** (labels, eyebrows, sub-amounts). |
-| Hero object | The **Settle card**: an evening-sky Apple Wallet-style card (`.s-card`) that tilts toward the pointer (`TiltCard`). Used on Welcome and as the Today hero. |
-| Character | **Pip** (`Pip.tsx`): a lime bean with a sprout, stubby hands and feet. Eyes follow the pointer or a `lookAt` point; the sprout leans against the gaze on a soft spring. Blinks (sometimes twice), fidgets every 7 to 13 s when idle (hop with squash and stretch, glance, sprout shake, wave), leans and blushes when hovered, hops with arms up on `cheer`. `shy` puts both hands over its eyes (password fields), `peek` lowers one. Mood still comes only from real numbers (`pipMood`). Logo-sized Pips pass `idle={false}`. |
-| Adding | **One way in.** The dock has a raised lime "+" in the middle on every tab (no other add buttons). It opens `AddSheet`: type an amount, then tap what it was; the tap saves. "I spent / I got paid" swaps category tiles for income sources. Recent spends are one-tap repeats with Undo on the toast. Notes are behind "+ Add a note". Splitting a bill is a link to Settle Up. |
-| Fewer controls | The dock holds Today, Activity, "+", Patterns, Ask. Wallet lives in the account menu. No top-bar Ask, no floating add button, no quick-action row; the Today ask bar suggests a question in its placeholder instead of chip buttons. |
-| Welcome | A daytime sky hero with drifting clouds, the tilting card and Pip; "how it works" bento; then the account section **above the clouds** (`AuthSky.tsx`): a morning sky, three depths of drifting cloud, a sun, twinkles, Pip riding its own cloud, and a frosted-glass card (the one place `backdrop-filter` is used). Fields use floating labels; the password has Show/Hide. Pip reads along the field being typed in, covers its eyes on the password, peeks when it is shown, and hops when a valid email is entered. |
+- **Calm and dense.** A ledger is a working surface: more rows, fewer cards,
+  less ornament. Whitespace groups related data instead of padding out a page.
+- **Keyboard first.** Every action has a key path and a visible focus state.
+  Nothing depends on a pointer hover to be discoverable.
+- **Data over decoration.** Numbers, dates and labels carry the screen. No hero
+  imagery, no gradients, no illustration behind content.
+- **One accent.** Indigo (`--accent`) marks the primary action and the current
+  selection. It does not tint headings, icons or decoration.
+- **Colour for state only.** Green, red and amber mean positive, negative and
+  warning, never emphasis or branding.
+- **Motion under 150ms, state changes only.** `--dur` is 120ms, applied to
+  hover, focus, pressed and disclosure. Nothing animates on load or scrolls by
+  itself.
+- **No mascot, streaks, confetti or celebratory copy.** A transaction is
+  recorded; that is the whole reward.
 
-## Motion stack budget (this repo)
+## Tokens
 
-Global picks live in `~/.agents/SKILLS-ROUTING.md` ("Motion and visual stack"). The staged plan for the libraries below (each optional unit has a drop rule) is [docs/ai/PREMIUM-VISUALS-PROMPT.md](./ai/PREMIUM-VISUALS-PROMPT.md). Here:
+### Colour
 
-| Library | Status | Where |
-|---------|--------|-------|
-| `motion` | **Installed**, the only animation dependency | All surfaces via `motion-kit.tsx` and `Pip.tsx`. Use `m.*`, never `motion.*`: `ConsumerApp` wraps everything in `<LazyMotion strict>` and loads `domAnimation` from `motion-features.ts` as its own chunk. Layout animations (`layout`, `layoutId`) and drag need `domMax`; switch the import there only if a feature needs them. |
-| Rive | Candidate | Only to replace hand-built Pip if Pip needs more states than eyes/blink/jump. Must keep `pipMood` as the source of mood. |
-| GSAP + Lenis | Welcome only, if ever | A scroll-told Welcome. Never on Today, Activity, Wallet, Ask, or sheets (Lenis breaks sheet scroll and text selection). |
-| React Three Fiber | Not planned | A 3D Settle card would duplicate `TiltCard`. Lazy-load with a static fallback if a future Welcome needs it. |
-| Aceternity / Magic UI / React Bits | Reference only | Copy a pattern, restyle to Sky tokens (ink, white glass, volt). No glow borders or purple. Frosted glass only on the sign-in scene. |
+| Token | Light | Dark | Use |
+|-------|-------|------|-----|
+| `--bg` | `#fafaf9` | `#0f1012` | Page ground |
+| `--surface` | `#ffffff` | `#16171a` | Cards, panels, inputs |
+| `--surface-2` | `#f4f4f2` | `#1c1d21` | Nested panels, table headers, hover rows |
+| `--surface-3` | `#ebebe8` | `#24262b` | Pressed rows, inert blocks |
+| `--line` | `#e6e6e2` | `#2a2c31` | Hairline borders, row dividers |
+| `--line-strong` | `#d4d4cf` | `#3a3d44` | Input borders, emphasis rules |
+| `--ink` | `#17181a` | `#ececea` | Primary text |
+| `--ink-2` | `#2c2e33` | `#d4d4d1` | Secondary text, dense table values |
+| `--muted` | `#5f636b` | `#a0a3aa` | Labels, metadata, helper text |
+| `--faint` | `#6b6f77` | `#8f939b` | Placeholders, disabled text |
+| `--accent` | `#2d4fc4` | `#8aa2ff` | Primary button fill, selection, active nav |
+| `--accent-hover` | `#2442a8` | `#a3b6ff` | Accent hover state |
+| `--accent-ink` | `#ffffff` | `#0f1012` | Text on accent fills |
+| `--accent-soft` | `#eef1fb` | `#1d2440` | Selection background, accent chips |
+| `--pos` | `#1a7f4b` | `#4cc38a` | Money in, settled state |
+| `--pos-soft` | `#e7f4ec` | `#13261c` | Positive chip background |
+| `--neg` | `#c8372d` | `#ff7a70` | Money out, errors, destructive actions |
+| `--neg-soft` | `#fbecea` | `#2c1715` | Negative chip background, error banner |
+| `--warn` | `#a15c07` | `#f0b84a` | Needs attention, stale data |
+| `--warn-soft` | `#fbf1e0` | `#2a2110` | Warning banner background |
+| `--shadow` | `0 1px 2px rgb(0 0 0 / 4%), 0 1px 1px rgb(0 0 0 / 3%)` | `0 0 0 1px var(--line)` | Resting elevation |
+| `--shadow-lg` | `0 12px 32px -12px rgb(0 0 0 / 18%), 0 2px 6px rgb(0 0 0 / 6%)` | `0 16px 40px -16px rgb(0 0 0 / 70%), 0 0 0 1px var(--line)` | Menus, dialogs, popovers |
 
-## Product invariants (never swap for metaphor)
+Dark theme resolves from the same token names: `prefers-color-scheme: dark`
+(unless `[data-theme="light"]` is set) and an explicit `[data-theme="dark"]`.
 
-- Wallet's expense CSV import reuses the existing card, form, button and status styles. Activity's proof panel offers an explicit chain-receipt check and JSON download. Both show unavailable/error states without implying money moved. No new visual or animation dependencies.
+### Spacing
 
-- Weekly **progress ring**, habit dots and pace copy on the Today card
-- Two-tap logging (amount, then the category tap saves), category colors (Okabe–Ito), streak pill
-- Patterns heatmap, demo guide, sheet dismiss (pointer down/up outside panel)
-- Ask is read-only; the Today ask bar only routes the question to the Ask tab
+A 4px grid. There are no intermediate values.
 
-## Process (how rolls should run here)
+| `--s1` | `--s2` | `--s3` | `--s4` | `--s5` | `--s6` | `--s8` | `--s10` | `--s12` | `--s16` |
+|---|---|---|---|---|---|---|---|---|---|
+| 4px | 8px | 12px | 16px | 20px | 24px | 32px | 40px | 48px | 64px |
 
-1. `impeccable context` + `concept-seed --scope direction --mode operate`
-2. **Pin** direction in `.impeccable/surfaces/…` + owner approval when roll conflicts with PRODUCT
-3. **Replace** tokens in `app.css` (no overlay file); update all surfaces
-4. `buildPath: code` in `.impeccable/config.json` for this app
-5. Verify desktop + mobile in running app; update this file from what shipped
+### Radii
 
-## What failed before
+| Token | Value | Use |
+|-------|-------|-----|
+| `--r1` | 4px | Chips, badges, small inputs |
+| `--r2` | 6px | Buttons, inputs, menu items |
+| `--r3` | 8px | Cards, panels, dialogs |
 
-- Unattended roll → café punch card + `punch-card.css` on monochrome `app.css` + removed photos = half redesign.
-- `frontend-design` “pick extreme” without a pinned contract = template shopping.
-- Bullet-journal and AURA layers were stacked as override sheets on top of each other. Pocket replaced the token block and the whole override tail in one pass; keep one layer.
+### Type scale
 
-- Authentication (2026-11-07): neutral bordered account panel, 48px inputs and Google action, shared multicolor Google mark; dedicated /google-signin confirmation screen with eligibility, permissions explanation and policy/support links. Existing marketing layout retained.
+| Token | Value | Use |
+|-------|-------|-----|
+| `--t-xs` | 12px | All-caps labels, table captions, chips |
+| `--t-sm` | 13px | Secondary text, table cells |
+| `--t-base` | 14px | Body and UI default |
+| `--t-md` | 16px | Lead sentences, input values |
+| `--t-lg` | 20px | Section headings |
+| `--t-xl` | 28px | Page titles |
+| `--t-2xl` | 40px | Landing statement only |
 
-- Contrast (2026-11-08): daytime Welcome hero and auth scene own light foreground/surface tokens in either OS theme; app screens retain night mode. Secondary text and dark-card labels must remain readable; dock active foreground/background change together. Google entry uses the shared branded button inside the Sky form.
+Fonts: `--font` is Inter; `--mono` is the system monospace stack. Weights in use
+are 400, 500 and 600.
+
+### Density
+
+| Token | Comfortable | Compact |
+|-------|-------------|---------|
+| `--row-h` | 40px | 32px |
+| `--pad` | 16px | 12px |
+
+`[data-density="compact"]` on `<html>` switches the values. Tables and list rows
+read `--row-h` and `--pad`, so they follow the preference without extra rules.
+
+### Motion
+
+| Token | Value |
+|-------|-------|
+| `--dur` | 120ms |
+| `--ease` | `cubic-bezier(0.2, 0, 0, 1)` |
+
+Transitions apply to hover, focus, pressed and open/closed states. Long
+animations, parallax, auto-scrolling and celebratory effects are out.
+
+## Typography
+
+- Inter 400 for body, 500 for labels and emphasis, 600 for headings and buttons.
+- Headings use tight tracking: page titles `-0.02em`, section headings
+  `-0.01em`. No condensed or stretched cuts.
+- Every amount uses `.num`, which sets `font-variant-numeric: tabular-nums`, so
+  columns line up as values change.
+- Small labels are uppercase, 12px, weight 500, `letter-spacing: 0.08em`, in
+  `--muted`. They label a section or a column; they never carry a sentence.
+- Sentence case everywhere else. No title case in body copy.
+
+## Layout
+
+- Everything sits on the 4px grid (`--s1` through `--s16`).
+- **Landing page**: a 12-column grid, max width 1200px, 24px gutters. Under
+  768px it becomes 4 columns with 16px gutters. Sections are separated by 1px
+  `--line` rules, numbered `01`–`05`, each with a small all-caps label.
+- **App shell**: a sidebar plus a top bar. The sidebar holds navigation groups,
+  the account switcher and the theme control; the top bar holds breadcrumbs,
+  search and the primary action. This shell ships in M7b. Until then the current
+  consumer screens run on the v2 tokens through the alias layer.
+
+## Components
+
+- **Buttons.** Primary is an accent fill with `--accent-ink` text and 600 weight.
+  Secondary is `--surface` with a 1px `--line-strong` border and `--ink` text.
+  Ghost has no background or border, only muted text that turns `--ink` on
+  hover. Height is 32px compact, 36px comfortable; radius `--r2`; one 120ms
+  transition.
+- **Inputs.** `--surface` background, 1px `--line-strong` border, radius `--r2`,
+  `--t-base` text, placeholder in `--faint`. Focus adds a 2px accent ring. Error
+  state uses `--neg` for the border and `--neg-soft` behind the message.
+- **Cards.** `--surface` background, 1px `--line` border, radius `--r3`. Use
+  `--shadow` only where a card must separate from a same-tone panel. No heavy
+  drop shadows, no glass blur.
+- **Tables and rows.** Row height `--row-h`, horizontal padding `--pad`,
+  dividers in `--line`. Amounts right-aligned with `.num`. Header labels use the
+  small all-caps style.
+- **Chips.** Radius `--r1`, `--t-xs`, padding `4px 8px`. Neutral chips use
+  `--surface-2` with `--muted` text. State chips use `--pos-soft`/`--pos`,
+  `--neg-soft`/`--neg`, `--warn-soft`/`--warn`. Accent chips use
+  `--accent-soft`/`--accent`.
+- **Empty states.** One sentence in `--muted`, an optional outline button, and
+  the `Planned · M#` label when the feature is not built. No illustration.
+- **Planned labels.** `Planned · M#` in the small all-caps style, colour
+  `--muted` or `--warn`. They sit next to any control that does not work yet.
+
+## Copy rules
+
+- Write plain statements in the active voice. "Spend logged · $4.50", not
+  "Nice one!".
+- Sentence case for headings, buttons and labels.
+- State only what works today. Describe the pipeline, security model and
+  features as they exist in the shipped code.
+- Label anything unbuilt `Planned · M#`, with the milestone that ships it. Never
+  describe a planned feature as available.
+- Name amounts with their currency. Include the sign or the word in/out, not
+  colour alone.
+
+## Accessibility
+
+- Body text meets AA contrast (4.5:1) in both themes; large text and UI borders
+  reach at least 3:1. `--muted` and `--faint` are tested against `--bg` and
+  `--surface`.
+- `:focus-visible` draws a 2px accent ring with a 2px offset. Never remove it.
+- Interactive targets are at least 44px on touch screens under 640px.
+- `prefers-reduced-motion` removes non-essential transitions and animations.
+- No horizontal scrolling at 360px. Tables collapse to stacked rows rather than
+  overflow.
+- State is never carried by colour alone: pair it with text or an icon.
+
+## Brand mark
+
+A static geometric "S": three horizontal ledger rules joined by short verticals,
+with a short hook at each end so it does not read as a 5. Drawn in `currentColor`
+(`BrandMark.tsx`, 24px viewBox, 3-unit stroke); the favicon is the same shape on an
+ink square. It replaces the mascot everywhere.
+
+## Legacy
+
+Old token names (`--pen`, `--lime`, `--sky-top`, `--dusk`, `--radius`,
+`--display`, …) still resolve through an alias block at the top of
+`assistant/src/web/app/app.css`. The aliases point at v2 tokens, so current
+screens pick up the neutral palette and Inter without being restyled. The alias
+block and the POCKET CSS layer are removed in M7b as each screen moves onto v2
+components, and hex values outside `tokens.css` go with them.

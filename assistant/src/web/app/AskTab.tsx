@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { api, type BootstrapResponse, type ToolCall, type Turn } from '../api.js';
 import { useDebouncedCallback, useOnceGuard } from './debounce.js';
 import { Icon } from './ui.js';
-import { Mascot } from './Mascot.js';
 
 const TOOL_WORDS: Record<string, string> = {
   get_account_overview: 'your balance',
@@ -45,8 +44,6 @@ export function AskTab({
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** Bumped when an answer lands so Settle hops once. */
-  const [answered, setAnswered] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
 
   /**
@@ -100,7 +97,6 @@ export function AskTab({
                 : undefined,
         },
       ]);
-      setAnswered((n) => n + 1);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -113,7 +109,6 @@ export function AskTab({
   return (
     <div className="ask-page">
       <header className="patterns-head ask-head">
-        <Mascot size={64} mood="calm" cheer={answered} className="ask-mascot" />
         <div>
           <p className="eyebrow">Ask</p>
           <h1>A conversation with your records.</h1>
@@ -145,11 +140,6 @@ export function AskTab({
           ) : null}
           {messages.map((m, i) => (
             <div key={i} className={`chat-turn chat-${m.role}`}>
-              {m.role === 'assistant' ? (
-                <span className="chat-avatar" aria-hidden="true">
-                  <Mascot still size={30} mood="calm" />
-                </span>
-              ) : null}
               <div>
                 <div className={`bubble ${m.role === 'user' ? 'bubble-user' : 'bubble-ai'}`}>{m.text}</div>
                 {m.role === 'assistant' && ((m.checked && m.checked.length > 0) || m.note) ? (
@@ -162,7 +152,6 @@ export function AskTab({
           ))}
           {busy ? (
             <div className="chat-status" role="status">
-              <Mascot size={22} track={false} idle={false} mood="happy" />
               <span className="chat-status-bars" aria-hidden="true"><i /><i /><i /></span>
               <span>Settle is reading your records…</span>
             </div>

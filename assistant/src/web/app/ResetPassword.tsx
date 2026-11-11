@@ -57,7 +57,7 @@ export function ResetPassword() {
           ) : !token ? (
             <>
               <p className="muted">This page needs the link from the reset email. Ask for a new link from the sign-in form.</p>
-              <a className="btn" href="/#own-wallet">Back to sign in</a>
+              <a className="btn" href="/signin">Back to sign in</a>
             </>
           ) : (
             <form className="reset-form" onSubmit={(e) => { e.preventDefault(); void submit(); }}>

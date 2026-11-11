@@ -5,8 +5,6 @@ import { moneyPlan } from './money-plan.js';
 import { TrustTab } from './TrustTab.js';
 import type { WalletData } from './data.js';
 import { Icon, Skeleton } from './ui.js';
-import { CountUp, TiltCard } from './motion-kit.js';
-import { Mascot } from './Mascot.js';
 
 export interface WalletActions {
   setup: () => void;
@@ -57,15 +55,15 @@ export function WalletTab({
             </div>
             {plan.hasBaseline ? (
               <>
-                <TiltCard className="s-card snapshot-card-hero" max={4}>
+                <div className="s-card snapshot-card-hero">
                   <div className="s-card-top">
                     <span className="s-card-brand">settle</span>
                     <span className="s-card-private"><Icon name="lock" size={12} /> Private</span>
                   </div>
                   <p className="s-card-label">Net position</p>
-                  <p className="s-card-amount num"><CountUp minor={plan.netMinor ?? plan.ledgerMinor} /></p>
+                  <p className="s-card-amount num">{money(plan.netMinor ?? plan.ledgerMinor)}</p>
                   <p className="s-card-sub">Projected cash minus card balance</p>
-                </TiltCard>
+                </div>
                 <dl className="snapshot-rows">
                   <div><dt>Cash baseline</dt><dd className="num">{money(plan.cashMinor ?? 0)}</dd></div>
                   {periodIncomeMinor > 0 ? (
@@ -93,7 +91,6 @@ export function WalletTab({
             </div>
             <div className="mini-stats">
               <div><span className="stat-label">Active days</span><strong className="num">{patterns?.totals.activeDays30d ?? 0}</strong></div>
-              <div><span className="stat-label">Current streak</span><strong className="num">{patterns?.streak.currentDays ?? 0} days</strong></div>
               <div><span className="stat-label">Logged out this month</span><strong className="num">{money(patterns?.month.spentMinor ?? 0)}</strong></div>
               <div><span className="stat-label">Logged in this month</span><strong className="num">{money(patterns?.month.incomeMinor ?? 0)}</strong></div>
             </div>
@@ -115,7 +112,6 @@ export function WalletTab({
 
         <div className="stack">
           <section className="ask-card" aria-labelledby="wallet-ask">
-            <Mascot size={56} mood="calm" className="ask-card-mascot" />
             <p className="eyebrow">A second pair of eyes</p>
             <h2 id="wallet-ask">Ask about your money</h2>
             <p className="ask-lede">Read-only answers from your records. It cannot move a cent.</p>

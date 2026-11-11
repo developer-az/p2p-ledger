@@ -1,0 +1,278 @@
+import { useState, type MouseEvent } from 'react';
+import { api, type BootstrapResponse } from '../api.js';
+import { BrandMark } from './BrandMark.js';
+import { GoogleButton } from './GoogleButton.js';
+import { navigate } from './router.js';
+import type { Session } from './session.js';
+import { useToast } from './ui.js';
+import './styles/signin.css';
+
+type SignInMode = 'signin' | 'create';
+
+/** OAuth callbacks return to the landing page with a code, which seeds the first error shown. */
+function initialError(): string | null {
+  const code = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('authError');
+  if (code === 'link-required') return 'Sign in with your existing password first, then connect Google from your account.';
+  if (code === 'google') return 'Google sign-in could not finish. Please try again.';
+  return null;
+}
+
+/** A plain left click navigates in place; every modified click keeps the browser default. */
+function handleLink(route: 'signin' | 'signup') {
+  return (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    event.preventDefault();
+    navigate({ kind: route });
+  };
+}
+
+export function SignIn({
+  mode,
+  boot,
+  bootError,
+  onStart,
+}: {
+  mode: SignInMode;
+  boot: BootstrapResponse | null;
+  bootError: string | null;
+  onStart: (session: Session) => void;
+}) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(initialError);
+  const [forgot, setForgot] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [resetSent, setResetSent] = useState<string | null>(null);
+  const toast = useToast();
+  const persistent = boot?.identity?.persistent === true;
+  const accountAvailable = mode === 'create'
+    ? boot?.identity?.signupAvailable !== false
+    : boot?.identity?.signinAvailable !== false;
+  const resetAvailable = boot?.identity?.passwordResetAvailable !== false;
+
+  async function submitForgot() {
+    if (busy || !resetAvailable) return;
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail.includes('@')) {
+      setError('Enter a valid email.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.requestPasswordReset(trimmedEmail);
+      setResetSent(res.message);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitAccount() {
+    if (forgot) return submitForgot();
+    if (!boot || busy || !accountAvailable) return;
+    const trimmedEmail = email.trim();
+    const trimmedName = name.trim();
+    if (mode === 'create' && !trimmedName) {
+      setError('Enter the name you want on the account.');
+      return;
+    }
+    if (!trimmedEmail.includes('@')) {
+      setError('Enter a valid email.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Use at least 8 characters.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const result = mode === 'create'
+        ? await api.register({ email: trimmedEmail, password, displayName: trimmedName })
+        : await api.login({ email: trimmedEmail, password });
+      onStart({ account: result.account, household: [], demo: false, user: result.user });
+      toast(
+        mode === 'create'
+          ? 'Your account is ready. Set your starting point with your own numbers.'
+          : `Welcome back, ${result.user.displayName}.`,
+        { tone: 'good' },
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="signin">
+      <div className="signin-top">
+        <a className="signin-home" href="/">
+          <BrandMark size={20} />
+          <span>Settle</span>
+        </a>
+      </div>
+
+      <div className="signin-grid">
+        <div className="signin-main">
+          <h1>{mode === 'create' ? 'Create your account' : 'Sign in to Settle'}</h1>
+          <p className="signin-lede">
+            {mode === 'create'
+              ? 'One email, one wallet. You start empty, and the sample household never mixes with yours.'
+              : 'Sign in and pick up right where you left off.'}
+          </p>
+
+          <form className="signin-form" aria-busy={busy} onSubmit={(e) => { e.preventDefault(); void submitAccount(); }}>
+            {forgot ? (
+              <>
+                <p className="signin-note">Enter the email on your account and we will send a link to choose a new password.</p>
+                <div className="signin-field">
+                  <label className="signin-label" htmlFor="account-email">Email</label>
+                  <input
+                    id="account-email"
+                    required
+                    disabled={busy}
+                    type="email"
+                    autoComplete="email"
+                    inputMode="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+                {resetSent ? <p className="signin-note" role="status">{resetSent}</p> : null}
+                <button className="signin-submit" type="submit" disabled={busy || !resetAvailable}>
+                  {busy ? 'Sending…' : resetSent ? 'Send again' : 'Send reset link'}
+                </button>
+                <button
+                  type="button"
+                  className="signin-ghost"
+                  onClick={() => { setForgot(false); setResetSent(null); setError(null); }}
+                >
+                  Back to sign in
+                </button>
+              </>
+            ) : (
+              <>
+                {boot?.identity?.googleAvailable ? (
+                  <>
+                    <GoogleButton href="/google-signin" disabled={busy} />
+                    <div className="auth-divider"><span>or continue with email</span></div>
+                  </>
+                ) : null}
+                {mode === 'create' ? (
+                  <div className="signin-field">
+                    <label className="signin-label" htmlFor="account-name">Name</label>
+                    <input
+                      id="account-name"
+                      required
+                      disabled={busy}
+                      maxLength={40}
+                      autoComplete="name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  </div>
+                ) : null}
+                <div className="signin-field">
+                  <label className="signin-label" htmlFor="account-email">Email</label>
+                  <input
+                    id="account-email"
+                    required
+                    disabled={busy}
+                    type="email"
+                    autoComplete="email"
+                    inputMode="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+                <div className="signin-field">
+                  <label className="signin-label" htmlFor="account-password">
+                    {mode === 'create' ? 'Password, 8+ characters' : 'Password'}
+                  </label>
+                  <div className="signin-secret">
+                    <input
+                      id="account-password"
+                      required
+                      maxLength={72}
+                      disabled={busy}
+                      type={showPassword ? 'text' : 'password'}
+                      data-secret="true"
+                      autoComplete={mode === 'create' ? 'new-password' : 'current-password'}
+                      minLength={8}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="signin-reveal"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      aria-pressed={showPassword}
+                    >
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                </div>
+                <button className="signin-submit" type="submit" disabled={!boot || busy || !accountAvailable}>
+                  {busy ? 'One moment…' : mode === 'create' ? 'Create account' : 'Sign in'}
+                </button>
+                {mode === 'signin' ? (
+                  <button
+                    type="button"
+                    className="signin-text"
+                    onClick={() => { setForgot(true); setResetSent(null); setError(null); }}
+                  >
+                    Forgot password?
+                  </button>
+                ) : null}
+              </>
+            )}
+
+            {!accountAvailable || (forgot && !resetAvailable) ? (
+              <p className="signin-note" aria-live="polite">
+                {forgot && !resetAvailable
+                  ? 'Password reset email is not connected on this deployment. No email was sent.'
+                  : boot?.identity?.unavailableReason}
+              </p>
+            ) : null}
+            {error && error !== boot?.identity?.unavailableReason ? <p className="signin-error" role="alert">{error}</p> : null}
+            {bootError ? <p className="signin-error" role="alert">{bootError}</p> : null}
+            {boot && accountAvailable && !forgot ? (
+              <p className="signin-note" aria-live="polite">
+                {persistent
+                  ? mode === 'create'
+                    ? 'Your account will be saved. Use this email to sign in next time.'
+                    : 'Sign in to return to your saved records.'
+                  : 'On this server the account lasts until the process restarts. A connected database keeps it.'}
+              </p>
+            ) : null}
+          </form>
+
+          <p className="signin-switch">
+            {mode === 'create' ? (
+              <>Have an account? <a href="/signin" onClick={handleLink('signin')}>Sign in</a></>
+            ) : (
+              <>No account? <a href="/signup" onClick={handleLink('signup')}>Create one</a></>
+            )}
+          </p>
+        </div>
+
+        <aside className="signin-aside" aria-labelledby="signin-aside-title">
+          <p className="signin-aside-label" id="signin-aside-title">How your data is handled</p>
+          <ul className="signin-aside-list">
+            <li>Passwords are stored only as salted scrypt hashes.</li>
+            <li>Settle never asks for your bank password.</li>
+            <li>You can download your statement at any time.</li>
+            <li>Two-factor sign-in <span className="planned">Planned · M2</span></li>
+            <li>Delete your account and data <span className="planned">Planned · M2</span></li>
+          </ul>
+        </aside>
+      </div>
+    </div>
+  );
+}

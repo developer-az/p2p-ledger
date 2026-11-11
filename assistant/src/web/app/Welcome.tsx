@@ -6,7 +6,7 @@ import type { Session } from './session.js';
 import { CountUp, EASE_OUT, InView, RevealWords, TiltCard } from './motion-kit.js';
 import { Mascot } from './Mascot.js';
 import { GoogleButton } from './GoogleButton.js';
-import { AuthSky } from './AuthSky.js';
+import { AuthSky, Cloud } from './AuthSky.js';
 import { Icon, useToast } from './ui.js';
 
 type AuthMode = 'signin' | 'create';
@@ -284,6 +284,12 @@ export function Welcome({
       </header>
 
       <section className="w-hero" aria-labelledby="w-title">
+        {/* A daytime sky the page climbs out of: the sign-in scene at the
+            bottom of the page is the same sky, above the clouds. */}
+        <div className="sky-layer w-clouds" aria-hidden="true">
+          <Cloud className="h1" tone="b" /><Cloud className="h2" /><Cloud className="h3" tone="b" /><Cloud className="h4" />
+        </div>
+
         <div className="w-hero-body">
           <div className="w-copy">
             <m.p className="w-status" {...rise(0.05)}>

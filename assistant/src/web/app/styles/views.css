@@ -77,7 +77,7 @@
   min-width: 0;
   min-height: 84px;
   padding: var(--s4);
-  background: var(--bg);
+  background: var(--glass-bg);
 }
 
 .app .v-fig-label {
@@ -125,6 +125,45 @@
 
 .app .v-fig-value.is-neg .v-fig-note {
   color: inherit;
+}
+
+.app .v-fig > .v-fig-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  line-height: 1.45;
+}
+
+/* Inline sparkline: one paint, no motion, sized by its cell. */
+.app .spark {
+  display: block;
+  width: 100%;
+  height: 28px;
+  margin-top: var(--s1);
+  overflow: visible;
+  color: var(--ink);
+}
+
+.app .spark-pos {
+  color: var(--pos);
+}
+
+.app .spark-neg {
+  color: var(--neg);
+}
+
+.app .spark-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.8;
+}
+
+.app .spark-area {
+  fill: currentColor;
+  opacity: 0.1;
 }
 
 /* ---------- Panels ---------- */
@@ -326,22 +365,26 @@
   line-height: 1.05;
 }
 
-.app .v-compare {
+.app .v-delta {
   margin: var(--s2) 0 0;
   color: var(--muted);
   font-size: var(--t-sm);
 }
 
-.app .v-compare .is-pos {
+.app .v-delta .is-pos {
   color: var(--pos);
   font-weight: 500;
   white-space: nowrap;
 }
 
-.app .v-compare .is-neg {
+.app .v-delta .is-neg {
   color: var(--neg);
   font-weight: 500;
   white-space: nowrap;
+}
+
+.app .month-note {
+  margin-top: var(--s2);
 }
 
 /* ---------- Category bars ---------- */
@@ -356,9 +399,9 @@
 
 .app .v-cat {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--s2) var(--s3);
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: var(--s1) var(--s2);
 }
 
 .app .v-cat-label {
@@ -369,6 +412,14 @@
   white-space: nowrap;
 }
 
+.app .v-cat-share {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .app .v-cat-amount {
   color: var(--ink);
   font-size: var(--t-sm);
@@ -377,15 +428,17 @@
 
 .app .v-cat-track {
   grid-column: 1 / -1;
-  height: 4px;
+  height: 6px;
   overflow: hidden;
+  border-radius: 999px;
   background: var(--surface-3);
 }
 
 .app .v-cat-bar {
   display: block;
   height: 100%;
-  background: color-mix(in srgb, var(--ink) 70%, transparent);
+  border-radius: 999px;
+  background: var(--cat-other);
 }
 
 /* ---------- Feed rows ---------- */
@@ -406,12 +459,12 @@
 
 .app .v-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: 36px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--s3);
   width: 100%;
   min-height: var(--row-h);
-  padding: 0 var(--pad);
+  padding: 12px var(--pad);
   border: 0;
   background: none;
   color: inherit;
@@ -419,7 +472,7 @@
 }
 
 .app .v-row:hover {
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
 }
 
 .app .v-row:focus-visible {
@@ -427,10 +480,25 @@
   outline-offset: -2px;
 }
 
+/* The avatar is the category colour at the same 16% fill as a tag, so the row
+   and its tag read as one family. The icon itself mixes 65% of the hue toward
+   ink to keep the small glyph legible in light mode. */
+.app .v-glyph {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--tint, var(--ink)) 65%, var(--ink));
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  line-height: 1;
+}
+
 .app .v-row-main {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s2);
+  display: grid;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -448,7 +516,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--muted);
-  font-size: var(--t-sm);
+  font-size: var(--t-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -457,20 +525,23 @@
   --tint: var(--ink);
   --tint-strength: var(--tint-neutral);
   justify-self: start;
-  padding: 0 var(--s2);
-  border-radius: var(--r1);
-  color: var(--muted);
+  padding: 1px 10px;
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--tint) 65%, var(--ink));
   font-size: var(--t-xs);
+  font-weight: 500;
   line-height: 20px;
   white-space: nowrap;
 }
 
 .app .v-amount {
-  grid-column: 3;
+  grid-column: 4;
   justify-self: end;
   color: var(--ink);
-  font-size: var(--t-base);
+  font-family: var(--mono);
+  font-size: var(--t-sm);
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -512,6 +583,43 @@
 }
 
 /* ---------- Empty states ---------- */
+
+.app .empty-block {
+  display: grid;
+  justify-items: start;
+  gap: var(--s2);
+  padding: var(--s5) 0;
+}
+
+.app .empty-icon {
+  --tint: var(--ink);
+  --tint-strength: var(--tint-neutral);
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  color: var(--muted);
+}
+
+.app .empty-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-base);
+  font-weight: 500;
+}
+
+.app .empty-copy {
+  margin: 0;
+  max-width: 46ch;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  line-height: 1.55;
+}
+
+.app .empty-action {
+  padding-top: var(--s1);
+}
 
 .app .v-empty {
   margin: 0;
@@ -649,17 +757,34 @@
 
 @media (max-width: 639px) {
   .app .v-row {
-    align-items: start;
-    padding-block: var(--s2);
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-items: center;
+    padding-block: 12px;
+  }
+
+  .app .v-glyph {
+    grid-column: 1;
+    grid-row: 1 / span 2;
   }
 
   .app .v-row-main {
+    grid-column: 2;
+    grid-row: 1;
     display: grid;
     gap: 2px;
   }
 
   .app .v-chip {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
     margin-top: 2px;
+  }
+
+  .app .v-amount {
+    grid-column: 3;
+    grid-row: 1 / span 2;
   }
 
   .app .v-seg {

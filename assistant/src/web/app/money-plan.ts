@@ -56,6 +56,29 @@ export function moneyPlan(view: AccountView | null | undefined): MoneyPlan {
   };
 }
 
+/**
+ * The month-to-date income KPI only counts money the person logged.
+ *
+ * A bank deposit moves money the person already owns onto the ledger, so it is
+ * counted in the balance and the feed, never as income. The practice household
+ * shows this clearly: its +$5,000 "Added from bank" transfer is not income, and
+ * a logged salary from last month is outside this month's window. The tile
+ * label and note say what the figure contains instead of overstating it.
+ */
+export interface MonthIncomeSummary {
+  minor: number;
+  label: string;
+  note: string;
+}
+
+export function monthIncomeSummary(view: AccountView | null | undefined): MonthIncomeSummary {
+  return {
+    minor: view?.patterns?.month.incomeMinor ?? 0,
+    label: 'Income logged this month',
+    note: 'Bank transfers are counted in your balance, not as income.',
+  };
+}
+
 export function suggestedWeeklyBudget(cashMinor: number | null, monthlyIncomeMinor = 0): number {
   const base = monthlyIncomeMinor > 0 ? monthlyIncomeMinor / 4 : cashMinor === null ? 0 : cashMinor * 0.18;
   const rounded = Math.round(base / 1000) * 1000;

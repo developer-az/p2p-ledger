@@ -1,7 +1,22 @@
-import { Fragment } from 'react';
-import { categoryLabel } from './categories.js';
+import { Fragment, type CSSProperties } from 'react';
+import { categoryLabel, categoryMeta, feedGlyph, incomeSourceLabel } from './categories.js';
 import { groupByDay, money, monthDay, timeLabel } from './format.js';
 import type { FeedItem } from './feed.js';
+import { Icon } from './ui.js';
+
+/** Inline tint for the glyph and tag: the material reads `--tint` / `--tint-strength`. */
+function tintStyle(color: string): CSSProperties {
+  return { '--tint': color, '--tint-strength': 'var(--tint-state)' } as CSSProperties;
+}
+
+/** Spend tags carry the category, income tags the source; ledger rows carry none. */
+function tagFor(item: FeedItem): { label: string; color: string } | null {
+  if (item.kind === 'income') {
+    return { label: incomeSourceLabel(item.category ?? 'other'), color: 'var(--pos)' };
+  }
+  if (item.category) return { label: categoryLabel(item.category), color: categoryMeta(item.category).color };
+  return null;
+}
 
 export function FeedRow({ item, onOpen, showTime = false }: { item: FeedItem; onOpen: (item: FeedItem) => void; showTime?: boolean }) {
   const incoming = item.signedMinor > 0 && item.kind !== 'declined';
@@ -11,16 +26,26 @@ export function FeedRow({ item, onOpen, showTime = false }: { item: FeedItem; on
   // A flat list (Overview) has no header, so each row shows its date instead.
   const meta = showTime ? timeLabel(item.occurredAt) : monthDay(item.occurredAt);
   const amountClass = `v-amount num${incoming ? ' is-pos' : ''}${declined ? ' is-failed' : ''}`;
+  const glyph = feedGlyph(item.kind, item.category);
+  const tag = tagFor(item);
+  const fallback = item.title.trim().charAt(0).toUpperCase() || '·';
   return (
     <li>
       <button type="button" className="v-row" onClick={() => onOpen(item)}>
+        <span
+          className="v-glyph glass-tint"
+          style={glyph ? tintStyle(glyph.color) : undefined}
+          aria-hidden="true"
+        >
+          {glyph ? <Icon name={glyph.icon} size={18} /> : fallback}
+        </span>
         <span className="v-row-main">
           <span className="v-row-title">{item.title}</span>
           <span className="v-row-sub">
             {item.subtitle}{meta ? ` · ${meta}` : ''}
           </span>
         </span>
-        {item.category ? <span className="v-chip">{categoryLabel(item.category)}</span> : null}
+        {tag ? <span className="v-chip" style={tintStyle(tag.color)}>{tag.label}</span> : null}
         <span className={amountClass}>
           {sign}{money(Math.abs(item.signedMinor))}
         </span>

@@ -3,7 +3,7 @@ import './styles/views.css';
 import './styles/insights.css';
 import { categoryMeta } from './categories.js';
 import { money } from './format.js';
-import { moneyPlan, moneyStory, monthsToClear } from './money-plan.js';
+import { moneyPlan, moneyStory, monthsToClear, monthIncomeSummary } from './money-plan.js';
 import { CategoryMoversChart, DailyTrendChart, MonthPaceChart } from './pattern-charts.js';
 import { buildActions, habitPeak, patternsState } from './pattern-insights.js';
 import { Icon, ProgressRing, Skeleton } from './ui.js';
@@ -37,6 +37,8 @@ export function InsightsTab({
   const patterns = plan?.patterns ?? null;
   const actions = useMemo(() => (patterns ? buildActions(patterns) : []), [patterns]);
   if (!data || !plan) return <Skeleton height={420} />;
+
+  const income = monthIncomeSummary(data.view);
 
   const stories = moneyStory(plan);
   const state = patternsState(data.view);
@@ -130,9 +132,10 @@ export function InsightsTab({
             <div className="ins-body">
               <div className="month-grid">
                 <div><span className="stat-label">Logged out</span><strong className="num">{money(patterns?.month.spentMinor ?? 0)}</strong></div>
-                <div><span className="stat-label">Logged in</span><strong className="num">{money(patterns?.month.incomeMinor ?? 0)}</strong></div>
+                <div><span className="stat-label">{income.label}</span><strong className="num">{money(income.minor)}</strong></div>
                 <div><span className="stat-label">Heading toward</span><strong className="num">{money(patterns?.month.projectedSpendMinor ?? 0)}</strong></div>
               </div>
+              <p className="hint month-note">{income.note}</p>
               {patterns ? (
                 <MonthPaceChart days={patterns.days} month={patterns.month} previous30Minor={patterns.totals.spendPrev30dMinor} />
               ) : null}

@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import './styles/views.css';
 import type { AccountRef, SpendCategory } from '../api.js';
-import { categoryLabel } from './categories.js';
+import { cashSeries, dailySeries } from '../chart-data.js';
+import { categoryLabel, categoryMeta } from './categories.js';
 import { buildFeed, type FeedItem } from './feed.js';
 import { FeedList } from './FeedList.js';
 import { money } from './format.js';
 import { moneyPlan } from './money-plan.js';
 import type { WalletData } from './data.js';
-import { Icon, Skeleton } from './ui.js';
+import { EmptyState, Icon, Skeleton, Sparkline } from './ui.js';
 
 export interface HomeActions {
   logSpend: (preset?: { category?: SpendCategory; amountMinor?: number }) => void;
@@ -30,6 +31,12 @@ export function Home({ me, name, data, actions }: { me: AccountRef; name?: strin
   const previousSpent = patterns?.totals.spendPrev30dMinor ?? 0;
   const monthDelta = monthSpent - previousSpent;
   const categories = (patterns?.categories ?? []).slice(0, 5);
+  const days = patterns?.days ?? [];
+  const spendTrend = dailySeries(days, 'spendMinor');
+  // The cash trend is only real when logged spends and income move the wallet;
+  // the profile flag says whether they do.
+  const walletMoves = data.view.moneyProfile?.spendLogsAffectWallet !== false;
+  const cashTrend = walletMoves && plan.cashMinor !== null ? cashSeries(days, plan.cashMinor) : [];
   const dateLine = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
   return (
@@ -39,7 +46,7 @@ export function Home({ me, name, data, actions }: { me: AccountRef; name?: strin
         <p className="v-sub">{dateLine}</p>
       </header>
 
-      {plan.hasBaseline ? <FigureStrip plan={plan} actions={actions} /> : <StartingPoint actions={actions} />}
+      {plan.hasBaseline ? <FigureStrip plan={plan} actions={actions} cashTrend={cashTrend} /> : <StartingPoint actions={actions} />}
 
       <AskBar onAsk={actions.ask} />
 
@@ -50,10 +57,9 @@ export function Home({ me, name, data, actions }: { me: AccountRef; name?: strin
             <button type="button" className="v-link" onClick={actions.seeAll}>View all</button>
           </div>
           {feed.length === 0 ? (
-            <div className="v-empty">
-              <p className="v-empty-title">No transactions yet</p>
-              <p>Log a spend or some income to see it here.</p>
-            </div>
+            <EmptyState icon="list" title="No transactions yet">
+              Log a spend or some income to see it here.
+            </EmptyState>
           ) : (
             <FeedList items={feed.slice(0, 8)} onOpen={actions.openItem} grouped={false} />
           )}
@@ -65,13 +71,18 @@ export function Home({ me, name, data, actions }: { me: AccountRef; name?: strin
               <h2 id="month-title">This month</h2>
             </div>
             <p className="v-month-value num">{money(monthSpent)}</p>
-            <p className="v-compare">
-              vs {money(previousSpent)} in the previous 30 days
-              {monthDelta !== 0 ? (
-                <span className={monthDelta < 0 ? 'is-pos' : 'is-neg'}>
-                  {' '}{monthDelta < 0 ? '↓' : '↑'} {money(Math.abs(monthDelta))}
-                </span>
-              ) : null}
+            <Sparkline values={spendTrend} tone="neg" label="Daily spend over the last 30 days" />
+            <p className="v-delta">
+              {monthDelta === 0 ? (
+                `No change against ${money(previousSpent)} in the previous 30 days`
+              ) : (
+                <>
+                  <span className={monthDelta < 0 ? 'is-pos' : 'is-neg'}>
+                    {monthDelta < 0 ? '↓' : '↑'} {money(Math.abs(monthDelta))}
+                  </span>{' '}
+                  {monthDelta < 0 ? 'less' : 'more'} than the previous 30 days
+                </>
+              )}
             </p>
           </section>
 
@@ -87,9 +98,16 @@ export function Home({ me, name, data, actions }: { me: AccountRef; name?: strin
                 {categories.map((category) => (
                   <li className="v-cat" key={category.category}>
                     <span className="v-cat-label">{categoryLabel(category.category)}</span>
+                    <span className="v-cat-share">{category.sharePct}%</span>
                     <span className="v-cat-amount num">{money(category.totalMinor)}</span>
                     <span className="v-cat-track" aria-hidden="true">
-                      <span className="v-cat-bar" style={{ width: `${Math.min(100, category.sharePct)}%` }} />
+                      <span
+                        className="v-cat-bar"
+                        style={{
+                          width: `${Math.min(100, category.sharePct)}%`,
+                          background: categoryMeta(category.category).color,
+                        }}
+                      />
                     </span>
                   </li>
                 ))}
@@ -102,20 +120,22 @@ export function Home({ me, name, data, actions }: { me: AccountRef; name?: strin
   );
 }
 
-function FigureStrip({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; actions: HomeActions }) {
+function FigureStrip({ plan, actions, cashTrend }: { plan: ReturnType<typeof moneyPlan>; actions: HomeActions; cashTrend: number[] }) {
   const net = plan.netMinor ?? plan.ledgerMinor;
   const budget = plan.budgetMinor;
+  const netTrend = cashTrend.map((value) => value - plan.creditMinor);
   return (
     <section className="v-figs" aria-label="Money position" data-tour="overview-figures">
       <div className="v-fig glass">
         <p className="v-fig-label">Net position</p>
         <p className={`v-fig-value num${net < 0 ? ' is-neg' : ''}`}>{money(net)}</p>
+        <Sparkline values={netTrend} label="Net position movement over the last 30 days" />
       </div>
       <div className="v-fig glass">
         <p className="v-fig-label">Cash</p>
         {plan.cashMinor === null
           ? <p className="v-fig-value is-muted">Not set</p>
-          : <p className="v-fig-value num">{money(plan.cashMinor)}</p>}
+          : <><p className="v-fig-value num">{money(plan.cashMinor)}</p><Sparkline values={cashTrend} label="Cash movement over the last 30 days" /></>}
       </div>
       <div className="v-fig glass">
         <p className="v-fig-label">On cards</p>

@@ -28,9 +28,9 @@ function prefersReducedMotion(): boolean {
  * over 600ms, writing textContent directly so React never re-renders per frame.
  * The last frame writes the server-rendered string, so the final value is exact.
  */
-function countUp(root: HTMLElement): void {
+function countUp(root: HTMLElement): () => void {
   const targets = Array.from(root.querySelectorAll<HTMLElement>('[data-count-to]'));
-  if (targets.length === 0) return;
+  if (targets.length === 0) return () => {};
   const rows = targets.map((el) => ({
     el,
     to: Number(el.dataset.countTo),
@@ -38,6 +38,7 @@ function countUp(root: HTMLElement): void {
     isMoney: el.dataset.countKind === 'money',
   }));
   const start = performance.now();
+  let pending = 0;
   const frame = (now: number) => {
     const t = Math.min(1, (now - start) / TICKER_MS);
     const eased = 1 - (1 - t) ** 3;
@@ -49,9 +50,10 @@ function countUp(root: HTMLElement): void {
       const value = Math.round(row.to * eased);
       row.el.textContent = row.isMoney ? money(value) : String(value);
     }
-    if (t < 1) requestAnimationFrame(frame);
+    if (t < 1) pending = requestAnimationFrame(frame);
   };
-  requestAnimationFrame(frame);
+  pending = requestAnimationFrame(frame);
+  return () => cancelAnimationFrame(pending);
 }
 
 /** The five pipeline stages, in the order the diagram draws them. */
@@ -224,13 +226,18 @@ export function Welcome({
     const strip = figsRef.current;
     if (!figures || !strip) return;
     if (typeof IntersectionObserver === 'undefined' || prefersReducedMotion()) return;
+    let cancels: Array<() => void> = [];
     const observer = new IntersectionObserver((entries) => {
       if (!entries.some((entry) => entry.isIntersecting)) return;
       observer.disconnect();
-      countUp(strip);
+      cancels.push(countUp(strip));
     }, { threshold: 0.35 });
     observer.observe(strip);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      for (const cancel of cancels) cancel();
+      cancels = [];
+    };
   }, [figures]);
 
   // The figures come from the sample household, which the server seeds on read.

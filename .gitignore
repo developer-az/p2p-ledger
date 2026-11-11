@@ -24,3 +24,4 @@ assistant/evals/results/
 .verify/
 .playwright-cli/
 .vercel
+.cache_ggshield

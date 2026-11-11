@@ -1,12 +1,15 @@
-import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
+import { isIP } from 'node:net';
 import { promisify } from 'node:util';
 import { pgSsl } from './db-tls.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
 
 const scrypt = promisify(scryptCb);
 
-export const SESSION_COOKIE = 'settle_session';
-export const SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 30;
+export const SESSION_COOKIE = '__Host-settle_session';
+export const SESSION_IDLE_MS = 30 * 60 * 1000;
+export const SESSION_ABSOLUTE_MS = 7 * 24 * 60 * 60 * 1000;
+export const SESSION_MAX_AGE_SEC = SESSION_ABSOLUTE_MS / 1000;
 
 export class EmailTakenError extends Error {
   constructor() {
@@ -24,6 +27,22 @@ export interface AuthRecord {
   ownerId: string;
 }
 
+export interface SessionSummary {
+  id: string;
+  createdAt: Date;
+  lastSeenAt: Date;
+  device: string;
+  ipPrefix: string | null;
+  /** Internal only: the route compares this to the caller's token hash. */
+  tokenHash: string;
+}
+
+export interface SessionMeta {
+  createdAt?: Date;
+  device?: string;
+  ipPrefix?: string | null;
+}
+
 export interface AuthStore {
   unlinkGoogle(userId: string): Promise<void>;
   findByGoogleSubject(subject: string): Promise<AuthRecord | null>;
@@ -36,8 +55,11 @@ export interface AuthStore {
   insert(user: AuthRecord): Promise<void>;
   provision(input: { email: string; password: string; displayName: string },
     createAccount: (user: AuthRecord) => Promise<void>): Promise<AuthRecord>;
-  saveSession(tokenHash: string, userId: string, expiresAt: Date): Promise<void>;
+  saveSession(tokenHash: string, userId: string, expiresAt: Date, meta?: SessionMeta): Promise<void>;
   userForToken(tokenHash: string, now: Date): Promise<AuthRecord | null>;
+  listSessions(userId: string): Promise<SessionSummary[]>;
+  /** True only when the public id belongs to this user. */
+  revokeSession(userId: string, publicId: string): boolean | Promise<boolean>;
   deleteSession(tokenHash: string): Promise<void>;
   /** Ends every session of a user (after a password reset). */
   deleteSessionsForUser(userId: string): Promise<void>;
@@ -70,6 +92,61 @@ export function hashSessionToken(token: string): string {
 
 export function newSessionToken(): string {
   return randomBytes(32).toString('base64url');
+}
+
+/** Short, non-identifying browser/OS label such as "Chrome on Windows". */
+export function deviceLabel(userAgent: string | undefined | null): string {
+  const ua = (userAgent ?? '').trim();
+  if (!ua) return 'Unknown device';
+  let browser: string;
+  if (/Edg\//i.test(ua)) browser = 'Edge';
+  else if (/OPR\//i.test(ua)) browser = 'Opera';
+  else if (/Firefox\//i.test(ua)) browser = 'Firefox';
+  else if (/Chrome\//i.test(ua) || /CriOS\//i.test(ua)) browser = 'Chrome';
+  else if (/Safari\//i.test(ua)) browser = 'Safari';
+  else if (/^curl\//i.test(ua)) browser = 'curl';
+  else if (/PostmanRuntime\//i.test(ua)) browser = 'Postman';
+  else browser = ua.split(/[\s/]/)[0]?.slice(0, 24) || 'Unknown';
+  let os = '';
+  if (/Windows/i.test(ua)) os = 'Windows';
+  else if (/iPhone|iPad|iPod/i.test(ua)) os = 'iOS';
+  else if (/Android/i.test(ua)) os = 'Android';
+  else if (/Macintosh|Mac OS X/i.test(ua)) os = 'macOS';
+  else if (/Linux/i.test(ua)) os = 'Linux';
+  return (os ? `${browser} on ${os}` : browser).slice(0, 40);
+}
+
+/** /24 for an IPv4 first hop, /48 for IPv6, else null. */
+export function ipPrefix(forwardedFor: string | undefined | null): string | null {
+  let host = forwardedFor?.split(',')[0]?.trim() ?? '';
+  if (!host) return null;
+  if (host.startsWith('[')) {
+    const end = host.indexOf(']');
+    host = end > 0 ? host.slice(1, end) : host;
+  } else if (!isIP(host) && /^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(host)) {
+    host = host.slice(0, host.lastIndexOf(':'));
+  }
+  const kind = isIP(host);
+  if (kind === 4) {
+    const octets = host.split('.');
+    return `${octets[0]}.${octets[1]}.${octets[2]}.0/24`;
+  }
+  if (kind !== 6) return null;
+  const [head, tail] = host.toLowerCase().split('::');
+  const left = head ? head.split(':').filter(Boolean) : [];
+  const right = tail ? tail.split(':').filter(Boolean) : [];
+  const groups = tail === undefined
+    ? left
+    : [...left, ...Array<string>(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right];
+  return `${groups.slice(0, 3).join(':')}::/48`;
+}
+
+function sessionCreatedAt(expiresAt: Date, meta?: SessionMeta): Date {
+  return meta?.createdAt ?? new Date(expiresAt.getTime() - SESSION_ABSOLUTE_MS);
+}
+
+function normalizeDevice(device?: string): string {
+  return (device?.trim() || 'Unknown device').slice(0, 40);
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -110,7 +187,10 @@ export class InMemoryAuthStore implements AuthStore {
   readonly persistent = false;
   private readonly byEmail = new Map<string, AuthRecord>();
   private readonly byId = new Map<string, AuthRecord>();
-  private readonly sessions = new Map<string, { userId: string; expiresAt: number }>();
+  private readonly sessions = new Map<string, {
+    userId: string; createdAt: number; lastSeenAt: number; expiresAt: number;
+    publicId: string; device: string; ipPrefix: string | null;
+  }>();
 
   private readonly attempts = new Map<string, { window: number; count: number }>();
   async allowAuthAttempt(bucket: string, now: Date, limit = 10): Promise<boolean> {
@@ -160,18 +240,55 @@ export class InMemoryAuthStore implements AuthStore {
     this.byId.set(user.id, user);
   }
 
-  async saveSession(tokenHash: string, userId: string, expiresAt: Date): Promise<void> {
-    this.sessions.set(tokenHash, { userId, expiresAt: expiresAt.getTime() });
+  async saveSession(tokenHash: string, userId: string, expiresAt: Date, meta?: SessionMeta): Promise<void> {
+    const createdAt = sessionCreatedAt(expiresAt, meta);
+    this.sessions.set(tokenHash, {
+      userId,
+      createdAt: createdAt.getTime(),
+      lastSeenAt: createdAt.getTime(),
+      expiresAt: expiresAt.getTime(),
+      publicId: randomUUID(),
+      device: normalizeDevice(meta?.device),
+      ipPrefix: meta?.ipPrefix ?? null,
+    });
   }
 
   async userForToken(tokenHash: string, now: Date): Promise<AuthRecord | null> {
     const session = this.sessions.get(tokenHash);
     if (!session) return null;
-    if (session.expiresAt <= now.getTime()) {
+    const time = now.getTime();
+    if (session.expiresAt <= time || time - session.lastSeenAt >= SESSION_IDLE_MS) {
       this.sessions.delete(tokenHash);
       return null;
     }
+    session.lastSeenAt = time;
     return this.byId.get(session.userId) ?? null;
+  }
+
+  async listSessions(userId: string): Promise<SessionSummary[]> {
+    const sessions: SessionSummary[] = [];
+    for (const [tokenHash, session] of this.sessions) {
+      if (session.userId !== userId) continue;
+      sessions.push({
+        id: session.publicId,
+        createdAt: new Date(session.createdAt),
+        lastSeenAt: new Date(session.lastSeenAt),
+        device: session.device,
+        ipPrefix: session.ipPrefix,
+        tokenHash,
+      });
+    }
+    return sessions;
+  }
+
+  async revokeSession(userId: string, publicId: string): Promise<boolean> {
+    for (const [tokenHash, session] of this.sessions) {
+      if (session.userId === userId && session.publicId === publicId) {
+        this.sessions.delete(tokenHash);
+        return true;
+      }
+    }
+    return false;
   }
 
   async deleteSession(tokenHash: string): Promise<void> {
@@ -239,10 +356,21 @@ create table if not exists app_signup_attempts (
     created_at timestamptz not null default now()
 );
 create table if not exists app_sessions (
-    token_hash text primary key,
-    user_id    uuid        not null references app_users (id) on delete cascade,
-    expires_at timestamptz not null
+    token_hash   text primary key,
+    user_id      uuid        not null references app_users (id) on delete cascade,
+    expires_at   timestamptz not null,
+    public_id    uuid        not null default gen_random_uuid(),
+    created_at   timestamptz not null default now(),
+    last_seen_at timestamptz not null default now(),
+    device       text,
+    ip_prefix    text
 );
+alter table app_sessions add column if not exists public_id uuid default gen_random_uuid();
+alter table app_sessions add column if not exists created_at timestamptz default now();
+alter table app_sessions add column if not exists last_seen_at timestamptz default now();
+alter table app_sessions add column if not exists device text;
+alter table app_sessions add column if not exists ip_prefix text;
+create unique index if not exists app_sessions_public_id_idx on app_sessions (public_id);
 create table if not exists app_password_resets (
     token_hash text primary key,
     user_id    uuid        not null references app_users (id) on delete cascade,
@@ -401,13 +529,17 @@ export class PostgresAuthStore implements AuthStore {
     }
   }
 
-  async saveSession(tokenHash: string, userId: string, expiresAt: Date): Promise<void> {
+  async saveSession(tokenHash: string, userId: string, expiresAt: Date, meta?: SessionMeta): Promise<void> {
     const c = await this.client();
     try {
       await this.ensureSchema(c);
+      const createdAt = sessionCreatedAt(expiresAt, meta);
       await c.query(
-        `insert into app_sessions (token_hash, user_id, expires_at) values ($1, $2, $3)`,
-        [tokenHash, userId, expiresAt.toISOString()],
+        `insert into app_sessions
+           (token_hash, user_id, expires_at, public_id, created_at, last_seen_at, device, ip_prefix)
+         values ($1, $2, $3, $4, $5, $5, $6, $7)`,
+        [tokenHash, userId, expiresAt.toISOString(), randomUUID(), createdAt.toISOString(),
+          normalizeDevice(meta?.device), meta?.ipPrefix ?? null],
       );
     } finally {
       await c.end();
@@ -418,16 +550,57 @@ export class PostgresAuthStore implements AuthStore {
     const c = await this.client();
     try {
       await this.ensureSchema(c);
+      const idleSeconds = SESSION_IDLE_MS / 1000;
       const res = await c.query(
-        `select u.id, u.email, u.password_hash, u.display_name, u.account_id, u.owner_id
-         from app_sessions s join app_users u on u.id = s.user_id
-         where s.token_hash = $1 and s.expires_at > $2`,
-        [tokenHash, now.toISOString()],
+        `with valid as (
+           update app_sessions
+              set last_seen_at = $2
+            where token_hash = $1
+              and expires_at > $2
+              and last_seen_at > $2::timestamptz - make_interval(secs => $3)
+           returning user_id
+         )
+         select u.id, u.email, u.password_hash, u.display_name, u.account_id, u.owner_id
+           from valid v join app_users u on u.id = v.user_id`,
+        [tokenHash, now.toISOString(), idleSeconds],
       );
-      return res.rows[0] ? this.row(res.rows[0] as Record<string, unknown>) : null;
+      if (!res.rows[0]) {
+        await c.query(
+          `delete from app_sessions
+            where token_hash = $1
+              and (expires_at <= $2 or last_seen_at <= $2::timestamptz - make_interval(secs => $3))`,
+          [tokenHash, now.toISOString(), idleSeconds],
+        );
+        return null;
+      }
+      return this.row(res.rows[0] as Record<string, unknown>);
     } finally {
       await c.end();
     }
+  }
+
+  async listSessions(userId: string): Promise<SessionSummary[]> {
+    const res = await this.run((c) => c.query(
+      `select token_hash, public_id, created_at, last_seen_at, device, ip_prefix
+         from app_sessions where user_id = $1 order by last_seen_at desc`,
+      [userId],
+    ));
+    return res.rows.map((row) => ({
+      id: String(row.public_id),
+      createdAt: new Date(row.created_at as string | Date),
+      lastSeenAt: new Date(row.last_seen_at as string | Date),
+      device: normalizeDevice(row.device == null ? undefined : String(row.device)),
+      ipPrefix: row.ip_prefix == null ? null : String(row.ip_prefix),
+      tokenHash: String(row.token_hash),
+    }));
+  }
+
+  async revokeSession(userId: string, publicId: string): Promise<boolean> {
+    const res = await this.run((c) => c.query(
+      `delete from app_sessions where user_id = $1 and public_id::text = $2 returning token_hash`,
+      [userId, publicId],
+    ));
+    return (res.rowCount ?? 0) > 0;
   }
 
   async deleteSession(tokenHash: string): Promise<void> {

@@ -54,10 +54,13 @@ import {
   InMemoryAuthStore,
   SESSION_COOKIE,
   RESET_TOKEN_TTL_SEC,
+  SESSION_ABSOLUTE_MS,
   SESSION_MAX_AGE_SEC,
+  deviceLabel,
   dummyPasswordHash,
   hashPassword,
   hashSessionToken,
+  ipPrefix,
   newSessionToken,
   verifyPassword,
   type AuthStore,
@@ -221,12 +224,12 @@ export function createApp(deps: {
   const app = new Hono().basePath('/api');
   app.use('*', async (c, next) => {
     c.header('Cache-Control', 'no-store');
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(c.req.method)) {
       const origin = c.req.header('Origin');
       const allowed = new Set([new URL(c.req.url).origin]);
       if (appUrl) allowed.add(new URL(appUrl).origin);
       if (c.req.header('Sec-Fetch-Site') === 'cross-site' || (origin && !allowed.has(origin)))
-        return c.json({ error: 'This request must come from Settle. Reload the app and try again.' }, 403);
+        return c.json({ error: 'cross_origin' }, 403);
     }
     await next();
   });
@@ -382,16 +385,19 @@ export function createApp(deps: {
 
   const issueSession = async (c: Parameters<typeof setCookie>[0], userId: string) => {
     const token = newSessionToken();
-    const expires = new Date(now().getTime() + SESSION_MAX_AGE_SEC * 1000);
-    await auth.saveSession(hashSessionToken(token), userId, expires);
-    const secure = (c.req.header('x-forwarded-proto') ?? new URL(c.req.url).protocol.replace(':', ''))
-      .split(',')[0]?.trim() === 'https';
+    const createdAt = now();
+    const expires = new Date(createdAt.getTime() + SESSION_ABSOLUTE_MS);
+    await auth.saveSession(hashSessionToken(token), userId, expires, {
+      createdAt,
+      device: deviceLabel(c.req.header('user-agent')),
+      ipPrefix: ipPrefix(c.req.header('x-forwarded-for')),
+    });
     setCookie(c, SESSION_COOKIE, token, {
       httpOnly: true,
       sameSite: 'Lax',
       path: '/',
       maxAge: SESSION_MAX_AGE_SEC,
-      secure: secure || process.env.NODE_ENV === 'production',
+      secure: true,
     });
   };
 
@@ -475,6 +481,35 @@ export function createApp(deps: {
     });
   });
 
+  app.get('/auth/sessions', async (c) => {
+    const token = getCookie(c, SESSION_COOKIE);
+    if (!token) return c.json({ error: 'Sign in first.' }, 401);
+    const tokenHash = hashSessionToken(token);
+    const user = await auth.userForToken(tokenHash, now());
+    if (!user) return c.json({ error: 'Sign in first.' }, 401);
+    const sessions = await auth.listSessions(user.id);
+    return c.json({
+      sessions: sessions.map((session) => ({
+        id: session.id,
+        current: session.tokenHash === tokenHash,
+        createdAt: session.createdAt.toISOString(),
+        lastSeenAt: session.lastSeenAt.toISOString(),
+        device: session.device,
+        ipPrefix: session.ipPrefix,
+      })),
+    });
+  });
+
+  app.delete('/auth/sessions/:id', async (c) => {
+    const token = getCookie(c, SESSION_COOKIE);
+    if (!token) return c.json({ error: 'Sign in first.' }, 401);
+    const user = await auth.userForToken(hashSessionToken(token), now());
+    if (!user) return c.json({ error: 'Sign in first.' }, 401);
+    const revoked = await auth.revokeSession(user.id, c.req.param('id'));
+    if (!revoked) return c.json({ error: 'Session not found.' }, 404);
+    return c.json({ ok: true });
+  });
+
   app.post('/auth/google/disconnect', async c => {
     const user = await sessionUser(c);
     if (!user) return c.json({ error: 'Sign in first.' }, 401);
@@ -483,14 +518,14 @@ export function createApp(deps: {
     if (typeof body?.password !== 'string' || body.password.length > 72 || !await verifyPassword(body.password, user.passwordHash))
       return c.json({ error: 'Enter your password. If you joined with Google, use Forgot password to set one first.' }, 400);
     await auth.unlinkGoogle(user.id);
-    deleteCookie(c, SESSION_COOKIE, { path: '/' });
+    deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true, httpOnly: true, sameSite: 'Lax' });
     return c.json({ ok: true });
   });
 
   app.post('/auth/logout', async (c) => {
     const token = getCookie(c, SESSION_COOKIE);
     if (token) await auth.deleteSession(hashSessionToken(token));
-    deleteCookie(c, SESSION_COOKIE, { path: '/' });
+    deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true, httpOnly: true, sameSite: 'Lax' });
     return c.json({ ok: true });
   });
 

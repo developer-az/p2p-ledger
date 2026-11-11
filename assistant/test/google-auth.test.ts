@@ -35,11 +35,11 @@ describe('Google authorization boundary', () => {
   it('sends a failed Google link back to the account page, which a signed-in user can see', async () => {
     const { app, auth, issue } = setup();
     await auth.insert({ id: 'u1', email: 'a@example.com', passwordHash: 'x', displayName: 'A', accountId: 'acc1', ownerId: 'o1' });
-    await auth.saveSession(hashSessionToken('tok'), 'u1', new Date(Date.now() + 3_600_000));
-    const start = await app.request('https://settle.example/auth/google/start?link=1', { headers: { Cookie: 'settle_session=tok' } });
+    await auth.saveSession(hashSessionToken('tok'), 'u1', new Date(Date.now() + 7 * 24 * 3_600_000));
+    const start = await app.request('https://settle.example/auth/google/start?link=1', { headers: { Cookie: '__Host-settle_session=tok' } });
     const flow = start.headers.get('Set-Cookie')!.split(';')[0]!;
     const response = await app.request('https://settle.example/auth/google/callback?state=wrong&code=forged', {
-      headers: { Cookie: flow + '; settle_session=tok' },
+      headers: { Cookie: flow + '; __Host-settle_session=tok' },
     });
     expect(response.headers.get('Location')).toContain('/account-access?authError=google-link');
     expect(issue).not.toHaveBeenCalled();

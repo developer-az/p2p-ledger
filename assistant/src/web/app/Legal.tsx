@@ -1,3 +1,4 @@
+import './styles/fonts.css';
 import { useState } from 'react';
 import './styles/tokens.css';
 import './styles/base.css';

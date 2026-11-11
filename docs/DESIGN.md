@@ -48,6 +48,7 @@ else; screens read tokens, never hex values.
 | `--neg-soft` | `#fbecea` | `#2c1715` | Negative chip background, error banner |
 | `--warn` | `#a15c07` | `#f0b84a` | Needs attention, stale data |
 | `--warn-soft` | `#fbf1e0` | `#2a2110` | Warning banner background |
+| `--cat-dining` … `--cat-other` | see `tokens.css` | see `tokens.css` | Spend categories, charts and dots only; each category owns one name |
 | `--shadow` | `0 1px 2px rgb(0 0 0 / 4%), 0 1px 1px rgb(0 0 0 / 3%)` | `0 0 0 1px var(--line)` | Resting elevation |
 | `--shadow-lg` | `0 12px 32px -12px rgb(0 0 0 / 18%), 0 2px 6px rgb(0 0 0 / 6%)` | `0 16px 40px -16px rgb(0 0 0 / 70%), 0 0 0 1px var(--line)` | Menus, dialogs, popovers |
 
@@ -79,11 +80,23 @@ A 4px grid. There are no intermediate values.
 | `--t-base` | 14px | Body and UI default |
 | `--t-md` | 16px | Lead sentences, input values |
 | `--t-lg` | 20px | Section headings |
-| `--t-xl` | 28px | Page titles |
-| `--t-2xl` | 40px | Landing statement only |
+| `--t-xl` | 28px | Large sans text; page titles sit at 32px display |
+| `--t-2xl` | 40px | Headline figures (This month, landing statement) |
 
-Fonts: `--font` is Inter; `--mono` is the system monospace stack. Weights in use
-are 400, 500 and 600.
+Fonts are self-hosted: Instrument Serif (display), IBM Plex Sans (text) and IBM
+Plex Mono (mono), as woff2 latin subsets in `assistant/public/fonts`, declared
+with `@font-face` in `styles/fonts.css` and preloaded from `index.html`. Nothing
+is fetched from a font CDN at build or run time. Each webfont has a
+metric-matched fallback face over local Georgia (serif) and Arial (sans), so a
+swap does not move a line.
+
+| Token | Face | Weights | Use |
+|-------|------|---------|-----|
+| `--font-display` | Instrument Serif | 400, 400 italic | Landing H1, landing section numerals `01`–`05`, landing figure-strip numbers, page titles (`.v-title`), headline Overview / This month figures |
+| `--font` | IBM Plex Sans | 400, 500, 600 | Body, labels, buttons, everything else |
+| `--mono` | IBM Plex Mono | 400, 500 | Code, keycaps, aligned figures |
+
+Weights in use are 400, 500 and 600.
 
 ### Density
 
@@ -107,11 +120,21 @@ animations, parallax, auto-scrolling and celebratory effects are out.
 
 ## Typography
 
-- Inter 400 for body, 500 for labels and emphasis, 600 for headings and buttons.
-- Headings use tight tracking: page titles `-0.02em`, section headings
-  `-0.01em`. No condensed or stretched cuts.
+- **Display** (`--font-display`) is Instrument Serif 400 and only ever sets the
+  landing H1 (`clamp(36px, 5vw, 56px)`, `letter-spacing: -0.01em`), the landing
+  section numerals `01`–`05` and figure-strip numbers, page titles (`.v-title`,
+  32px) and the headline Overview / This month figures. It never sets body copy,
+  navigation, buttons or labels.
+- **Text** (`--font`) is IBM Plex Sans: 400 body, 500 labels and emphasis, 600
+  headings and buttons.
+- **Mono** (`--mono`) is IBM Plex Mono 400/500, for code, keycaps and figures
+  that must align character by character.
+- Headings use tight tracking: display `-0.01em`, section headings `-0.01em`. No
+  condensed or stretched cuts.
 - Every amount uses `.num`, which sets `font-variant-numeric: tabular-nums`, so
-  columns line up as values change.
+  columns line up as values change. IBM Plex Sans has that feature; Instrument
+  Serif ships proportional lining figures only, which is why display never sets
+  a value that has to line up in a column.
 - Small labels are uppercase, 12px, weight 500, `letter-spacing: 0.08em`, in
   `--muted`. They label a section or a column; they never carry a sentence.
 - Sentence case everywhere else. No title case in body copy.

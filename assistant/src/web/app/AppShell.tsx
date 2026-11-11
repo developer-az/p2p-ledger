@@ -66,7 +66,7 @@ const GROUPS: { title: string; items: SectionItem[] }[] = [
       { section: 'overview', label: 'Overview', icon: 'home' },
       { section: 'transactions', label: 'Transactions', icon: 'list' },
       { section: 'insights', label: 'Insights', icon: 'chart' },
-      { section: 'ask', label: 'Ask', icon: 'sparkle' },
+      { section: 'ask', label: 'Ask', icon: 'chat' },
     ],
   },
   {

@@ -20,7 +20,7 @@ describe('security headers', () => {
     expect(PAGE_CSP).toContain("script-src 'self'");
     expect(PAGE_CSP).not.toMatch(/script-src[^;]*unsafe/);
     expect(PAGE_CSP).toContain("frame-ancestors 'none'");
-    expect(PAGE_CSP).toContain('https://fonts.gstatic.com');
+    expect(PAGE_CSP).not.toContain('https://fonts.gstatic.com'); expect(PAGE_CSP).toContain("font-src 'self'");
   });
 
   it('every API response carries the API headers', async () => {

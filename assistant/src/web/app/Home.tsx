@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import './styles/views.css';
 import type { AccountRef, SpendCategory } from '../api.js';
 import { categoryLabel } from './categories.js';
@@ -152,28 +152,15 @@ function StartingPoint({ actions }: { actions: HomeActions }) {
   );
 }
 
-/** Example questions the ask bar cycles through as its placeholder. */
-const ASK_IDEAS = [
-  'Where did most of my money go this month?',
-  'Can I afford a $60 night out this week?',
-  'Which day of the week do I spend the most?',
-  'How am I doing against my weekly pace?',
-];
+/** One worked example, kept as the ask bar's placeholder. It does not cycle. */
+const ASK_EXAMPLE = 'Where did most of my money go this month?';
 
 function AskBar({ onAsk }: { onAsk: (question?: string) => void }) {
   const [q, setQ] = useState('');
-  const [idea, setIdea] = useState(0);
-  // The placeholder suggests a question every few seconds instead of a row of
-  // chip buttons; submitting an empty bar asks the one on show.
-  useEffect(() => {
-    if (q) return undefined;
-    const id = window.setInterval(() => setIdea((i) => (i + 1) % ASK_IDEAS.length), 4200);
-    return () => window.clearInterval(id);
-  }, [q]);
   return (
-    <form className="v-ask" role="search" onSubmit={(e) => { e.preventDefault(); onAsk(q.trim() || ASK_IDEAS[idea]); }}>
+    <form className="v-ask" role="search" onSubmit={(e) => { e.preventDefault(); onAsk(q.trim() || ASK_EXAMPLE); }}>
       <label htmlFor="ask-bar" className="sr-only">Ask about your money</label>
-      <input id="ask-bar" placeholder={ASK_IDEAS[idea]} value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
+      <input id="ask-bar" placeholder={ASK_EXAMPLE} value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
       <button type="submit" className="v-ask-go" aria-label="Ask">
         <Icon name="arrowUp" size={16} />
       </button>

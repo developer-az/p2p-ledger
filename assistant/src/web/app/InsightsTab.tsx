@@ -42,7 +42,7 @@ export function InsightsTab({
           <h1 className="v-title">Insights</h1>
           <p className="v-sub">Built only from what you log. No bank feed, no guessing.</p>
         </div>
-        <button type="button" className="btn btn-sm" onClick={onAsk}><Icon name="sparkle" size={16} /> Ask about this</button>
+        <button type="button" className="btn btn-sm" onClick={onAsk}><Icon name="chat" size={16} /> Ask about this</button>
       </header>
 
       {state.kind === 'none' ? (

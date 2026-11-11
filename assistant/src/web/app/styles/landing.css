@@ -94,7 +94,7 @@
 .app .lp-content { grid-column: span 9; display: grid; gap: var(--s6); align-content: start; min-width: 0; }
 /* Landing emblem: the grid gap is --s6, so pull it back to --s5 below the seal. */
 .app .lp-emblem { margin-bottom: calc(var(--s5) - var(--s6)); }
-.app .lp-num { font-size: var(--t-sm); font-variant-numeric: tabular-nums; color: var(--accent); }
+.app .lp-num { font-family: var(--font-display); font-size: var(--t-base); line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--ink-2); }
 .app .lp-label-text {
   margin: 0;
   font-family: var(--font);
@@ -109,11 +109,11 @@
 .app .lp h1,
 .app .lp-h1 {
   margin: 0;
-  font-family: var(--font);
-  font-size: clamp(28px, 4vw, 40px);
-  font-weight: 600;
-  line-height: 1.12;
-  letter-spacing: -0.02em;
+  font-family: var(--font-display);
+  font-size: clamp(36px, 5vw, 56px);
+  font-weight: 400;
+  line-height: 1.04;
+  letter-spacing: -0.01em;
   max-width: 22ch;
 }
 .app .lp-lede {
@@ -159,9 +159,9 @@
   align-items: center;
   min-height: 22px;
   padding: 0 var(--s2);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--line-strong);
   border-radius: var(--r1);
-  color: var(--accent);
+  color: var(--ink-2);
   font-size: var(--t-xs);
   font-weight: 500;
   line-height: 1.4;
@@ -199,9 +199,10 @@
 .app .lp-fig-value {
   margin: 0;
   min-height: 34px;
-  font-size: clamp(20px, 6vw, var(--t-xl));
-  font-weight: 500;
-  line-height: 1.2;
+  font-family: var(--font-display);
+  font-size: clamp(22px, 6vw, 34px);
+  font-weight: 400;
+  line-height: 1.15;
   color: var(--ink);
   white-space: nowrap;
 }
@@ -225,7 +226,7 @@
 
 .app .lp-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s4); max-width: 60ch; }
 .app .lp-line { display: grid; grid-template-columns: var(--s6) minmax(0, 1fr); gap: var(--s3); align-items: baseline; }
-.app .lp-line-num { font-size: var(--t-sm); color: var(--accent); }
+.app .lp-line-num { font-family: var(--font-display); font-size: var(--t-base); line-height: 1.2; color: var(--ink-2); }
 .app .lp-line-body { margin: 0; font-size: var(--t-md); line-height: 1.5; color: var(--ink-2); }
 
 /* ---------- 05 Run it ---------- */

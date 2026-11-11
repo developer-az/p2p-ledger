@@ -1,3 +1,4 @@
+import './styles/fonts.css';
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import './styles/tokens.css';

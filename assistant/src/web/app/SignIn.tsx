@@ -97,9 +97,8 @@ export function SignIn({
       onStart({ account: result.account, household: [], demo: false, user: result.user });
       toast(
         mode === 'create'
-          ? 'Your account is ready. Set your starting point with your own numbers.'
-          : `Welcome back, ${result.user.displayName}.`,
-        { tone: 'good' },
+          ? `Account created. Signed in as ${result.user.displayName}.`
+          : `Signed in as ${result.user.displayName}.`,
       );
     } catch (e) {
       setError((e as Error).message);

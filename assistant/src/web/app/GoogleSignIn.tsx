@@ -1,3 +1,4 @@
+import './styles/fonts.css';
 import { useState } from 'react';
 import { GoogleButton } from './GoogleButton.js';
 import './styles/tokens.css';

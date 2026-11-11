@@ -14,12 +14,12 @@ const COMMON: Record<string, string> = {
   'Cross-Origin-Opener-Policy': 'same-origin',
 };
 
-/** The web app: own scripts only; Google Fonts for type; no framing; API calls to the same origin. */
+/** The web app: own scripts, styles and self-hosted fonts; no framing; API calls to the same origin. */
 export const PAGE_CSP = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
   "img-src 'self' data: blob:",
   "connect-src 'self'",
   "worker-src 'self' blob:",

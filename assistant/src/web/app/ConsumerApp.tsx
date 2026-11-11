@@ -1,3 +1,4 @@
+import './styles/fonts.css';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LazyMotion } from 'motion/react';
 import './styles/tokens.css';

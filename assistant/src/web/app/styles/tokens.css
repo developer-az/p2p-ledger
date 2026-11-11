@@ -25,6 +25,16 @@
   --warn-soft: #fbf1e0;
   /* Brand colour, used only by the wax-seal emblem. */
   --brand-gold: #a8874a;
+  /* Spend categories. Chart hues spaced far enough apart to tell apart at 8px;
+     muted enough to sit on paper. Read from categories.ts by token name. */
+  --cat-dining: #b3541e;
+  --cat-groceries: #1f7a55;
+  --cat-transport: #1f5f9e;
+  --cat-entertainment: #9a4f74;
+  --cat-housing: #a86a12;
+  --cat-shopping: #2f7c9e;
+  --cat-health: #5b4ca8;
+  --cat-other: #5f636b;
   --shadow: 0 1px 2px rgb(0 0 0 / 4%), 0 1px 1px rgb(0 0 0 / 3%);
   --shadow-lg: 0 12px 32px -12px rgb(0 0 0 / 18%), 0 2px 6px rgb(0 0 0 / 6%);
   color-scheme: light;
@@ -54,8 +64,11 @@
   --t-lg: 20px;
   --t-xl: 28px;
   --t-2xl: 40px;
-  --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* Self-hosted faces; see styles/fonts.css. Display is for headings, section
+     numerals and the headline figures only, never for body copy. */
+  --font: "IBM Plex Sans", "IBM Plex Sans Fallback", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Instrument Serif", "Instrument Serif Fallback", Georgia, "Times New Roman", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* Motion. */
   --dur: 120ms;
@@ -89,6 +102,14 @@
     --warn: #f0b84a;
     --warn-soft: #2a2110;
     --brand-gold: #c8a96a;
+    --cat-dining: #d98150;
+    --cat-groceries: #3fae7f;
+    --cat-transport: #6fa3e0;
+    --cat-entertainment: #cf88ac;
+    --cat-housing: #d9a44a;
+    --cat-shopping: #6cb8d8;
+    --cat-health: #9b8fe8;
+    --cat-other: #a0a3aa;
     --shadow: 0 0 0 1px var(--line);
     --shadow-lg: 0 16px 40px -16px rgb(0 0 0 / 70%), 0 0 0 1px var(--line);
     color-scheme: dark;
@@ -117,6 +138,14 @@
   --warn: #f0b84a;
   --warn-soft: #2a2110;
   --brand-gold: #c8a96a;
+  --cat-dining: #d98150;
+  --cat-groceries: #3fae7f;
+  --cat-transport: #6fa3e0;
+  --cat-entertainment: #cf88ac;
+  --cat-housing: #d9a44a;
+  --cat-shopping: #6cb8d8;
+  --cat-health: #9b8fe8;
+  --cat-other: #a0a3aa;
   --shadow: 0 0 0 1px var(--line);
   --shadow-lg: 0 16px 40px -16px rgb(0 0 0 / 70%), 0 0 0 1px var(--line);
   color-scheme: dark;

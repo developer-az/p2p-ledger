@@ -378,3 +378,12 @@ describe.skipIf(!TEST_DATABASE_URL)('schema gate', () => {
     });
   }, 30_000);
 });
+
+describe('Supabase pooler host match', () => {
+  it('matches only on a label boundary', async () => {
+    const { supabasePoolerMode } = await import('../src/server/db-tls.js');
+    expect(supabasePoolerMode('postgres://u@aws-0-us-east-1.pooler.supabase.com:5432/db', {})).toBe('transaction');
+    expect(supabasePoolerMode('postgres://u@evilpooler.supabase.com:5432/db', {})).toBeNull();
+    expect(supabasePoolerMode('postgres://u@pooler.supabase.com.evil.test:5432/db', {})).toBeNull();
+  });
+});

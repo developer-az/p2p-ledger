@@ -162,7 +162,10 @@ function postgresUrl(connectionString: string): URL | null {
  */
 export function supabasePoolerMode(connectionString: string, env: Env = process.env): SupabasePoolerMode | null {
   const url = postgresUrl(connectionString);
-  if (!url || !url.hostname.toLowerCase().endsWith(SUPABASE_POOLER_SUFFIX)) return null;
+  const host = url?.hostname.toLowerCase() ?? '';
+  // Match the domain on a label boundary so 'evilpooler.supabase.com' does not count.
+  const bare = SUPABASE_POOLER_SUFFIX.replace(/^\./, '');
+  if (!url || !(host === bare || host.endsWith(`.${bare}`))) return null;
   if (env.PG_SUPABASE_SESSION_MODE === '1') return 'session';
   // An explicit non-5432 port is already the caller's choice (for example 6543).
   return url.port === '' || url.port === String(SUPABASE_SESSION_PORT) ? 'transaction' : null;

@@ -151,19 +151,38 @@ Transitions apply to hover, focus, pressed and open/closed states.
 
 One material, on static surfaces only: smoked watch crystal. It reads as a
 pane over the page, not as a coloured pane of its own — neutral fill, neutral
-border, one diagonal highlight, a soft drop. Never neon, never rainbow, never
-a tint borrowed from the accent.
+border, one diagonal highlight, a soft drop. Never neon, never rainbow.
+
+It has two forms. **Panel glass** (`.glass`) is the neutral pane: the shell,
+panels, dialogs, the tour rail, the sign-in aside, the landing figures.
+**Tinted glass** is the same pane carrying one colour token, and it is what
+the app's coloured controls are made of: buttons, chips, state pills, tags,
+badges, segmented thumbs, the active sidebar item, keycaps and the toast. The
+colour is the only difference; the edge, the sheen, the frost and the drop are
+the same.
 
 ### Tokens (`styles/tokens.css`, light and both dark blocks)
 
 | Token | Light | Dark | Use |
 |-------|-------|------|-----|
-| `--glass-bg` | `color-mix(in srgb, var(--surface) 62%, transparent)` | `color-mix(in srgb, var(--surface) 55%, transparent)` | Panel fill over the page |
-| `--glass-bg-dense` | `color-mix(in srgb, var(--surface) 88%, transparent)` | `color-mix(in srgb, var(--surface) 78%, transparent)` | The same fill for panels that sit on a dialog scrim |
-| `--glass-border` | `color-mix(in srgb, var(--ink) 10%, transparent)` | `color-mix(in srgb, #fff 9%, transparent)` | Hairline edge |
-| `--glass-blur` | `14px` | `14px` | Frost radius |
-| `--glass-sheen` | `linear-gradient(135deg, white 18%, transparent 38%, transparent 70%, white 6%)` | same shape, white 9% and 3% | The one highlight |
-| `--glass-shadow` | `inset 0 1px 0` white 35%, plus `0 8px 24px -12px` ink 18% | `inset 0 1px 0` white 8%, plus `0 8px 24px -12px` black 50% | Edge light and drop |
+| `--glass-bg` | `color-mix(in srgb, var(--surface) 48%, transparent)` | `... 42% ...` | Panel fill over the page |
+| `--glass-bg-dense` | `... 88% ...` | `... 78% ...` | The same fill for panels that sit on a dialog scrim |
+| `--glass-border` | `color-mix(in srgb, var(--ink) 12%, transparent)` | `color-mix(in srgb, #fff 12%, transparent)` | Hairline edge |
+| `--glass-blur` / `--glass-saturate` | `18px` / `160%` | same | Frost |
+| `--glass-filter` | `blur(var(--glass-blur)) saturate(var(--glass-saturate))` | same | The one place the filter is spelled out |
+| `--glass-edge` | `inset 0 1px 0` white 55% | white 14% | The cut top bevel |
+| `--glass-inner` | `inset 0 0 0 1px` white 30% | white 7% | Thin inner border |
+| `--glass-sheen` | `linear-gradient(135deg, white 26%, transparent 42%, transparent 68%, white 9%)` | white 12% and 5% | Panel highlight |
+| `--glass-sheen-tint` | white 22% / 8% | white 6% / 3% | The same highlight for a tinted control |
+| `--glass-sheen-fill` | white 8% / 3% | white 6% / 3% | The thinner highlight under a near-opaque accent fill |
+| `--glass-shadow` | `--glass-edge`, `--glass-inner`, `0 10px 28px -12px` ink 20% | same shape, black 55% | Edge light and drop |
+| `--glass-shadow-hover` | brighter bevel, `0 12px 30px -12px` ink 24% | white 22%, black 62% | A control lifting under the pointer |
+| `--glass-under` | `transparent` | `transparent` | What a tinted fill mixes with; the fallback makes it `--surface` |
+| `--tint-neutral` | `8%` | `8%` | Smoke: badges, keycaps, chips, planned tags, ghost buttons |
+| `--tint-state` | `16%` | `14%` | A state colour at rest: pills, active items, segmented thumbs |
+| `--tint-accent` | `92%` | `92%` | A primary fill, opaque enough for `--accent-ink` |
+| `--wash-gold` / `--wash-accent` / `--wash-neutral` | `--brand-gold` 24%, `--accent` 16%, `--ink` 5% | gold 24%, accent 16%, `--surface-3` 55% | The three washes under the glass |
+| `--pos-ink` / `--neg-ink` / `--warn-ink` | the state colour mixed toward `--ink` (70/74/78%) | the state colour itself | State text on a pale state tint |
 
 `--glass-bg-dense` covers the one place where the same fill would fail: a
 dialog panel frosts its own scrim (ink at 30% for the palette, 40% for a
@@ -171,36 +190,118 @@ sheet), so the under-glass is much darker than the page and the fill goes up to
 88% (light) and 78% (dark) to hold 12px `--muted` and `--faint` text at 4.5:1.
 
 `.glass` in `styles/base.css` is the material: `background: var(--glass-bg)`,
-`backdrop-filter: blur(var(--glass-blur)) saturate(140%)` (with the `-webkit-`
-form), `1px solid var(--glass-border)`, `box-shadow: var(--glass-shadow)`, and
-the sheen as an `::after` overlay at `border-radius: inherit` with
-`pointer-events: none`. The sheen paints above the fill and below the content
-(`isolation: isolate` on the panel, `z-index: -1` on the overlay), so it never
-lightens a label and the token contrast holds.
+`backdrop-filter: var(--glass-filter)` (with the `-webkit-` form), `1px solid
+var(--glass-border)`, `box-shadow: var(--glass-shadow)`, and the sheen as an
+`::after` overlay at `border-radius: inherit` with `pointer-events: none`. The
+sheen paints above the fill and below the content (`isolation: isolate` on the
+panel, `z-index: -1` on the overlay), so it never lightens a label and the
+token contrast holds.
+
+### Tinted glass
+
+`.glass-tint` is the material with a colour in it. The element names the colour
+and how much of the fill it takes; everything else is shared:
+
+```css
+background-color: color-mix(
+  in srgb,
+  var(--tint, var(--ink)) var(--tint-strength, var(--tint-neutral)),
+  var(--glass-under)
+);
+background-image: var(--tint-sheen, var(--glass-sheen-tint));
+border: 1px solid color-mix(in srgb, var(--tint, var(--ink)) 30%, var(--glass-border));
+box-shadow: var(--glass-shadow);
+backdrop-filter: var(--glass-filter);
+```
+
+The default tint is `--ink` at `--tint-neutral`, so a neutral control only has
+to join the selector list. A control with a colour sets `--tint` and
+`--tint-strength` in its own sheet and lets the material paint the fill, the
+edge and the sheen. The sheen is a `background-image` rather than a pseudo
+element here: fill and highlight are one paint, and no extra layer sits over a
+label.
+
+The highlight is thinner on a control than on a panel (`--glass-sheen-tint`),
+and thinner again on a near-opaque accent fill (`--glass-sheen-fill`, set as
+`--tint-sheen` by the primary buttons). A panel's 26% (light) or 12% (dark)
+sheen covers most of a 24px chip; white over a small fill is light the label
+then has to fight, and in dark it is the only thing that would push a state
+pill below 4.5:1. The panel tokens keep the full highlight; the controls keep
+the cut edge.
+
+`base.css` carries the selector list once for the controls that already own a
+stable class, so no markup was added for the material:
+
+| Control | `--tint` | `--tint-strength` | Label |
+|---------|----------|-------------------|-------|
+| `.btn`, `.v-btn`, `.lp-btn`, `.btn-quiet` | `--ink` | `--tint-neutral` | `--ink` |
+| `.btn-primary`, `.v-btn-primary`, `.lp-btn-primary`, `.shell-new` | `--accent` | `--tint-accent` | `--accent-ink` |
+| `.btn-danger` | `--neg` | `--tint-state` | `--neg-ink` |
+| `.chip`, `.add-again-chip`, `.v-chip`, `.lp-tag` | `--ink` | `--tint-neutral` | `--ink-2` / `--muted` |
+| `.pill-good` / `.pill-bad` / `.pill-warn` | `--pos` / `--neg` / `--warn` | `--tint-state` | `--pos-ink` / `--neg-ink` / `--warn-ink` |
+| `.shell-item[aria-current="page"]`, `.set-tab[aria-current="page"]` | `--accent` | `--tint-state` | `--ink` |
+| `.v-seg button[aria-pressed="true"]`, `.add-switch button[aria-checked="true"]` | `--accent` | `--tint-state` | `--ink` |
+| `.palette-row[aria-selected="true"]` | `--accent` | `--tint-state` | `--ink` |
+| `.shell-badge`, `.planned-tag`, `.planned`, `.lp-tag.is-planned` | `--ink` | `--tint-neutral` | `--muted` |
+| `.shell-search kbd`, `.palette-panel kbd`, `.shortcut-panel kbd` | `--ink` | `--tint-neutral` | `--muted` / `--ink-2` |
+| `.toast` | `--ink` | `88%` | `--bg` |
+
+Hover raises the tint by 8 points and swaps to `--glass-shadow-hover`; press
+lowers it by 6. The accent fill cannot be raised much (it starts at 92%), so a
+primary button hovers on `--accent-hover` at 94% instead. The toast takes 88%
+rather than 76% because the sheen lightens the top-left of its fill and the
+label has to clear 4.5:1 there.
+
+Contrast: the label keeps its readable token; only the fill moved. The state
+tints are pale enough for `--ink`, so state pills use a darker state ink
+(`--pos-ink` and friends) to hold 12px text at 4.5:1 on the pale fill, and the
+accent fill runs at 92% with the thin sheen so `--accent-ink` is 4.9:1 (light)
+and 7.3:1 (dark) at the brightest point. Measured at the brightest sheen, the
+light theme gives 5.2:1 and up for the neutral controls (the muted keycap is
+the floor) and 5.7-6.2:1 for the three pills; dark gives 5.2-6.8:1 with the
+thinned sheen. Disabled controls stay
+solid: no tint, no frost, no sheen, `--surface-3` and `--muted` as before. The
+focus ring is untouched at `2px solid var(--accent)`.
+
+The add sheet's Expense/Income switch used a thumb that slid on `transform`.
+A moving backdrop cannot be frosted, so the thumb is out of the paint and the
+checked button carries the tint instead — the same pattern as `.v-seg`.
 
 ### The backdrop
 
 Glass needs something to frost. `.app` carries one fixed, non-animated layer
 (`::before`, `position: fixed`, `inset: 0`, `z-index: -1`, `pointer-events:
-none`): two very faint washes on `--bg` — `--brand-gold` at 13% top-right,
-`--accent` at 8% bottom-left. Nothing moves, nothing loops. `.lp` paints the
-same layer only when it is not already inside `.app`, so the washes never
-stack. The shell's own `--bg` fill was removed so the layer shows through.
+none`): three static washes on `--bg` — `--wash-gold` top-right,
+`--wash-accent` bottom-left, and a soft `--wash-neutral` top-left that keeps the
+centre from going flat. They are visible through the 48% (light) and 42% (dark)
+panel fill but stay calm enough that body text never sits on them. Nothing
+moves, nothing loops. `.lp` paints the same layer only when it is not already
+inside `.app`, so the washes never stack. The shell's own `--bg` fill was
+removed so the layer shows through.
 
 ### Where it goes
 
-The sidebar (`≥768px`), the sticky top bar, `.card`, `.v-panel`, the `.v-fig`
-figure cells, `.ins-panel`, settings panels, the command palette and shortcut
-sheet panels, dialog and sheet panels, the tour rail, the sign-in aside, the
-landing figure cells and the pipeline diagram. `glass` is a class, added where
-the surface is marked up, so the material is a decision per surface.
+**Panel glass** (`class="glass"`, added where the surface is marked up, so the
+material stays a decision per surface): the sidebar (`≥768px`), the sticky top
+bar, `.card`, `.v-panel`, the `.v-fig` figure cells, `.ins-panel`, settings
+panels, the command palette and shortcut sheet panels, dialog and sheet panels,
+the tour rail, the sign-in aside, the landing figure cells and the pipeline
+diagram.
 
-It never goes on the dial, chart internals, buttons, inputs, list rows, toasts,
-or anything that moves or scrolls inside its own container. A surface that is
-transformed is not glass: the mobile sidebar drawer is opaque `--surface` while
-it slides, and takes the material at 768px where it sits still. A glass surface
-nested inside another one keeps the fill but drops the blur and the sheen
-(`.trust-embedded .card`), so a stack never frosts twice.
+**Tinted glass** (applied by selector, see the table above): every button, chip,
+state pill, tag, badge, keycap, the segmented thumbs, the active sidebar item,
+the active settings tab, the selected palette row and the toast.
+
+It never goes on the dial, chart internals, inputs, list rows, the icon-only
+chrome buttons (`.shell-icon-btn` — four of them in a row would fight the
+primary action), category avatars (their solid fill is what carries the white
+initial), or anything that moves or scrolls inside its own container. A surface
+that is transformed is not glass: the mobile sidebar drawer is opaque
+`--surface` while it slides, and takes the material at 768px where it sits
+still. A tinted control inside a glass panel keeps the tint, edge and sheen but
+drops the second blur (`.glass :is(...)`) — one frost per stack, so a chip on a
+card costs nothing extra and a control in the top bar never re-blurs the bar's
+own backdrop. `.trust-embedded .card` drops the blur and the sheen entirely.
 
 An SVG shape cannot hold a backdrop filter, so the landing pipeline panel
 frosts and its boxes take `--glass-bg` as a plain translucent fill on top.
@@ -208,24 +309,30 @@ frosts and its boxes take `--glass-bg` as a plain translucent fill on top.
 ### Fallbacks
 
 - `@supports not (backdrop-filter: blur(1px))` (either prefix): the fill drops
-to solid `--surface` and the sheen goes.
-- `prefers-reduced-transparency: reduce`: the same solid `--surface`, no sheen,
-no blur.
+to solid `--surface`, the sheen goes, and `--glass-under` becomes `--surface`
+so every tinted fill turns into a solid tint on the surface.
+- `prefers-reduced-transparency: reduce`: the same, plus `--glass-filter: none`
+for the panels and the tinted controls.
 - Text contrast does not change on glass: fill and border are mixed from
 `--surface` and `--ink`, so the ratio between text and panel stays between the
 `--surface` and `--bg` values already tested at 4.5:1. The one case that needed
-more is a panel over a scrim, which takes `--glass-bg-dense`. If a surface ever
-looks too translucent behind text, raise its fill's surface share; do not touch
-the text colour.
+more is a panel over a scrim, which takes `--glass-bg-dense`. A tinted fill does
+change the surface under a label, so each tint ships its own readable label
+token (`--accent-ink`, `--pos-ink`, `--neg-ink`, `--warn-ink`, `--muted`,
+`--ink-2`). If a tinted element ever looks too pale behind its label, raise
+`--tint-strength`; do not touch the text colour.
 
 ### Performance rule
 
 Never put `backdrop-filter` on an element that animates, and never on `<html>`
 or `<body>`. A blurred element is re-blurred whenever its backdrop paints, so
 it stays on panels that do not move: no transition, no transform, no scroll
-container of its own above it. The panels that fade in (palette, shortcut
-sheet) run their fade on the dialog, which carries no filter. The route
-cross-fade snapshots the painted page, so it does not cost a blur per frame.
+container of its own above it. That is why the tinted material carries no
+`transition` and no `transform` on hover or press — the feedback is a colour
+change and a brighter edge — and why the add sheet's sliding thumb was replaced
+by a tinted button. The panels that fade in (palette, shortcut sheet) run their
+fade on the dialog, which carries no filter. The route cross-fade snapshots the
+painted page, so it does not cost a blur per frame.
 
 ## Typography
 
@@ -264,11 +371,13 @@ cross-fade snapshots the painted page, so it does not cost a blur per frame.
 
 ## Components
 
-- **Buttons.** Primary is an accent fill with `--accent-ink` text and 600 weight.
-  Secondary is `--surface` with a 1px `--line-strong` border and `--ink` text.
-  Ghost has no background or border, only muted text that turns `--ink` on
-  hover. Height is 32px compact, 36px comfortable; radius `--r2`; one 120ms
-  transition.
+- **Buttons.** Primary is the accent at `--tint-accent` (92%) with
+  `--accent-ink` text and 600 weight. Secondary is neutral tinted glass with a
+  `color-mix` border; ghost is the same neutral tint (no separate transparent
+  state — on glass the edge is what separates it). All three are the tinted
+  glass material described under Glass: no transition, no transform; hover and
+  press move the tint and the edge instead. Height is 32px compact, 36px
+  comfortable; radius `--r2`. Disabled stays solid `--surface-3` with `--muted`.
 - **Inputs.** `--surface` background, 1px `--line-strong` border, radius `--r2`,
   `--t-base` text, placeholder in `--faint`. Focus adds a 2px accent ring. Error
   state uses `--neg` for the border and `--neg-soft` behind the message.
@@ -279,14 +388,17 @@ cross-fade snapshots the painted page, so it does not cost a blur per frame.
 - **Tables and rows.** Row height `--row-h`, horizontal padding `--pad`,
   dividers in `--line`. Amounts right-aligned with `.num`. Header labels use the
   small all-caps style.
-- **Chips.** Radius `--r1`, `--t-xs`, padding `4px 8px`. Neutral chips use
-  `--surface-2` with `--muted` text. State chips use `--pos-soft`/`--pos`,
-  `--neg-soft`/`--neg`, `--warn-soft`/`--warn`. Accent chips use
-  `--accent-soft`/`--accent`.
+- **Chips.** Radius `--r1`, `--t-xs`, padding `4px 8px`. Neutral chips are
+  neutral tinted glass with `--ink-2` text. State chips (`.pill-good`,
+  `.pill-bad`, `.pill-warn`) take the state colour at `--tint-state` in the fill,
+  keep a state-coloured border and use `--pos-ink`/`--neg-ink`/`--warn-ink` for
+  the label. There is no longer a `--*-soft` flat fill behind a chip: the soft
+  tints were the same idea in one flat colour.
 - **Empty states.** One sentence in `--muted`, an optional outline button, and
   the `Planned · M#` label when the feature is not built. No illustration.
 - **Planned labels.** `Planned · M#` in the small all-caps style, colour
-  `--muted` or `--warn`. They sit next to any control that does not work yet.
+  `--muted` on neutral tinted glass. They sit next to any control that does not
+  work yet.
 
 ## Copy rules
 

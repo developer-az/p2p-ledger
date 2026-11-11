@@ -1,6 +1,6 @@
 /* Design system v2 tokens. See docs/DESIGN.md. Colours only come from here. */
 
-.app, .app-preloader {
+.app, .app-preloader, .toasts {
   --bg: #fafaf9;
   --surface: #ffffff;
   --surface-2: #f4f4f2;
@@ -40,21 +40,65 @@
   /* Glass: the smoked-crystal material for static surfaces. See the Glass
      section of docs/DESIGN.md. Fill and border are mixed from the theme so
      the material follows it; the sheen is one diagonal highlight. */
-  --glass-bg: color-mix(in srgb, var(--surface) 62%, transparent);
+  --glass-bg: color-mix(in srgb, var(--surface) 48%, transparent);
   /* Denser fill for the glass panels that sit on a dialog scrim, where the
      under-glass is much darker than the page; keeps small text at 4.5:1. */
   --glass-bg-dense: color-mix(in srgb, var(--surface) 88%, transparent);
-  --glass-border: color-mix(in srgb, var(--ink) 10%, transparent);
-  --glass-blur: 14px;
+  --glass-border: color-mix(in srgb, var(--ink) 12%, transparent);
+  --glass-blur: 18px;
+  --glass-saturate: 160%;
+  /* Cut edge: a bright top bevel, a thin inner border, then one soft drop. */
+  --glass-edge: inset 0 1px 0 rgb(255 255 255 / 55%);
+  --glass-inner: inset 0 0 0 1px rgb(255 255 255 / 30%);
   --glass-sheen: linear-gradient(
     135deg,
-    rgb(255 255 255 / 18%) 0%,
-    transparent 38%,
-    transparent 70%,
-    rgb(255 255 255 / 6%) 100%
+    rgb(255 255 255 / 26%) 0%,
+    transparent 42%,
+    transparent 68%,
+    rgb(255 255 255 / 9%) 100%
   );
-  --glass-shadow: inset 0 1px 0 rgb(255 255 255 / 35%),
-    0 8px 24px -12px color-mix(in srgb, var(--ink) 18%, transparent);
+  /* Tinted controls take a thinner sheen than a panel: the highlight covers
+     most of a 24px chip, and white over a pale fill is light the label has to
+     fight. `-fill` is thinner still, for the near-opaque accent fill that
+     carries white text. */
+  --glass-sheen-tint: linear-gradient(
+    135deg,
+    rgb(255 255 255 / 22%) 0%,
+    transparent 42%,
+    transparent 68%,
+    rgb(255 255 255 / 8%) 100%
+  );
+  --glass-sheen-fill: linear-gradient(
+    135deg,
+    rgb(255 255 255 / 8%) 0%,
+    transparent 46%,
+    transparent 70%,
+    rgb(255 255 255 / 3%) 100%
+  );
+  --glass-shadow: var(--glass-edge), var(--glass-inner),
+    0 10px 28px -12px color-mix(in srgb, var(--ink) 20%, transparent);
+  --glass-shadow-hover: inset 0 1px 0 rgb(255 255 255 / 70%),
+    var(--glass-inner),
+    0 12px 30px -12px color-mix(in srgb, var(--ink) 24%, transparent);
+  /* Tinted glass: a colour token comes through --tint, and --tint-strength is
+     its share of the fill. Neutral smoke is the default. The accent fill runs
+     almost opaque because --accent-ink must clear 4.5:1 over any backdrop. */
+  --tint-neutral: 8%;
+  --tint-state: 16%;
+  --tint-accent: 92%;
+  /* State text on a tinted chip: darker than the state colour itself, because
+     the pale tint raises the fill's luminance. Dark keeps the state colour. */
+  --pos-ink: color-mix(in srgb, var(--pos) 70%, var(--ink));
+  --neg-ink: color-mix(in srgb, var(--neg) 74%, var(--ink));
+  --warn-ink: color-mix(in srgb, var(--warn) 78%, var(--ink));
+  /* The backdrop the glass frosts: three static washes painted on --bg. */
+  --wash-gold: color-mix(in srgb, var(--brand-gold) 24%, transparent);
+  --wash-accent: color-mix(in srgb, var(--accent) 16%, transparent);
+  --wash-neutral: color-mix(in srgb, var(--ink) 5%, transparent);
+  /* What sits under a tinted fill, and the filter that frosts it. Fallbacks
+     swap both for a solid tint and no filter. */
+  --glass-under: transparent;
+  --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   color-scheme: light;
 
   /* Spacing: a 4px grid. */
@@ -98,7 +142,8 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .app, :root:not([data-theme="light"]) .app-preloader {
+  :root:not([data-theme="light"]) .app, :root:not([data-theme="light"]) .app-preloader,
+  :root:not([data-theme="light"]) .toasts {
     --bg: #0f1012;
     --surface: #16171a;
     --surface-2: #1c1d21;
@@ -131,24 +176,58 @@
     --shadow: 0 0 0 1px var(--line);
     --shadow-lg: 0 16px 40px -16px rgb(0 0 0 / 70%), 0 0 0 1px var(--line);
     /* Glass, dark: a thinner fill and a softer sheen than light. */
-    --glass-bg: color-mix(in srgb, var(--surface) 55%, transparent);
+    --glass-bg: color-mix(in srgb, var(--surface) 42%, transparent);
     --glass-bg-dense: color-mix(in srgb, var(--surface) 78%, transparent);
-    --glass-border: color-mix(in srgb, #fff 9%, transparent);
-    --glass-blur: 14px;
+    --glass-border: color-mix(in srgb, #fff 12%, transparent);
+    --glass-blur: 18px;
+    --glass-saturate: 160%;
+    --glass-edge: inset 0 1px 0 rgb(255 255 255 / 14%);
+    --glass-inner: inset 0 0 0 1px rgb(255 255 255 / 7%);
     --glass-sheen: linear-gradient(
       135deg,
-      rgb(255 255 255 / 9%) 0%,
-      transparent 38%,
+      rgb(255 255 255 / 12%) 0%,
+      transparent 42%,
+      transparent 68%,
+      rgb(255 255 255 / 5%) 100%
+    );
+    /* Dark: white over a small dark fill is the one thing that eats a label's
+       contrast, so the tinted sheen is a hint, not a wash. */
+    --glass-sheen-tint: linear-gradient(
+      135deg,
+      rgb(255 255 255 / 6%) 0%,
+      transparent 42%,
+      transparent 68%,
+      rgb(255 255 255 / 3%) 100%
+    );
+    --glass-sheen-fill: linear-gradient(
+      135deg,
+      rgb(255 255 255 / 6%) 0%,
+      transparent 46%,
       transparent 70%,
       rgb(255 255 255 / 3%) 100%
     );
-    --glass-shadow: inset 0 1px 0 rgb(255 255 255 / 8%),
-      0 8px 24px -12px rgb(0 0 0 / 50%);
+    --glass-shadow: var(--glass-edge), var(--glass-inner),
+      0 10px 28px -12px rgb(0 0 0 / 55%);
+    --glass-shadow-hover: inset 0 1px 0 rgb(255 255 255 / 22%),
+      var(--glass-inner),
+      0 12px 30px -12px rgb(0 0 0 / 62%);
+    --tint-neutral: 8%;
+    --tint-state: 14%;
+    --tint-accent: 92%;
+    --pos-ink: var(--pos);
+    --neg-ink: var(--neg);
+    --warn-ink: var(--warn);
+    --wash-gold: color-mix(in srgb, var(--brand-gold) 24%, transparent);
+    --wash-accent: color-mix(in srgb, var(--accent) 16%, transparent);
+    --wash-neutral: color-mix(in srgb, var(--surface-3) 55%, transparent);
+    --glass-under: transparent;
+    --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
     color-scheme: dark;
   }
 }
 
-:root[data-theme="dark"] .app, :root[data-theme="dark"] .app-preloader {
+:root[data-theme="dark"] .app, :root[data-theme="dark"] .app-preloader,
+:root[data-theme="dark"] .toasts {
   --bg: #0f1012;
   --surface: #16171a;
   --surface-2: #1c1d21;
@@ -180,19 +259,50 @@
   --cat-other: #a0a3aa;
   --shadow: 0 0 0 1px var(--line);
   --shadow-lg: 0 16px 40px -16px rgb(0 0 0 / 70%), 0 0 0 1px var(--line);
-  --glass-bg: color-mix(in srgb, var(--surface) 55%, transparent);
+  --glass-bg: color-mix(in srgb, var(--surface) 42%, transparent);
   --glass-bg-dense: color-mix(in srgb, var(--surface) 78%, transparent);
-  --glass-border: color-mix(in srgb, #fff 9%, transparent);
-  --glass-blur: 14px;
+  --glass-border: color-mix(in srgb, #fff 12%, transparent);
+  --glass-blur: 18px;
+  --glass-saturate: 160%;
+  --glass-edge: inset 0 1px 0 rgb(255 255 255 / 14%);
+  --glass-inner: inset 0 0 0 1px rgb(255 255 255 / 7%);
   --glass-sheen: linear-gradient(
     135deg,
-    rgb(255 255 255 / 9%) 0%,
-    transparent 38%,
+    rgb(255 255 255 / 12%) 0%,
+    transparent 42%,
+    transparent 68%,
+    rgb(255 255 255 / 5%) 100%
+  );
+  --glass-sheen-tint: linear-gradient(
+    135deg,
+    rgb(255 255 255 / 6%) 0%,
+    transparent 42%,
+    transparent 68%,
+    rgb(255 255 255 / 3%) 100%
+  );
+  --glass-sheen-fill: linear-gradient(
+    135deg,
+    rgb(255 255 255 / 6%) 0%,
+    transparent 46%,
     transparent 70%,
     rgb(255 255 255 / 3%) 100%
   );
-  --glass-shadow: inset 0 1px 0 rgb(255 255 255 / 8%),
-    0 8px 24px -12px rgb(0 0 0 / 50%);
+  --glass-shadow: var(--glass-edge), var(--glass-inner),
+    0 10px 28px -12px rgb(0 0 0 / 55%);
+  --glass-shadow-hover: inset 0 1px 0 rgb(255 255 255 / 22%),
+    var(--glass-inner),
+    0 12px 30px -12px rgb(0 0 0 / 62%);
+  --tint-neutral: 8%;
+  --tint-state: 14%;
+  --tint-accent: 92%;
+  --pos-ink: var(--pos);
+  --neg-ink: var(--neg);
+  --warn-ink: var(--warn);
+  --wash-gold: color-mix(in srgb, var(--brand-gold) 24%, transparent);
+  --wash-accent: color-mix(in srgb, var(--accent) 16%, transparent);
+  --wash-neutral: color-mix(in srgb, var(--surface-3) 55%, transparent);
+  --glass-under: transparent;
+  --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   color-scheme: dark;
 }
 

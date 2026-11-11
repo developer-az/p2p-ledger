@@ -173,20 +173,24 @@ body:has(.app), body:has(.app-preloader) {
 /* ---------- Buttons, chips, fields ---------- */
 
 .app .btn-quiet {
-  border-color: transparent;
-  background: transparent;
   color: var(--muted);
 }
 
 .app .btn-quiet:hover:not(:disabled) {
-  border-color: transparent;
-  background: var(--surface-2);
+  background-color: color-mix(
+    in srgb,
+    var(--tint) calc(var(--tint-strength) + 8%),
+    var(--glass-under)
+  );
+  box-shadow: var(--glass-shadow-hover);
   color: var(--ink);
 }
 
 .app .btn-danger {
+  --tint: var(--neg);
+  --tint-strength: var(--tint-state);
   border-color: color-mix(in srgb, var(--neg) 35%, var(--line));
-  color: var(--neg);
+  color: var(--neg-ink);
 }
 
 .app .chips {
@@ -196,21 +200,26 @@ body:has(.app), body:has(.app-preloader) {
 }
 
 .app .chip {
+  --tint: var(--ink);
+  --tint-strength: var(--tint-neutral);
   display: inline-flex;
   align-items: center;
   gap: var(--s1);
   min-height: 32px;
   padding: 0 var(--s3);
-  border: 1px solid var(--line-strong);
   border-radius: var(--r2);
-  background: var(--surface);
   color: var(--ink-2);
   font-size: var(--t-sm);
   font-weight: 500;
 }
 
 .app .chip:hover {
-  background: var(--surface-2);
+  background-color: color-mix(
+    in srgb,
+    var(--tint) calc(var(--tint-strength) + 8%),
+    var(--glass-under)
+  );
+  box-shadow: var(--glass-shadow-hover);
   color: var(--ink);
 }
 
@@ -355,7 +364,10 @@ body:has(.app), body:has(.app-preloader) {
 
 /* ---------- Toasts ---------- */
 
-.app .toasts {
+/* The toast renders in a portal outside `.app`, so it carries the token scope
+   on its own container (see tokens.css) and keeps the ink at 88%: the sheen
+   lightens the fill, and the label has to stay above 4.5:1 where it does. */
+.toasts {
   position: fixed;
   bottom: var(--s5);
   left: 50%;
@@ -364,10 +376,14 @@ body:has(.app), body:has(.app-preloader) {
   gap: var(--s2);
   width: min(420px, 100% - 32px);
   transform: translateX(-50%);
+  font-family: var(--font);
   pointer-events: none;
 }
 
-.app .toast {
+.toasts .toast {
+  --tint: var(--ink);
+  --tint-strength: 88%;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -375,27 +391,25 @@ body:has(.app), body:has(.app-preloader) {
   padding: var(--s3) var(--s4);
   border-left: 3px solid transparent;
   border-radius: var(--r2);
-  background: var(--ink);
   color: var(--bg);
-  box-shadow: var(--shadow-lg);
   font-size: var(--t-sm);
   font-weight: 500;
   pointer-events: auto;
 }
 
-.app .toast-good {
+.toasts .toast-good {
   border-left-color: var(--pos);
 }
 
-.app .toast-bad {
+.toasts .toast-bad {
   border-left-color: var(--neg);
 }
 
-.app .toast-action {
+.toasts .toast-action {
   padding: var(--s1) var(--s2);
   border: 0;
   border-radius: var(--r1);
-  background: color-mix(in srgb, var(--bg) 18%, transparent);
+  background: color-mix(in srgb, var(--bg) 10%, transparent);
   color: inherit;
   font-size: var(--t-xs);
   font-weight: 600;
@@ -633,6 +647,12 @@ body:has(.app), body:has(.app-preloader) {
   background: var(--surface-2);
 }
 
+/* The thumb used to slide; a sliding backdrop cannot be frosted, so the
+   checked button carries the tint and the thumb stays out of the paint. */
+.app .add-switch-thumb {
+  display: none;
+}
+
 .app .add-switch button {
   position: relative;
   z-index: 1;
@@ -643,28 +663,12 @@ body:has(.app), body:has(.app-preloader) {
   color: var(--muted);
   font-size: var(--t-sm);
   font-weight: 500;
-  transition: color var(--dur) var(--ease);
 }
 
 .app .add-switch button[aria-checked="true"] {
+  --tint: var(--accent);
+  --tint-strength: var(--tint-state);
   color: var(--ink);
-}
-
-.app .add-switch-thumb {
-  position: absolute;
-  top: var(--s1);
-  bottom: var(--s1);
-  left: var(--s1);
-  width: calc(50% - var(--s1));
-  border-radius: var(--r1);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  transition: transform var(--dur) var(--ease), background-color var(--dur) var(--ease);
-}
-
-.app .add-form.is-got .add-switch-thumb {
-  transform: translateX(100%);
-  background: var(--accent-soft);
 }
 
 .app .add-amount {
@@ -726,16 +730,15 @@ body:has(.app), body:has(.app-preloader) {
 }
 
 .app .add-again-chip {
+  --tint: var(--ink);
+  --tint-strength: var(--tint-neutral);
   display: inline-flex;
   align-items: center;
   gap: var(--s1);
   padding: var(--s1) var(--s3);
-  border: 1px solid var(--line-strong);
   border-radius: var(--r2);
-  background: var(--surface);
   color: var(--ink-2);
   font-size: var(--t-sm);
-  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 
 .app .add-again-chip b {
@@ -746,6 +749,12 @@ body:has(.app), body:has(.app-preloader) {
 }
 
 .app .add-again-chip:hover:not(:disabled) {
+  background-color: color-mix(
+    in srgb,
+    var(--tint) calc(var(--tint-strength) + 8%),
+    var(--glass-under)
+  );
+  box-shadow: var(--glass-shadow-hover);
   border-color: var(--ink);
   color: var(--ink);
 }

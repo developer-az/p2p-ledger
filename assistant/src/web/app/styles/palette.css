@@ -111,8 +111,9 @@
 }
 
 .app .palette-row[aria-selected="true"] {
-  background: var(--surface-2);
-  box-shadow: inset 2px 0 0 var(--accent);
+  --tint: var(--accent);
+  --tint-strength: var(--tint-state);
+  box-shadow: inset 2px 0 0 var(--accent), var(--glass-shadow);
 }
 
 .app .palette-row-label {
@@ -224,10 +225,10 @@
 
 .app .palette-panel kbd,
 .app .shortcut-panel kbd {
+  --tint: var(--ink);
+  --tint-strength: var(--tint-neutral);
   padding: 0 var(--s1);
-  border: 1px solid var(--line-strong);
   border-radius: var(--r1);
-  background: var(--surface);
   color: var(--ink-2);
   font-family: var(--mono);
   font-size: var(--t-xs);

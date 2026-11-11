@@ -37,8 +37,8 @@
 /* ---------- Glass ----------
    Smoked-crystal material for static surfaces only: the shell, panels, dialogs,
    the tour rail, the sign-in aside and the landing figure cells. Never on an
-   element that animates, never on a row, a button or a chart internals, never
-   on <html> or <body>. See the Glass section of docs/DESIGN.md. */
+   element that animates, never on a row or a chart internals, never on <html>
+   or <body>. See the Glass section of docs/DESIGN.md. */
 
 .glass {
   position: relative;
@@ -47,8 +47,8 @@
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
 }
 
 /* The sheen paints above the fill and below the content, so it never lightens
@@ -62,6 +62,78 @@
   background: var(--glass-sheen);
   mix-blend-mode: normal;
   pointer-events: none;
+}
+
+/* ---------- Tinted glass ----------
+   The same material carrying a colour: --tint is the colour and --tint-strength
+   is its share of the fill. Neutral smoke is the default, so an element only
+   has to name a colour to join in. Applied to the app's coloured controls by
+   selector below, because each already owns a stable class; the sheets that
+   load later only set --tint and never paint a flat fill over it.
+
+   The sheen is a background layer, not a pseudo-element, so the fill and the
+   highlight are one paint. Nothing here moves: no transform, no transition,
+   which is what lets the backdrop be filtered once and stay put. */
+
+.glass-tint,
+.app .btn,
+.app .pill,
+.app .chip,
+.app .v-btn,
+.app .v-chip,
+.app .lp-btn,
+.app .lp-tag,
+.app .shell-badge,
+.app .shell-new,
+.app .shell-item[aria-current="page"],
+.app .set-tab[aria-current="page"],
+.app .v-seg button[aria-pressed="true"],
+.app .add-switch button[aria-checked="true"],
+.app .palette-row[aria-selected="true"],
+.app .palette-panel kbd,
+.app .shortcut-panel kbd,
+.app .shell-search kbd,
+.app .planned-tag,
+.planned,
+.toasts .toast {
+  background-color: color-mix(
+    in srgb,
+    var(--tint, var(--ink)) var(--tint-strength, var(--tint-neutral)),
+    var(--glass-under)
+  );
+  background-image: var(--tint-sheen, var(--glass-sheen-tint));
+  border: 1px solid
+    color-mix(in srgb, var(--tint, var(--ink)) 30%, var(--glass-border));
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+}
+
+/* One frost per stack: a tinted control sitting on a glass surface already has
+   a frosted layer under it, so it keeps the tint, edge and sheen and drops the
+   second live blur. */
+.glass :is(
+  .btn,
+  .pill,
+  .chip,
+  .v-btn,
+  .v-chip,
+  .lp-btn,
+  .lp-tag,
+  .shell-badge,
+  .shell-new,
+  .shell-item[aria-current="page"],
+  .set-tab[aria-current="page"],
+  .v-seg button[aria-pressed="true"],
+  .add-switch button[aria-checked="true"],
+  .palette-row[aria-selected="true"],
+  kbd,
+  .planned-tag,
+  .planned,
+  .toast
+) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* These surfaces set their own background, border and shadow in the sheets that
@@ -100,7 +172,8 @@
   background: var(--glass-bg-dense);
 }
 
-/* Fallbacks: the fill drops back to the opaque surface and the sheen goes. */
+/* Fallbacks: the fill drops back to the opaque surface, the tinted fill becomes
+   a solid tint on the surface, and the sheen goes. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass {
     --glass-bg: var(--surface);
@@ -108,6 +181,16 @@
     --glass-sheen: none;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+
+  .app,
+  .app-preloader,
+  .toasts {
+    --glass-under: var(--surface);
+    --glass-sheen: none;
+    --glass-sheen-tint: none;
+    --glass-sheen-fill: none;
+    --glass-filter: none;
   }
 }
 
@@ -119,10 +202,20 @@
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
+
+  .app,
+  .app-preloader,
+  .toasts {
+    --glass-under: var(--surface);
+    --glass-sheen: none;
+    --glass-sheen-tint: none;
+    --glass-sheen-fill: none;
+    --glass-filter: none;
+  }
 }
 
 /* The glass needs something under it to frost: one fixed layer per page root,
-   two very faint washes on the page ground. No animation, no pointer events.
+   three static washes on the page ground. No animation, no pointer events.
    `.lp` only paints it when it is not already inside `.app`, so the washes
    never stack. */
 .app::before,
@@ -133,16 +226,9 @@
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(
-      58% 46% at 100% 0,
-      color-mix(in srgb, var(--brand-gold) 13%, transparent) 0%,
-      transparent 70%
-    ),
-    radial-gradient(
-      52% 42% at 0 100%,
-      color-mix(in srgb, var(--accent) 8%, transparent) 0%,
-      transparent 70%
-    ),
+    radial-gradient(58% 46% at 100% 0, var(--wash-gold) 0%, transparent 68%),
+    radial-gradient(52% 44% at 0 100%, var(--wash-accent) 0%, transparent 70%),
+    radial-gradient(48% 40% at 0 0, var(--wash-neutral) 0%, transparent 70%),
     var(--bg);
 }
 
@@ -182,15 +268,16 @@
 /* ---------- Buttons and links ---------- */
 
 .app .btn {
+  /* The fill, edge and sheen come from the tinted-glass material above. */
+  --tint: var(--ink);
+  --tint-strength: var(--tint-neutral);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--s2);
   min-height: 36px;
   padding: 0 var(--s4);
-  border: 1px solid var(--line-strong);
   border-radius: var(--r2);
-  background: var(--surface);
   color: var(--ink);
   font-size: var(--t-sm);
   font-weight: 500;
@@ -198,24 +285,48 @@
 }
 
 .app .btn:hover:not(:disabled) {
-  background: var(--surface-2);
+  background-color: color-mix(
+    in srgb,
+    var(--tint) calc(var(--tint-strength) + 8%),
+    var(--glass-under)
+  );
+  box-shadow: var(--glass-shadow-hover);
 }
 
 .app .btn-primary {
-  border-color: var(--accent);
-  background: var(--accent);
+  --tint: var(--accent);
+  --tint-strength: var(--tint-accent);
+  /* The near-opaque accent takes the thin sheen so --accent-ink keeps 4.5:1
+     under the highlight. */
+  --tint-sheen: var(--glass-sheen-fill);
   color: var(--accent-ink);
 }
 
 .app .btn-primary:hover:not(:disabled) {
-  border-color: var(--accent-hover);
-  background: var(--accent-hover);
+  background-color: color-mix(
+    in srgb,
+    var(--accent-hover) 94%,
+    var(--glass-under)
+  );
 }
 
+.app .btn-primary:active:not(:disabled) {
+  background-color: color-mix(
+    in srgb,
+    var(--accent-hover) 88%,
+    var(--glass-under)
+  );
+}
+
+/* Disabled stays a solid, muted control: no tint, no frost, no sheen. */
 .app .btn:disabled {
   border-color: var(--line);
-  background: var(--surface-3);
+  background-color: var(--surface-3);
+  background-image: none;
   color: var(--muted);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   opacity: 1;
   cursor: not-allowed;
 }
@@ -284,32 +395,41 @@
 /* ---------- Pills ---------- */
 
 .app .pill {
+  --tint: var(--ink);
+  --tint-strength: var(--tint-neutral);
   display: inline-flex;
   align-items: center;
   gap: var(--s1);
   padding: 0 var(--s2);
-  border: 1px solid var(--line-strong);
   border-radius: var(--r1);
-  background: transparent;
   color: var(--muted);
   font-size: var(--t-xs);
   font-weight: 500;
   white-space: nowrap;
 }
 
-.app .pill-good {
+/* State pills carry the state colour in the fill and a darker ink for the
+   label; the border stays the state colour so the pill still reads at a
+   glance. */
+.app .pill.pill-good {
+  --tint: var(--pos);
+  --tint-strength: var(--tint-state);
   border-color: var(--pos);
-  color: var(--pos);
+  color: var(--pos-ink);
 }
 
-.app .pill-bad {
+.app .pill.pill-bad {
+  --tint: var(--neg);
+  --tint-strength: var(--tint-state);
   border-color: var(--neg);
-  color: var(--neg);
+  color: var(--neg-ink);
 }
 
-.app .pill-warn {
+.app .pill.pill-warn {
+  --tint: var(--warn);
+  --tint-strength: var(--tint-state);
   border-color: var(--warn);
-  color: var(--warn);
+  color: var(--warn-ink);
 }
 
 /* ---------- Notices ---------- */

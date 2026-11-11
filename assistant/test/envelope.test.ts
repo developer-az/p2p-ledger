@@ -413,7 +413,9 @@ describe.skipIf(!process.env.SETTLE_TEST_DATABASE_URL)('Postgres data key store'
     const client = new pg.Client(pgConfig(url));
     await client.connect();
     try {
-      await client.query('delete from app_data_keys where user_id = $1', [user]);
+      if ((await client.query("select to_regclass('app_data_keys') as t")).rows[0]?.t) {
+        await client.query('delete from app_data_keys where user_id = $1', [user]);
+      }
       await withUser(client, user, async () => {
         await client.query('delete from income_logs where account_id = $1', [user]);
         await client.query('delete from money_profiles where account_id = $1', [user]);

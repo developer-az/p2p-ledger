@@ -11,8 +11,10 @@
  * Every press therefore carries the sequence number of the gesture that
  * produced it, and a scrim press is ignored when it belongs to the gesture
  * that opened the drawer. A later, separate tap gets a new number and closes
- * it. Keeping the rule here, pure, lets the shell stay a thin wire and lets
- * the open/close behaviour be tested without a DOM.
+ * it. A press that has no pointer behind it at all (assistive technology,
+ * keyboard activation) carries null instead of a number and always closes an
+ * open drawer. Keeping the rule here, pure, lets the shell stay a thin wire
+ * and lets the open/close behaviour be tested without a DOM.
  */
 
 /** Matches `@media (max-width: 767px)` in styles/shell.css. */
@@ -33,8 +35,8 @@ export interface NavDrawerState {
 export type NavDrawerEvent =
   /** The menu button (or the `[` shortcut) was pressed. */
   | { type: 'menu-press'; gesture: number }
-  /** The scrim was pressed. */
-  | { type: 'scrim-press'; gesture: number }
+  /** The scrim was pressed; null means the click had no pointerdown before it. */
+  | { type: 'scrim-press'; gesture: number | null }
   /** A nav link navigated; the drawer closes behind it. */
   | { type: 'navigate' }
   /** Escape. */
@@ -57,10 +59,24 @@ export function isDrawerOpen(state: NavDrawerState): boolean {
 
 /**
  * A scrim press closes the drawer unless it is the tail of the tap that opened
- * it. The scrim only exists on mobile and only while the drawer is open.
+ * it. A press without a pointer gesture (null) cannot be that tail, so it
+ * always closes. The scrim only exists on mobile and only while open.
  */
-export function shouldCloseFromScrim(state: NavDrawerState, gesture: number): boolean {
-  return isDrawerOpen(state) && state.openedBy !== gesture;
+export function shouldCloseFromScrim(state: NavDrawerState, gesture: number | null): boolean {
+  if (!isDrawerOpen(state)) return false;
+  return gesture === null || state.openedBy !== gesture;
+}
+
+/**
+ * A route change closes an open drawer. If focus was inside it, the focused
+ * element is about to land in an inert subtree, so the menu button takes the
+ * focus instead of dropping it on the body.
+ */
+export function shouldFocusMenuAfterRouteChange(
+  state: NavDrawerState,
+  focusInsideDrawer: boolean,
+): boolean {
+  return isDrawerOpen(state) && focusInsideDrawer;
 }
 
 function close(state: NavDrawerState): NavDrawerState {

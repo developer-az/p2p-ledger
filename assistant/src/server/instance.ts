@@ -6,6 +6,7 @@ import { createSpendLogStore } from './spend-log.js';
 import { createPersonalFinanceStore } from './personal-finance.js';
 import { createAlertDismissalStore } from './alert-store.js';
 import { createPaymentRequestStore } from './payment-requests.js';
+import { createSubscriptionTrackerStore } from './subscription-tracker.js';
 import { createAuthStore } from './auth.js';
 import { createRateLimitStore } from './rate-limit-store.js';
 import { JavaWorkflows, RoutedSpendLogStore } from './java-workflows.js';
@@ -14,6 +15,7 @@ let spendLogs = createSpendLogStore();
 let personalFinance = createPersonalFinanceStore();
 let alertDismissals = createAlertDismissalStore();
 let paymentRequests = createPaymentRequestStore();
+let subscriptionMarks = createSubscriptionTrackerStore();
 
 /** Shared API app for Node server, Vercel, and Vite dev middleware. */
 export function createAssistantApi() {
@@ -29,6 +31,7 @@ export function createAssistantApi() {
   personalFinance = createPersonalFinanceStore(process.env, dataKeys);
   alertDismissals = createAlertDismissalStore(process.env);
   paymentRequests = createPaymentRequestStore();
+  subscriptionMarks = createSubscriptionTrackerStore();
   return createApp({
     ledger,
     practice,
@@ -38,6 +41,7 @@ export function createAssistantApi() {
     personalFinance,
     alertDismissals,
     paymentRequests,
+    subscriptionMarks,
     javaWorkflows,
     dataKeys,
     auth: createAuthStore(),

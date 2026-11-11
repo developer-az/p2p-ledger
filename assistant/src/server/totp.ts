@@ -13,6 +13,7 @@ import {
   scrypt as scryptCb,
   scryptSync,
   timingSafeEqual,
+  randomInt,
 } from 'node:crypto';
 import { promisify } from 'node:util';
 
@@ -132,8 +133,7 @@ const RECOVERY_GROUP_LEN = 4;
 export function generateRecoveryCodes(count = 10): string[] {
   const codes = new Set<string>();
   while (codes.size < count) {
-    const bytes = randomBytes(RECOVERY_GROUPS * RECOVERY_GROUP_LEN);
-    const raw = [...bytes].map((byte) => RECOVERY_ALPHABET[byte % RECOVERY_ALPHABET.length]).join('');
+    const raw = Array.from({ length: RECOVERY_GROUPS * RECOVERY_GROUP_LEN }, () => RECOVERY_ALPHABET[randomInt(RECOVERY_ALPHABET.length)]).join('');
     codes.add(`${raw.slice(0, RECOVERY_GROUP_LEN)}-${raw.slice(RECOVERY_GROUP_LEN)}`);
   }
   return [...codes];

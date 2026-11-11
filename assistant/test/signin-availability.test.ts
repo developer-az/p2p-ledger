@@ -52,7 +52,7 @@ describe('sign-in page layout', () => {
     const html = render('signin', true);
     expect(html).toContain('scrypt');
     expect(html).toContain('bank password');
-    expect(html).toMatch(/Planned · /);
+    expect(html).toContain('Sign in with a passkey.');
     expect(html).not.toMatch(/end-to-end encrypt/i);
   });
 

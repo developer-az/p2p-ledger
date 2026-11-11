@@ -5,8 +5,16 @@ import {
   type AuditEventRow,
   type AuthSessionRow,
   type MfaStatus,
+  type PasskeySummary,
 } from '../api.js';
 import { relativeTime } from './format.js';
+import {
+  creationOptionsFromJson,
+  credentialToJson,
+  isPasskeyCancelled,
+  passkeySupport,
+  requestOptionsFromJson,
+} from './passkeys.js';
 
 /** Plain words for each security event type the server records. */
 const AUDIT_LABELS: Record<string, string> = {
@@ -21,6 +29,9 @@ const AUDIT_LABELS: Record<string, string> = {
   session_revoked: 'Session signed out',
   password_changed: 'Password changed',
   password_reset_requested: 'Password reset requested',
+  passkey_added: 'Passkey added',
+  passkey_removed: 'Passkey removed',
+  passkey_login: 'Signed in with a passkey',
   export: 'Data exported',
   account_deleted: 'Account deleted',
 };
@@ -431,6 +442,289 @@ export function AuditRow({ real }: { real: boolean }) {
       )}
 
       {error && events !== null ? <p className="error-text" role="alert">{error}</p> : null}
+    </li>
+  );
+}
+
+/** Settings → Security: passkeys that can sign in without a password. */
+export function PasskeysRow({ real }: { real: boolean }) {
+  const [passkeys, setPasskeys] = useState<PasskeySummary[] | null>(null);
+  const [supported, setSupported] = useState(false);
+  const [mfaOn, setMfaOn] = useState(false);
+  const [mode, setMode] = useState<'idle' | 'add'>('idle');
+  const [name, setName] = useState('This device');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [pending, setPending] = useState<
+    { kind: 'add'; name: string } | { kind: 'remove'; id: string } | null
+  >(null);
+  const [credential, setCredential] = useState('');
+  const [stepUpError, setStepUpError] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [version, setVersion] = useState(0);
+  const credentialRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setSupported(passkeySupport()); }, []);
+
+  useEffect(() => {
+    if (!real) return;
+    let live = true;
+    api.passkeys()
+      .then((list) => { if (live) setPasskeys(list.passkeys); })
+      .catch((e: Error) => { if (live) setError(e.message); });
+    api.mfa()
+      .then((status) => { if (live) setMfaOn(status.enabled); })
+      .catch(() => { if (live) setMfaOn(false); });
+    return () => { live = false; };
+  }, [real, version]);
+
+  useEffect(() => {
+    if (mode === 'add') nameRef.current?.focus();
+    if (pending) credentialRef.current?.focus();
+  }, [mode, pending]);
+
+  async function beginAdd(passkeyName: string) {
+    setBusy('add');
+    setError('');
+    setMessage('');
+    try {
+      const options = await api.passkeyRegisterOptions();
+      const created = await navigator.credentials.create({
+        publicKey: creationOptionsFromJson(options),
+      }) as PublicKeyCredential | null;
+      if (!created) {
+        setMode('idle');
+        return;
+      }
+      await api.passkeyRegister(credentialToJson(created), passkeyName);
+      setMode('idle');
+      setMessage('Passkey added.');
+      setVersion((v) => v + 1);
+    } catch (e) {
+      if (needsStepUp(e)) {
+        setMode('idle');
+        setPending({ kind: 'add', name: passkeyName });
+        setCredential('');
+        setStepUpError('');
+      } else if (isPasskeyCancelled(e)) {
+        setMode('idle');
+      } else {
+        setError((e as Error).message);
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function remove(id: string) {
+    setBusy('remove:' + id);
+    setError('');
+    setMessage('');
+    try {
+      await api.deletePasskey(id);
+      setMessage('Passkey removed.');
+      setVersion((v) => v + 1);
+    } catch (e) {
+      if (needsStepUp(e)) {
+        setPending({ kind: 'remove', id });
+        setCredential('');
+        setStepUpError('');
+      } else {
+        setError((e as Error).message);
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function stepUpWithPasskey() {
+    const action = pending;
+    if (!action || busy !== null) return;
+    setBusy('stepup');
+    setStepUpError('');
+    try {
+      const options = await api.stepUpPasskeyOptions();
+      const assertion = await navigator.credentials.get({
+        publicKey: requestOptionsFromJson(options),
+      }) as PublicKeyCredential | null;
+      if (!assertion) return;
+      await api.stepUp({ passkey: credentialToJson(assertion) });
+      setPending(null);
+      setCredential('');
+      if (action.kind === 'add') await beginAdd(action.name);
+      else await remove(action.id);
+    } catch (e) {
+      if (isPasskeyCancelled(e)) {
+        setStepUpError('Passkey prompt cancelled. Use your password or code instead.');
+      } else {
+        setStepUpError((e as Error).message);
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function submitStepUp() {
+    if (!pending) return;
+    const value = credential.trim();
+    if (!value) {
+      setStepUpError(mfaOn ? 'Enter the code from your authenticator app.' : 'Enter your password.');
+      return;
+    }
+    setBusy('stepup');
+    setStepUpError('');
+    try {
+      await api.stepUp(mfaOn ? { code: value } : { password: value });
+      const action = pending;
+      setPending(null);
+      setCredential('');
+      if (action.kind === 'add') await beginAdd(action.name);
+      else await remove(action.id);
+    } catch (e) {
+      setStepUpError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <li className="set-row set-row-block">
+      <div className="set-row-head">
+        <span className="set-row-label">Passkeys</span>
+        <span className="set-row-desc">Sign in with your device instead of typing a password.</span>
+      </div>
+
+      {!real ? (
+        <div className="row-wrap">
+          <button type="button" className="btn btn-sm" disabled>Add a passkey</button>
+        </div>
+      ) : passkeys === null ? (
+        <p className="set-copy muted">{error ? 'Could not load passkeys.' : 'Loading passkeys…'}</p>
+      ) : passkeys.length === 0 ? (
+        <p className="set-copy muted">No passkeys yet.</p>
+      ) : (
+        <ul className="set-list">
+          {passkeys.map((passkey) => (
+            <li key={passkey.id}>
+              <div className="set-session-main">
+                <span className="set-session-device">{passkey.name}</span>
+                <span className="set-session-meta">
+                  Added {relativeTime(passkey.createdAt)} · {
+                    passkey.lastUsedAt
+                      ? `Last used ${relativeTime(passkey.lastUsedAt)}`
+                      : 'Not used yet'
+                  }
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={busy !== null}
+                onClick={() => void remove(passkey.id)}
+              >
+                {busy === 'remove:' + passkey.id ? 'Removing…' : 'Remove'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {real ? (
+        <div className="row-wrap">
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={!supported || busy !== null || mode === 'add'}
+            onClick={() => { setMode('add'); setName('This device'); setError(''); setMessage(''); }}
+          >
+            Add a passkey
+          </button>
+          {!supported ? <span className="set-copy muted">This browser does not support passkeys.</span> : null}
+        </div>
+      ) : null}
+
+      {real && mode === 'add' ? (
+        <form
+          className="set-inline-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void beginAdd(name.trim() || 'Passkey');
+          }}
+        >
+          <label htmlFor="passkey-name">Passkey name</label>
+          <input
+            id="passkey-name"
+            ref={nameRef}
+            maxLength={40}
+            disabled={busy !== null}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <div className="row-wrap">
+            <button type="submit" className="btn btn-primary btn-sm" disabled={busy !== null || !name.trim()}>
+              {busy === 'add' ? 'Waiting for browser…' : 'Continue'}
+            </button>
+            <button type="button" className="btn btn-sm" disabled={busy !== null} onClick={() => setMode('idle')}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      {real && pending ? (
+        <form
+          className="set-stepup"
+          onSubmit={(e) => { e.preventDefault(); void submitStepUp(); }}
+        >
+          <p className="set-copy">
+            {mfaOn
+              ? 'Enter the code from your authenticator app to continue.'
+              : 'Enter your password to continue.'}
+          </p>
+          {supported && passkeys && passkeys.length > 0 ? (
+            <div className="row-wrap">
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={busy !== null}
+                onClick={() => void stepUpWithPasskey()}
+              >
+                {busy === 'stepup' ? 'Waiting for browser…' : 'Use a passkey'}
+              </button>
+            </div>
+          ) : null}
+          <label htmlFor="passkey-step-up">{mfaOn ? 'Authenticator code' : 'Password'}</label>
+          <input
+            id="passkey-step-up"
+            ref={credentialRef}
+            type={mfaOn ? 'text' : 'password'}
+            inputMode={mfaOn ? 'numeric' : undefined}
+            autoComplete={mfaOn ? 'one-time-code' : 'current-password'}
+            maxLength={mfaOn ? 20 : 72}
+            disabled={busy !== null}
+            value={credential}
+            onChange={(e) => setCredential(e.target.value)}
+          />
+          <div className="row-wrap">
+            <button type="submit" className="btn btn-primary btn-sm" disabled={busy !== null || !credential.trim()}>
+              {busy === 'stepup' ? 'Checking…' : 'Confirm'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={busy !== null}
+              onClick={() => { setPending(null); setCredential(''); setStepUpError(''); }}
+            >
+              Cancel
+            </button>
+          </div>
+          {stepUpError ? <p className="error-text" role="alert">{stepUpError}</p> : null}
+        </form>
+      ) : null}
+
+      {message ? <p className="set-copy" role="status">{message}</p> : null}
+      {error && passkeys !== null ? <p className="error-text" role="alert">{error}</p> : null}
     </li>
   );
 }

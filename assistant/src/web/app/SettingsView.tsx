@@ -7,7 +7,7 @@ import { densityLabel, type DensityPref } from './density.js';
 import { money } from './format.js';
 import { moneyPlan } from './money-plan.js';
 import { navigate, routeHref, SETTINGS_TABS, type SettingsTab } from './router.js';
-import { AuditRow, DataPrivacyPanel, SessionsRow, TwoFactorRow } from './SecuritySettings.js';
+import { AuditRow, DataPrivacyPanel, PasskeysRow, SessionsRow, TwoFactorRow } from './SecuritySettings.js';
 import type { ThemePref } from './theme.js';
 import { TrustTab } from './TrustTab.js';
 
@@ -127,6 +127,7 @@ export function SettingsView({
                 {!real ? <p className="set-copy muted">Sign in to a real account to use this.</p> : null}
                 <ul className="set-rows">
                   <TwoFactorRow real={real} />
+                  <PasskeysRow real={real} />
                   <SessionsRow real={real} />
                   <AuditRow real={real} />
                 </ul>

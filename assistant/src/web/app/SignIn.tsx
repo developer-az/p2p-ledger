@@ -2,6 +2,12 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { api, isApiError, isMfaChallenge, type BootstrapResponse } from '../api.js';
 import { BrandMark } from './BrandMark.js';
 import { GoogleButton } from './GoogleButton.js';
+import {
+  credentialToJson,
+  isPasskeyCancelled,
+  passkeySupport,
+  requestOptionsFromJson,
+} from './passkeys.js';
 import { navigate } from './router.js';
 import type { Session } from './session.js';
 import { useToast } from './ui.js';
@@ -53,6 +59,7 @@ export function SignIn({
   const [resetSent, setResetSent] = useState<string | null>(null);
   const [challenge, setChallenge] = useState<string | null>(initialChallenge);
   const [mfaCode, setMfaCode] = useState('');
+  const [passkeyAvailable, setPasskeyAvailable] = useState(false);
   const toast = useToast();
   const codeRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
@@ -73,6 +80,9 @@ export function SignIn({
     const next = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`;
     window.history.replaceState(null, '', next);
   }, []);
+
+  // PublicKeyCredential is a browser capability; keep SSR markup deterministic.
+  useEffect(() => { setPasskeyAvailable(passkeySupport()); }, []);
 
   // Each new step starts at its first field; leaving the MFA step returns to email.
   useEffect(() => {
@@ -169,6 +179,32 @@ export function SignIn({
       } else {
         setError((e as Error).message);
       }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitPasskey() {
+    if (!boot || busy || !accountAvailable || !passkeySupport()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const options = await api.passkeyLoginOptions();
+      const credential = await navigator.credentials.get({
+        publicKey: requestOptionsFromJson(options),
+      }) as PublicKeyCredential | null;
+      if (!credential) return;
+      const result = await api.passkeyLogin(credentialToJson(credential));
+      if (isMfaChallenge(result)) {
+        setChallenge(result.challenge);
+        setMfaCode('');
+        return;
+      }
+      onStart({ account: result.account, household: [], demo: false, user: result.user });
+      toast(`Signed in as ${result.user.displayName}.`);
+    } catch (e) {
+      if (isPasskeyCancelled(e)) return;
+      setError((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -317,6 +353,16 @@ export function SignIn({
                 <button className="signin-submit" type="submit" disabled={!boot || busy || !accountAvailable}>
                   {busy ? 'One moment…' : mode === 'create' ? 'Create account' : 'Sign in'}
                 </button>
+                {mode === 'signin' && passkeyAvailable ? (
+                  <button
+                    type="button"
+                    className="signin-text"
+                    disabled={!boot || busy || !accountAvailable}
+                    onClick={() => { void submitPasskey(); }}
+                  >
+                    Sign in with a passkey
+                  </button>
+                ) : null}
                 {mode === 'signin' ? (
                   <button
                     type="button"
@@ -367,7 +413,7 @@ export function SignIn({
             <li>You can download your statement at any time.</li>
             <li>Two-factor sign-in with an authenticator app.</li>
             <li>Delete your account and data.</li>
-            <li>Passkeys <span className="planned">Planned · later</span></li>
+            <li>Sign in with a passkey.</li>
           </ul>
         </aside>
       </div>

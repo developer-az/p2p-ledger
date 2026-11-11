@@ -48,6 +48,13 @@ import { LlmGuard, trimHistory } from './llm-guard.js';
 import { API_HEADERS, securityHeaders } from './security-headers.js';
 import { createMailer, passwordResetEmail, type Mailer } from './mailer.js';
 import { requireStepUp } from './step-up.js';
+import {
+  WebAuthnError,
+  readClientDataChallenge,
+  readCredentialId,
+  verifyAssertion,
+  verifyRegistration,
+} from './webauthn.js';
 import { CSV_HEADER_ROW, csvExportRow } from './data-export.js';
 import { isBreachedPassword } from './breached-password.js';
 import { LoginThrottle } from './login-throttle.js';
@@ -58,6 +65,7 @@ import { SETTLE_RAILS, type SettleRail } from './payment-requests.js';
 import {
   EmailTakenError,
   InMemoryAuthStore,
+  PasskeyExistsError,
   SESSION_COOKIE,
   RESET_TOKEN_TTL_SEC,
   SESSION_ABSOLUTE_MS,
@@ -72,6 +80,7 @@ import {
   type AuditInput,
   type AuditType,
   type AuthStore,
+  type PasskeyRecord,
 } from './auth.js';
 import {
   base32Encode,
@@ -111,7 +120,20 @@ const mfaVerifyBody = z.object({
 const stepUpBody = z.object({
   code: z.string().trim().min(1).max(64).optional(),
   password: z.string().min(1).max(72).optional(),
+  passkey: z.custom<Record<string, unknown>>(
+    (value) => typeof value === 'object' && value !== null && !Array.isArray(value),
+    'invalid passkey credential',
+  ).optional(),
 });
+const passkeyCredential = z.custom<Record<string, unknown>>(
+  (value) => typeof value === 'object' && value !== null && !Array.isArray(value),
+  'invalid passkey credential',
+);
+const passkeyRegisterBody = z.object({
+  credential: passkeyCredential,
+  name: z.string().trim().min(1).max(40).optional(),
+});
+const passkeyLoginBody = z.object({ credential: passkeyCredential });
 const deleteAccountBody = z.object({ confirm: z.literal('DELETE') });
 
 const depositBody = z.object({ amountMinor: z.number().int().positive().max(MAX_MINOR_UI) });
@@ -186,6 +208,9 @@ const WAKE_PROBE_TIMEOUT_MS = 9_000;
 /** Sign-in second-factor challenge lifetime and the step-up window. */
 const MFA_CHALLENGE_TTL_MS = 5 * 60_000;
 const STEP_UP_MS = 10 * 60_000;
+const PASSKEY_CHALLENGE_TTL_MS = 5 * 60_000;
+/** Login challenges are not tied to a user; discoverable credentials identify the account. */
+const PASSKEY_LOGIN_CHALLENGE_USER = '00000000-0000-0000-0000-000000000000';
 
 /**
  * Export page size. Each page is rendered as its own chunk so the response body
@@ -274,6 +299,42 @@ export function createApp(deps: {
     await securityState.saveChallenge(challenge, userId,
       new Date(at.getTime() + MFA_CHALLENGE_TTL_MS), at);
     return challenge;
+  };
+  /** WebAuthn challenges are single-use and share the security-state store. */
+  const newPasskeyChallenge = async (userId: string): Promise<string> => {
+    const challenge = randomBytes(32).toString('base64url');
+    const at = now();
+    await securityState.saveChallenge(challenge, userId,
+      new Date(at.getTime() + PASSKEY_CHALLENGE_TTL_MS), at);
+    return challenge;
+  };
+  const appOrigin = (c: Context): string => appUrl
+    ? new URL(appUrl).origin
+    : new URL(c.req.url).origin;
+  const rpIdFor = (c: Context): string => appUrl
+    ? new URL(appUrl).hostname
+    : new URL(c.req.url).hostname;
+  const passkeySummary = (passkey: PasskeyRecord) => ({
+    id: passkey.id,
+    name: passkey.name,
+    transports: passkey.transports,
+    alg: passkey.alg,
+    createdAt: passkey.createdAt.toISOString(),
+    lastUsedAt: passkey.lastUsedAt?.toISOString() ?? null,
+  });
+  /** True when a challenge exists, belongs to the caller and has not expired. */
+  const passkeyChallengeValid = async (challenge: string, userId: string): Promise<boolean> => {
+    const pending = await securityState.getChallenge(challenge);
+    if (!pending || pending.userId !== userId) return false;
+    if (pending.expiresAt.getTime() <= now().getTime()) {
+      await securityState.deleteChallenge(challenge);
+      return false;
+    }
+    return true;
+  };
+  const webauthnFailure = (c: Context, error: unknown): Response => {
+    if (error instanceof WebAuthnError) return c.json({ error: error.code }, 400);
+    throw error;
   };
   const mailer = deps.mailer ?? createMailer();
   const appUrl = (deps.appUrl ?? process.env.APP_URL ?? '').trim().replace(/\/$/, '');
@@ -984,6 +1045,24 @@ export function createApp(deps: {
   });
 
   /** Opens a ten-minute window for sensitive actions; later steps use requireStepUp. */
+  app.post('/auth/step-up/passkey/options', async (c) => {
+    const user = await sessionUser(c);
+    if (!user) return c.json({ error: 'Sign in first.' }, 401);
+    const passkeys = await auth.listPasskeys(user.id);
+    const challenge = await newPasskeyChallenge(user.id);
+    return c.json({
+      challenge,
+      rpId: rpIdFor(c),
+      timeout: PASSKEY_CHALLENGE_TTL_MS,
+      userVerification: 'preferred',
+      allowCredentials: passkeys.map((passkey) => ({
+        type: 'public-key',
+        id: passkey.id,
+        transports: passkey.transports,
+      })),
+    });
+  });
+
   app.post('/auth/step-up', async (c) => {
     const user = await sessionUser(c);
     if (!user) return c.json({ error: 'Sign in first.' }, 401);
@@ -995,7 +1074,35 @@ export function createApp(deps: {
     const at = now();
     const state = await auth.getMfaState(user.id);
     let accepted = false;
-    if (state.secret) {
+    if (parsed.data.passkey) {
+      let challenge = '';
+      try {
+        challenge = readClientDataChallenge(parsed.data.passkey, 'webauthn.get');
+        if (!await passkeyChallengeValid(challenge, user.id))
+          return c.json({ error: 'challenge_expired' }, 400);
+        const passkey = await auth.getPasskey(readCredentialId(parsed.data.passkey));
+        if (!passkey || passkey.userId !== user.id)
+          return c.json({ error: 'invalid_credentials' }, 400);
+        const verified = verifyAssertion(parsed.data.passkey, {
+          expectedChallenge: challenge,
+          expectedOrigin: appOrigin(c),
+          rpId: rpIdFor(c),
+          passkey,
+        });
+        await securityState.deleteChallenge(challenge);
+        await auth.touchPasskey(passkey.id, verified.signCount, at);
+        accepted = true;
+      } catch (error) {
+        if (error instanceof WebAuthnError) {
+          if (error.code === 'passkey_cloned') {
+            await securityState.deleteChallenge(challenge).catch(() => {});
+          }
+          await mfaThrottle.failAsync(throttleKey);
+          return c.json({ error: error.code }, 400);
+        }
+        throw error;
+      }
+    } else if (state.secret) {
       if (!mfaKey) return c.json({ error: 'mfa_unavailable' }, 503);
       if (parsed.data.code) {
         const verdict = verifyTotp(decryptSecret(state.secret, mfaKey), parsed.data.code, at.getTime(),
@@ -1021,6 +1128,171 @@ export function createApp(deps: {
     await auth.setSessionStepUp(hashSessionToken(token), until);
     await audit(c, user.id, 'step_up');
     return c.json({ ok: true, until: until.toISOString() });
+  });
+
+  app.post('/auth/passkeys/register/options', async (c) => {
+    const user = await sessionUser(c);
+    if (!user) return c.json({ error: 'Sign in first.' }, 401);
+    const denied = await requireStepUp(c, auth, now);
+    if (denied) return denied;
+    const passkeys = await auth.listPasskeys(user.id);
+    const challenge = await newPasskeyChallenge(user.id);
+    return c.json({
+      rp: { id: rpIdFor(c), name: 'Settle' },
+      user: {
+        id: Buffer.from(user.id, 'utf8').toString('base64url'),
+        name: user.email,
+        displayName: user.displayName,
+      },
+      challenge,
+      pubKeyCredParams: [
+        { type: 'public-key', alg: -7 },
+        { type: 'public-key', alg: -257 },
+      ],
+      timeout: PASSKEY_CHALLENGE_TTL_MS,
+      attestation: 'none',
+      authenticatorSelection: {
+        residentKey: 'preferred',
+        requireResidentKey: false,
+        userVerification: 'preferred',
+      },
+      excludeCredentials: passkeys.map((passkey) => ({
+        type: 'public-key',
+        id: passkey.id,
+        transports: passkey.transports,
+      })),
+    });
+  });
+
+  app.post('/auth/passkeys/register', async (c) => {
+    const user = await sessionUser(c);
+    if (!user) return c.json({ error: 'Sign in first.' }, 401);
+    const parsed = passkeyRegisterBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'invalid_credential' }, 400);
+    try {
+      const challenge = readClientDataChallenge(parsed.data.credential, 'webauthn.create');
+      if (!await passkeyChallengeValid(challenge, user.id))
+        return c.json({ error: 'challenge_expired' }, 400);
+      const verified = verifyRegistration(parsed.data.credential, {
+        expectedChallenge: challenge,
+        expectedOrigin: appOrigin(c),
+        rpId: rpIdFor(c),
+      });
+      await securityState.deleteChallenge(challenge);
+      const name = parsed.data.name ?? 'Passkey';
+      await auth.addPasskey({
+        id: verified.credentialId,
+        userId: user.id,
+        publicKeyJwk: verified.publicKeyJwk,
+        alg: verified.alg,
+        signCount: verified.signCount,
+        transports: verified.transports,
+        name,
+        createdAt: now(),
+        lastUsedAt: null,
+      });
+      await audit(c, user.id, 'passkey_added', { name });
+      const stored = await auth.getPasskey(verified.credentialId);
+      return c.json({ ok: true, passkey: stored ? passkeySummary(stored) : null });
+    } catch (error) {
+      if (error instanceof PasskeyExistsError) return c.json({ error: 'passkey_exists' }, 409);
+      return webauthnFailure(c, error);
+    }
+  });
+
+  app.get('/auth/passkeys', async (c) => {
+    const user = await sessionUser(c);
+    if (!user) return c.json({ error: 'Sign in first.' }, 401);
+    const passkeys = await auth.listPasskeys(user.id);
+    return c.json({ passkeys: passkeys.map(passkeySummary) });
+  });
+
+  app.delete('/auth/passkeys/:id', async (c) => {
+    const user = await sessionUser(c);
+    if (!user) return c.json({ error: 'Sign in first.' }, 401);
+    const denied = await requireStepUp(c, auth, now);
+    if (denied) return denied;
+    const id = c.req.param('id');
+    if (!id || id.length > 2048) return c.json({ error: 'passkey_not_found' }, 404);
+    if (!await auth.deletePasskey(user.id, id)) {
+      return c.json({ error: 'passkey_not_found' }, 404);
+    }
+    await audit(c, user.id, 'passkey_removed', { id });
+    return c.json({ ok: true });
+  });
+
+  app.post('/auth/passkeys/login/options', async (c) => {
+    const challenge = await newPasskeyChallenge(PASSKEY_LOGIN_CHALLENGE_USER);
+    return c.json({
+      challenge,
+      rpId: rpIdFor(c),
+      timeout: PASSKEY_CHALLENGE_TTL_MS,
+      userVerification: 'preferred',
+      allowCredentials: [],
+    });
+  });
+
+  /** Discoverable passkey sign-in. The credential identifies the account. */
+  app.post('/auth/passkeys/login', async (c) => {
+    const ipKey = 'ip:' + clientIp(c);
+    const throttle = await ipThrottle.checkAsync(ipKey);
+    if (!throttle.allowed) {
+      c.header('Retry-After', String(throttle.retryAfterSec));
+      return c.json({ error: 'too_many_attempts' }, 429);
+    }
+    const fail = async (response: Response): Promise<Response> => {
+      await ipThrottle.failAsync(ipKey);
+      return response;
+    };
+    const parsed = passkeyLoginBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return fail(c.json({ error: 'invalid_credential' }, 400));
+    try {
+      const challenge = readClientDataChallenge(parsed.data.credential, 'webauthn.get');
+      if (!await passkeyChallengeValid(challenge, PASSKEY_LOGIN_CHALLENGE_USER)) {
+        return fail(c.json({ error: 'challenge_expired' }, 400));
+      }
+      const passkey = await auth.getPasskey(readCredentialId(parsed.data.credential));
+      if (!passkey) return fail(c.json({ error: 'invalid_credentials' }, 401));
+      let verified;
+      try {
+        verified = verifyAssertion(parsed.data.credential, {
+          expectedChallenge: challenge,
+          expectedOrigin: appOrigin(c),
+          rpId: rpIdFor(c),
+          passkey,
+        });
+      } catch (error) {
+        if (error instanceof WebAuthnError) {
+          if (error.code === 'passkey_cloned') {
+            await securityState.deleteChallenge(challenge);
+            await audit(c, passkey.userId, 'passkey_login', { result: 'passkey_cloned' });
+          }
+          return fail(c.json({ error: error.code }, 400));
+        }
+        throw error;
+      }
+      await ipThrottle.succeedAsync(ipKey);
+      await securityState.deleteChallenge(challenge);
+      await auth.touchPasskey(passkey.id, verified.signCount, now());
+      await audit(c, passkey.userId, 'passkey_login', { uv: verified.userVerified });
+      const user = await auth.findById(passkey.userId);
+      if (!user) return c.json({ error: 'invalid_credentials' }, 401);
+      if (!verified.userVerified) {
+        const mfa = await auth.getMfaState(user.id);
+        if (mfa.secret) {
+          const mfaChallenge = await newMfaChallenge(user.id);
+          await audit(c, user.id, 'mfa_challenge');
+          return c.json({ mfaRequired: true, challenge: mfaChallenge });
+        }
+      }
+      await issueSession(c, user.id);
+      return c.json({
+        user: { email: user.email, displayName: user.displayName },
+        account: { id: user.accountId, owner: user.ownerId },
+      });
+    } catch (error) {
+      return webauthnFailure(c, error);
+    }
   });
 
   // Password reset. The request step answers the same way whether or not the email has an account,

@@ -18,6 +18,13 @@ export class EmailTakenError extends Error {
   }
 }
 
+export class PasskeyExistsError extends Error {
+  constructor() {
+    super('That passkey is already registered.');
+    this.name = 'PasskeyExistsError';
+  }
+}
+
 export interface AuthRecord {
   id: string;
   email: string;
@@ -58,6 +65,20 @@ export interface StoredRecoveryCode {
   codeHash: string;
 }
 
+export interface PasskeyRecord {
+  /** WebAuthn credential id, base64url. */
+  id: string;
+  userId: string;
+  publicKeyJwk: Record<string, string>;
+  /** COSE algorithm: -7 (ES256) or -257 (RS256). */
+  alg: number;
+  signCount: number;
+  transports: string[];
+  name: string;
+  createdAt: Date;
+  lastUsedAt: Date | null;
+}
+
 /** Security events worth keeping after the fact. The log is append-only. */
 export type AuditType =
   | 'login'
@@ -71,6 +92,9 @@ export type AuditType =
   | 'session_revoked'
   | 'password_changed'
   | 'password_reset_requested'
+  | 'passkey_added'
+  | 'passkey_removed'
+  | 'passkey_login'
   | 'export'
   | 'account_deleted';
 
@@ -134,6 +158,11 @@ export interface AuthStore {
   listRecoveryCodes(userId: string): Promise<StoredRecoveryCode[]>;
   /** Single use: returns false when the code was already spent. */
   useRecoveryCode(userId: string, id: string, now: Date): Promise<boolean>;
+  addPasskey(record: PasskeyRecord): Promise<void>;
+  listPasskeys(userId: string): Promise<PasskeyRecord[]>;
+  getPasskey(id: string): Promise<PasskeyRecord | null>;
+  deletePasskey(userId: string, id: string): Promise<boolean>;
+  touchPasskey(id: string, signCount: number, lastUsedAt: Date): Promise<void>;
   getSessionStepUp(tokenHash: string): Promise<Date | null>;
   setSessionStepUp(tokenHash: string, until: Date): Promise<void>;
   /** Append-only: there is deliberately no update or delete counterpart. */
@@ -273,6 +302,7 @@ export class InMemoryAuthStore implements AuthStore {
   private readonly recoveryCodes = new Map<string, {
     userId: string; codeHash: string; usedAt: number | null;
   }>();
+  private readonly passkeys = new Map<string, PasskeyRecord>();
   /** The only audit storage is an append list; reads hand out deep copies. */
   private readonly audit: Array<AuditEvent & { userId: string }> = [];
 
@@ -483,6 +513,59 @@ export class InMemoryAuthStore implements AuthStore {
     return true;
   }
 
+  async addPasskey(record: PasskeyRecord): Promise<void> {
+    if (this.passkeys.has(record.id)) throw new PasskeyExistsError();
+    this.passkeys.set(record.id, {
+      ...record,
+      publicKeyJwk: { ...record.publicKeyJwk },
+      transports: [...record.transports],
+      createdAt: new Date(record.createdAt.getTime()),
+      lastUsedAt: record.lastUsedAt ? new Date(record.lastUsedAt.getTime()) : null,
+    });
+  }
+
+  async listPasskeys(userId: string): Promise<PasskeyRecord[]> {
+    return [...this.passkeys.values()]
+      .filter((passkey) => passkey.userId === userId)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((passkey) => ({
+        ...passkey,
+        publicKeyJwk: { ...passkey.publicKeyJwk },
+        transports: [...passkey.transports],
+        createdAt: new Date(passkey.createdAt.getTime()),
+        lastUsedAt: passkey.lastUsedAt ? new Date(passkey.lastUsedAt.getTime()) : null,
+      }));
+  }
+
+  async getPasskey(id: string): Promise<PasskeyRecord | null> {
+    const passkey = this.passkeys.get(id);
+    if (!passkey) return null;
+    return {
+      ...passkey,
+      publicKeyJwk: { ...passkey.publicKeyJwk },
+      transports: [...passkey.transports],
+      createdAt: new Date(passkey.createdAt.getTime()),
+      lastUsedAt: passkey.lastUsedAt ? new Date(passkey.lastUsedAt.getTime()) : null,
+    };
+  }
+
+  async deletePasskey(userId: string, id: string): Promise<boolean> {
+    const passkey = this.passkeys.get(id);
+    if (!passkey || passkey.userId !== userId) return false;
+    this.passkeys.delete(id);
+    return true;
+  }
+
+  async touchPasskey(id: string, signCount: number, lastUsedAt: Date): Promise<void> {
+    const passkey = this.passkeys.get(id);
+    if (!passkey) return;
+    this.passkeys.set(id, {
+      ...passkey,
+      signCount,
+      lastUsedAt: new Date(lastUsedAt.getTime()),
+    });
+  }
+
   async getSessionStepUp(tokenHash: string): Promise<Date | null> {
     const session = this.sessions.get(tokenHash);
     return session?.stepUpUntil == null ? null : new Date(session.stepUpUntil);
@@ -525,6 +608,7 @@ export class InMemoryAuthStore implements AuthStore {
   async deleteUser(userId: string): Promise<void> {
     this.mfa.delete(userId);
     for (const [id, code] of this.recoveryCodes) if (code.userId === userId) this.recoveryCodes.delete(id);
+    for (const [id, passkey] of this.passkeys) if (passkey.userId === userId) this.passkeys.delete(id);
     for (const [hash, session] of this.sessions) if (session.userId === userId) this.sessions.delete(hash);
     for (const [hash, reset] of this.resets) if (reset.userId === userId) this.resets.delete(hash);
     for (const [subject, id] of this.googleSubjects) if (id === userId) this.googleSubjects.delete(subject);
@@ -594,6 +678,18 @@ create table if not exists app_recovery_codes (
 );
 create index if not exists app_recovery_codes_user_idx on app_recovery_codes (user_id) where used_at is null;
 alter table app_sessions add column if not exists step_up_until timestamptz;
+create table if not exists app_passkeys (
+    id             text primary key,
+    user_id        uuid        not null references app_users (id) on delete cascade,
+    public_key_jwk jsonb       not null,
+    alg            integer     not null,
+    sign_count     bigint      not null default 0,
+    transports     text[]      not null default '{}',
+    name           text        not null,
+    created_at     timestamptz not null default now(),
+    last_used_at   timestamptz
+);
+create index if not exists app_passkeys_user_idx on app_passkeys (user_id);
 `;
 
 /**
@@ -1031,6 +1127,78 @@ export class PostgresAuthStore implements AuthStore {
     return (res.rowCount ?? 0) > 0;
   }
 
+  private passkeyRow(row: Record<string, unknown>): PasskeyRecord {
+    const rawJwk = typeof row.public_key_jwk === 'string'
+      ? JSON.parse(row.public_key_jwk) as unknown
+      : row.public_key_jwk;
+    return {
+      id: String(row.id),
+      userId: String(row.user_id),
+      publicKeyJwk: (rawJwk ?? {}) as Record<string, string>,
+      alg: Number(row.alg),
+      signCount: Number(row.sign_count),
+      transports: Array.isArray(row.transports) ? row.transports.map(String) : [],
+      name: String(row.name),
+      createdAt: new Date(row.created_at as string | Date),
+      lastUsedAt: row.last_used_at == null
+        ? null
+        : new Date(row.last_used_at as string | Date),
+    };
+  }
+
+  async addPasskey(record: PasskeyRecord): Promise<void> {
+    try {
+      await this.run((c) => c.query(
+        `insert into app_passkeys
+          (id, user_id, public_key_jwk, alg, sign_count, transports, name, created_at, last_used_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [record.id, record.userId, JSON.stringify(record.publicKeyJwk), record.alg,
+          record.signCount, record.transports, record.name, record.createdAt.toISOString(),
+          record.lastUsedAt?.toISOString() ?? null],
+      ));
+    } catch (error) {
+      if (typeof error === 'object' && error !== null
+        && (error as { code?: unknown }).code === '23505') {
+        throw new PasskeyExistsError();
+      }
+      throw error;
+    }
+  }
+
+  async listPasskeys(userId: string): Promise<PasskeyRecord[]> {
+    const res = await this.run((c) => c.query(
+      `select id, user_id, public_key_jwk, alg, sign_count, transports, name, created_at, last_used_at
+         from app_passkeys where user_id = $1 order by created_at desc, id`,
+      [userId],
+    ));
+    return res.rows.map((row) => this.passkeyRow(row as Record<string, unknown>));
+  }
+
+  async getPasskey(id: string): Promise<PasskeyRecord | null> {
+    const res = await this.run((c) => c.query(
+      `select id, user_id, public_key_jwk, alg, sign_count, transports, name, created_at, last_used_at
+         from app_passkeys where id = $1`,
+      [id],
+    ));
+    const row = res.rows[0] as Record<string, unknown> | undefined;
+    return row ? this.passkeyRow(row) : null;
+  }
+
+  async deletePasskey(userId: string, id: string): Promise<boolean> {
+    const res = await this.run((c) => c.query(
+      `delete from app_passkeys where id = $1 and user_id = $2 returning id`,
+      [id, userId],
+    ));
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  async touchPasskey(id: string, signCount: number, lastUsedAt: Date): Promise<void> {
+    await this.run((c) => c.query(
+      `update app_passkeys set sign_count = $2, last_used_at = $3 where id = $1`,
+      [id, signCount, lastUsedAt.toISOString()],
+    ));
+  }
+
   async getSessionStepUp(tokenHash: string): Promise<Date | null> {
     const res = await this.run((c) => c.query(
       `select step_up_until from app_sessions where token_hash = $1`,
@@ -1082,6 +1250,7 @@ export class PostgresAuthStore implements AuthStore {
         // The audit trigger refuses DELETE unless this transaction-local flag is on.
         await c.query(`set local settle.allow_audit_purge = 'on'`);
         await c.query('delete from app_recovery_codes where user_id = $1', [userId]);
+        await c.query('delete from app_passkeys where user_id = $1', [userId]);
         await c.query('delete from app_sessions where user_id = $1', [userId]);
         await c.query('delete from app_password_resets where user_id = $1', [userId]);
         await c.query('delete from app_google_identities where user_id = $1', [userId]);

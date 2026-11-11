@@ -409,6 +409,54 @@ export interface MfaSetup {
   otpauthUri: string;
 }
 
+export interface PasskeySummary {
+  id: string;
+  name: string;
+  transports: string[];
+  alg: number;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export interface PasskeyCreationOptions {
+  rp: { id: string; name: string };
+  user: { id: string; name: string; displayName: string };
+  challenge: string;
+  pubKeyCredParams: { type: 'public-key'; alg: number }[];
+  timeout: number;
+  attestation: 'none';
+  authenticatorSelection: {
+    residentKey: 'preferred';
+    requireResidentKey: boolean;
+    userVerification: 'preferred' | 'required' | 'discouraged';
+  };
+  excludeCredentials: { type: 'public-key'; id: string; transports: string[] }[];
+}
+
+export interface PasskeyRequestOptions {
+  challenge: string;
+  rpId: string;
+  timeout: number;
+  userVerification: 'preferred' | 'required' | 'discouraged';
+  allowCredentials: { type: 'public-key'; id: string; transports: string[] }[];
+}
+
+/** Browser credential response in the base64url JSON shape the server accepts. */
+export interface PasskeyCredentialJson {
+  id: string;
+  rawId: string;
+  type: 'public-key';
+  response: {
+    clientDataJSON: string;
+    attestationObject?: string;
+    authenticatorData?: string;
+    signature?: string;
+    userHandle?: string | null;
+    transports?: string[];
+  };
+  clientExtensionResults?: unknown;
+}
+
 export interface AuditEventRow {
   id: string;
   type: string;
@@ -453,6 +501,11 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   step_up_required: 'Confirm it is you to continue.',
   invalid_credentials: 'That code or password did not work.',
   mfa_unavailable: 'Two-factor sign-in is not available on this server.',
+  passkey_cloned: 'This passkey may have been copied. Sign in another way and remove it.',
+  unsupported_attestation: 'This passkey type is not supported.',
+  unsupported_algorithm: 'This passkey type is not supported.',
+  passkey_exists: 'That passkey is already added.',
+  passkey_not_found: 'That passkey is no longer on this account.',
   confirm_required: 'Type DELETE to confirm.',
   unsupported_format: 'Choose JSON or CSV.',
 };
@@ -640,8 +693,24 @@ export const api = {
   logout: () => call<{ ok: boolean }>('/api/auth/logout', { method: 'POST', body: '{}' }),
   mfaVerify: (challenge: string, code: string) =>
     call<{ ok: boolean }>('/api/auth/mfa/verify', { method: 'POST', body: JSON.stringify({ challenge, code }) }),
-  stepUp: (body: { code: string } | { password: string }) =>
+  stepUp: (body: { code: string } | { password: string } | { passkey: PasskeyCredentialJson }) =>
     call<{ ok: boolean; until: string }>('/api/auth/step-up', { method: 'POST', body: JSON.stringify(body) }),
+  stepUpPasskeyOptions: () =>
+    call<PasskeyRequestOptions>('/api/auth/step-up/passkey/options', { method: 'POST', body: '{}' }),
+  passkeys: () => call<{ passkeys: PasskeySummary[] }>('/api/auth/passkeys'),
+  passkeyRegisterOptions: () =>
+    call<PasskeyCreationOptions>('/api/auth/passkeys/register/options', { method: 'POST', body: '{}' }),
+  passkeyRegister: (credential: PasskeyCredentialJson, name: string) =>
+    call<{ ok: boolean; passkey: PasskeySummary | null }>('/api/auth/passkeys/register', {
+      method: 'POST',
+      body: JSON.stringify({ credential, name }),
+    }),
+  deletePasskey: (id: string) =>
+    call<{ ok: boolean }>(`/api/auth/passkeys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  passkeyLoginOptions: () =>
+    call<PasskeyRequestOptions>('/api/auth/passkeys/login/options', { method: 'POST', body: '{}' }),
+  passkeyLogin: (credential: PasskeyCredentialJson) =>
+    call<LoginResult>('/api/auth/passkeys/login', { method: 'POST', body: JSON.stringify({ credential }) }),
   mfa: () => call<MfaStatus>('/api/auth/mfa'),
   mfaSetup: () => call<MfaSetup>('/api/auth/mfa/setup', { method: 'POST', body: '{}' }),
   mfaEnable: (code: string) =>

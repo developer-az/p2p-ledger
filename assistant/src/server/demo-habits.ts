@@ -3,6 +3,7 @@ import type { SpendCategory, SpendLogStore } from './spend-log.js';
 
 const MS_DAY = 86_400_000;
 const MS_HOUR = 3_600_000;
+const DEMO_SEED_TTL_MS = 24 * MS_HOUR;
 
 export type DemoPersona = 'anthony' | 'sam' | 'jordan';
 
@@ -126,56 +127,52 @@ function at(now: Date, daysAgo: number, hoursAgo = 0): string {
   return new Date(now.getTime() - daysAgo * MS_DAY - hoursAgo * MS_HOUR).toISOString();
 }
 
-/** Seed cash balance per persona; the smoke check uses it to spot fixture drift. */
+/** Cash balance the demo seed writes; the smoke check compares against it. */
 export function demoSeedCashMinor(persona: DemoPersona): number {
   return PROFILES[persona].cashMinor;
 }
 
-/** Content fingerprint of the seeded rows: timestamps shift with the seed run, amounts do not. */
-function spendKey(amountMinor: number, note: string, category: string): string {
-  return `${note}|${amountMinor}|${category}`;
-}
-
-function seedSpendKeys(persona: DemoPersona): string[] {
-  return PROFILES[persona].spends
-    .map((spend) => spendKey(spend.amountMinor, spend.note, spend.category))
-    .sort();
+async function clearSpendLogs(spendLogs: SpendLogStore, accountId: string): Promise<void> {
+  if (spendLogs.deleteAll) {
+    await spendLogs.deleteAll(accountId);
+    return;
+  }
+  for (;;) {
+    const rows = await spendLogs.list(accountId, { limit: 500 });
+    if (rows.length === 0) return;
+    let removed = 0;
+    for (const row of rows) if (await spendLogs.remove(accountId, row.id)) removed++;
+    if (removed === 0) return;
+  }
 }
 
 /**
- * True when the stored demo history no longer matches the fixture — a stray
- * deposit/import, an edited budget, an extra income row or a changed cash
- * balance. Old builds wrote straight to the shared practice ids, so production
- * demo starts call this and re-seed rather than showing drifted numbers.
+ * Daily reset for the shared demo wallet. The seed timestamp lives on the money
+ * profile, so it survives with the rest of the demo data. Reads inside the day
+ * leave a visitor's demo writes alone; after 24 hours the history is wiped and
+ * written from the fixture again.
  */
-export async function demoHabitsDrifted(
+export async function resetDemoHabitsIfStale(
   spendLogs: SpendLogStore,
   finance: PersonalFinanceStore,
   accountId: string,
   persona: DemoPersona,
+  now = new Date(),
 ): Promise<boolean> {
-  const profile = await finance.getProfile(accountId, 'USD');
-  const seed = PROFILES[persona];
-  if (profile.walletCashMinor !== seed.cashMinor) return true;
-  if (profile.creditOwedMinor !== seed.creditMinor) return true;
-  if (profile.weeklyBudgetMinor !== seed.weeklyBudgetMinor) return true;
-
-  const spends = await spendLogs.list(accountId, { limit: 2_000 });
-  const expected = seedSpendKeys(persona);
-  if (spends.length !== expected.length) return true;
-  const actual = spends.map((row) => spendKey(row.amountMinor, row.note ?? '', row.category)).sort();
-  if (actual.some((key, i) => key !== expected[i])) return true;
-
-  const incomes = await finance.listIncome(accountId, { limit: 100 });
-  return incomes.length !== 1 || incomes[0]?.amountMinor !== seed.incomeMinor;
+  const profile = await finance.getProfile(accountId, 'USD', now);
+  const seededAt = profile.demoSeededAt ? Date.parse(profile.demoSeededAt) : Number.NaN;
+  if (Number.isFinite(seededAt) && now.getTime() - seededAt < DEMO_SEED_TTL_MS) {
+    /* Still fill a cold instance's empty history, but never wipe within the day. */
+    return seedDemoHabits(spendLogs, finance, accountId, persona, now);
+  }
+  await clearSpendLogs(spendLogs, accountId);
+  await finance.deleteAll(accountId);
+  return seedDemoHabits(spendLogs, finance, accountId, persona, now);
 }
 
 /**
  * Gives a demo wallet a believable personal history so the product has something
- * to teach with on first open. Idempotent while the stored history matches the
- * fixture. A wallet that drifted — or a cold instance whose in-memory spend log
- * is empty while the persisted profile and incomes remain — is purged and
- * seeded again, so repeated cold starts cannot pile up demo incomes.
+ * to teach with on first open. Idempotent: a wallet with any spend log is left alone.
  */
 export async function seedDemoHabits(
   spendLogs: SpendLogStore,
@@ -184,16 +181,15 @@ export async function seedDemoHabits(
   persona: DemoPersona,
   now = new Date(),
 ): Promise<boolean> {
-  if (!await demoHabitsDrifted(spendLogs, finance, accountId, persona)) return false;
-  /* Drifted or empty: throw the stored demo state away and seed the fixture again. */
-  await spendLogs.deleteAll?.(accountId);
-  await finance.deleteAll(accountId);
+  const existing = await spendLogs.list(accountId, { limit: 1 });
+  if (existing.length > 0) return false;
   const profile = PROFILES[persona];
   await finance.updateProfile(accountId, 'USD', {
     walletCashMinor: profile.cashMinor,
     creditOwedMinor: profile.creditMinor,
     weeklyBudgetMinor: profile.weeklyBudgetMinor,
     spendLogsAffectWallet: true,
+    demoSeededAt: now.toISOString(),
   }, now);
   await finance.recordIncome(accountId, {
     amountMinor: profile.incomeMinor,

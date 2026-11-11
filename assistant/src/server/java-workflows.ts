@@ -140,9 +140,4 @@ export class RoutedSpendLogStore implements SpendLogStore {
     const result = await this.java.request<{ removed: boolean }>('DELETE', `/v1/accounts/${encodeURIComponent(accountId)}/spends/${encodeURIComponent(id)}`);
     return result.removed;
   }
-  /** Practice demo reset: the Java ledger owns live rows and has no bulk purge. */
-  async deleteAll(accountId: string): Promise<void> {
-    if (!this.isPractice(accountId)) return;
-    await this.practice.deleteAll?.(accountId);
-  }
 }

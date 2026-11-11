@@ -41,6 +41,10 @@ export interface RecordSpendInput {
 export interface SpendLogStore {
   record(accountId: string, input: RecordSpendInput, now?: Date, idempotencyKey?: string): Promise<SpendLogEntry>;
   list(accountId: string, opts?: { since?: Date; limit?: number }): Promise<SpendLogEntry[]>;
+  /** Ascending id keyset page used by bounded data export. */
+  listSpendPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]>;
+  /** Alias kept for callers that use the same name as the income store. */
+  listPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]>;
   /** Remove one manual log. Returns false when it was already gone. */
   remove(accountId: string, spendId: string): Promise<boolean>;
   /**
@@ -268,6 +272,17 @@ export class InMemorySpendLogStore implements SpendLogStore {
       .filter((e) => e.accountId === accountId && (since === undefined || Date.parse(e.occurredAt) >= since))
       .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
       .slice(0, limit);
+  }
+
+  async listSpendPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]> {
+    return this.events
+      .filter((entry) => entry.accountId === accountId && (afterId === null || entry.id > afterId))
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .slice(0, Math.max(1, limit));
+  }
+
+  async listPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]> {
+    return this.listSpendPage(accountId, afterId, limit);
   }
 
   async remove(accountId: string, spendId: string): Promise<boolean> {

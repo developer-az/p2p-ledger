@@ -47,9 +47,10 @@ import { LlmGuard, trimHistory } from './llm-guard.js';
 import { API_HEADERS, securityHeaders } from './security-headers.js';
 import { createMailer, passwordResetEmail, type Mailer } from './mailer.js';
 import { requireStepUp } from './step-up.js';
-import { buildCsvExport } from './data-export.js';
+import { CSV_HEADER_ROW, csvExportRow } from './data-export.js';
 import { isBreachedPassword } from './breached-password.js';
 import { LoginThrottle } from './login-throttle.js';
+import { createSecurityStateStore, type SecurityStateStore } from './security-state.js';
 import { retryAfterSeconds } from './rate-limit.js';
 import { InMemoryRateLimitStore, durableLimiter, type RateLimitStore } from './rate-limit-store.js';
 import { SETTLE_RAILS, type SettleRail } from './payment-requests.js';
@@ -186,11 +187,10 @@ const MFA_CHALLENGE_TTL_MS = 5 * 60_000;
 const STEP_UP_MS = 10 * 60_000;
 
 /**
- * Export row limit: effectively uncapped. The list stores return newest-first
- * and only expose a lower-bound `since`, so older rows cannot be paged
- * through that cursor; the export asks for every row in one call instead.
+ * Export page size. Each page is rendered as its own chunk so the response body
+ * is a stream rather than one string holding every income and spend row.
  */
-const EXPORT_ROW_LIMIT = Number.MAX_SAFE_INTEGER;
+const EXPORT_PAGE_SIZE = 500;
 
 /**
  * Rate limiters are built once per app instance (see rate-limit-store.ts). The
@@ -222,6 +222,8 @@ export function createApp(deps: {
   llmGuard?: LlmGuard;
   /** Shared hit counters. Production passes Postgres so limits span instances; tests default to memory. */
   rateLimitStore?: RateLimitStore;
+  /** Shared lockout and challenge rows. Defaults to Postgres when auth is Postgres. */
+  securityState?: SecurityStateStore;
   /** 32-byte AES key that encrypts stored TOTP secrets. Defaults to MFA_ENCRYPTION_KEY. */
   mfaKey?: Buffer;
   now?: () => Date;
@@ -230,22 +232,6 @@ export function createApp(deps: {
 }) {
   const now = deps.now ?? (() => new Date());
   const mfaKey = resolveMfaKey(deps.mfaKey);
-  /**
-   * Pending second-factor challenges for password sign-in. This map is per
-   * process: a multi-instance deploy (Vercel, several Node workers) needs these
-   * rows in Postgres so a challenge survives a request landing elsewhere.
-   */
-  const mfaChallenges = new Map<string, { userId: string; expiresAt: number; attempts: number }>();
-  /** Issues a short-lived second-factor challenge and prunes expired ones. */
-  const newMfaChallenge = (userId: string): string => {
-    const at = now().getTime();
-    for (const [token, challenge] of mfaChallenges) {
-      if (challenge.expiresAt <= at) mfaChallenges.delete(token);
-    }
-    const challenge = randomBytes(32).toString('base64url');
-    mfaChallenges.set(challenge, { userId, expiresAt: at + MFA_CHALLENGE_TTL_MS, attempts: 0 });
-    return challenge;
-  };
   const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
   const paymentRequests = deps.paymentRequests ?? new InMemoryPaymentRequestStore();
   /**
@@ -277,6 +263,15 @@ export function createApp(deps: {
   };
   const llmGuard = deps.llmGuard ?? new LlmGuard();
   const auth = deps.auth ?? new InMemoryAuthStore();
+  const securityState = deps.securityState ?? createSecurityStateStore(auth);
+  /** Issues a short-lived second-factor challenge in the shared state store. */
+  const newMfaChallenge = async (userId: string): Promise<string> => {
+    const challenge = randomBytes(32).toString('base64url');
+    const at = now();
+    await securityState.saveChallenge(challenge, userId,
+      new Date(at.getTime() + MFA_CHALLENGE_TTL_MS), at);
+    return challenge;
+  };
   const mailer = deps.mailer ?? createMailer();
   const appUrl = (deps.appUrl ?? process.env.APP_URL ?? '').trim().replace(/\/$/, '');
   const enforceWalletAuth = deps.enforceWalletAuth ?? (auth.persistent || process.env.NODE_ENV === 'production');
@@ -302,10 +297,10 @@ export function createApp(deps: {
   // Per-process sign-in counters (see login-throttle.ts). IPs get 20 free
   // failures because one address can legitimately try several accounts.
   const threatNow = () => now().getTime();
-  const accountThrottle = new LoginThrottle({ now: threatNow });
-  const ipThrottle = new LoginThrottle({ now: threatNow, blockAfter: 20 });
+  const accountThrottle = new LoginThrottle({ now: threatNow, state: securityState });
+  const ipThrottle = new LoginThrottle({ now: threatNow, blockAfter: 20, state: securityState });
   /** Second-factor attempts are account-scoped: five failures cover verify, disable, and step-up. */
-  const mfaThrottle = new LoginThrottle({ now: threatNow });
+  const mfaThrottle = new LoginThrottle({ now: threatNow, state: securityState });
   /** 429 response shared by the second-factor routes. */
   const tooManyMfaAttempts = (c: Context, retryAfterSec: number) => {
     c.header('Retry-After', String(retryAfterSec));
@@ -571,8 +566,8 @@ export function createApp(deps: {
     const email = parsed.data.email.toLowerCase();
     const accountKey = 'acct:' + email;
     const ipKey = 'ip:' + clientIp(c);
-    const accountVerdict = accountThrottle.check(accountKey);
-    const ipVerdict = ipThrottle.check(ipKey);
+    const accountVerdict = await accountThrottle.checkAsync(accountKey);
+    const ipVerdict = await ipThrottle.checkAsync(ipKey);
     if (!accountVerdict.allowed || !ipVerdict.allowed) {
       const retryAfterSec = Math.max(accountVerdict.retryAfterSec, ipVerdict.retryAfterSec);
       c.header('Retry-After', String(retryAfterSec));
@@ -585,17 +580,17 @@ export function createApp(deps: {
     // unknown accounts from wrong passwords.
     const ok = await verifyPassword(parsed.data.password, user?.passwordHash ?? await dummyPasswordHash());
     if (!user || !ok) {
-      accountThrottle.fail(accountKey);
-      ipThrottle.fail(ipKey);
+      await accountThrottle.failAsync(accountKey);
+      await ipThrottle.failAsync(ipKey);
       // Unknown emails stay unlogged so the audit log cannot confirm accounts.
       if (user) await audit(c, user.id, 'login_failed');
       return c.json({ error: 'Email or password is incorrect.' }, 401);
     }
-    accountThrottle.succeed(accountKey);
-    ipThrottle.succeed(ipKey);
+    await accountThrottle.succeedAsync(accountKey);
+    await ipThrottle.succeedAsync(ipKey);
     const mfa = await auth.getMfaState(user.id);
     if (mfa.secret) {
-      const challenge = newMfaChallenge(user.id);
+      const challenge = await newMfaChallenge(user.id);
       await audit(c, user.id, 'mfa_challenge');
       return c.json({ mfaRequired: true, challenge });
     }
@@ -678,79 +673,141 @@ export function createApp(deps: {
     if (requested !== 'json' && requested !== 'csv') return c.json({ error: 'unsupported_format' }, 400);
     const format = requested as 'json' | 'csv';
 
-    const [profile, income, spendLogs, sessions] = await Promise.all([
+    /** Walks ascending id pages without ever holding the whole table. */
+    const pageRows = async <T extends { id: string }>(
+      load: (afterId: string | null) => Promise<T[]>,
+      visit?: (rows: T[]) => void,
+    ): Promise<number> => {
+      let afterId: string | null = null;
+      let total = 0;
+      for (;;) {
+        const rows = await load(afterId);
+        if (rows.length === 0) break;
+        total += rows.length;
+        visit?.(rows);
+        if (rows.length < EXPORT_PAGE_SIZE) break;
+        afterId = rows[rows.length - 1]!.id;
+      }
+      return total;
+    };
+    const loadIncomePage = (afterId: string | null) =>
+      personalFinance.listIncomePage(user.accountId, afterId, EXPORT_PAGE_SIZE);
+    const loadSpendPage = (afterId: string | null) =>
+      deps.spendLogs.listSpendPage(user.accountId, afterId, EXPORT_PAGE_SIZE);
+
+    const [profile, sessions, incomeCount, spendCount] = await Promise.all([
       personalFinance.getProfile(user.accountId, 'USD', now()),
-      personalFinance.listIncome(user.accountId, { limit: EXPORT_ROW_LIMIT }),
-      deps.spendLogs.list(user.accountId, { limit: EXPORT_ROW_LIMIT }),
       auth.listSessions(user.id),
+      pageRows(loadIncomePage),
+      pageRows(loadSpendPage),
     ]);
     const at = now();
-    await audit(c, user.id, 'export', { format, income: income.length, spendLogs: spendLogs.length });
+    await audit(c, user.id, 'export', { format, income: incomeCount, spendLogs: spendCount });
     const filename = `settle-export-${at.toISOString().slice(0, 10)}.${format}`;
+    const headers = {
+      'Content-Type': format === 'csv' ? 'text/csv; charset=utf-8' : 'application/json; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    };
 
     if (format === 'csv') {
-      return new Response(buildCsvExport({ income, spendLogs }), {
-        headers: {
-          'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition': `attachment; filename="${filename}"`,
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          try {
+            controller.enqueue(encoder.encode(CSV_HEADER_ROW));
+            await pageRows(loadIncomePage, (rows) => {
+              controller.enqueue(encoder.encode(rows.map((entry) => csvExportRow('income', entry)).join('')));
+            });
+            await pageRows(loadSpendPage, (rows) => {
+              controller.enqueue(encoder.encode(rows.map((entry) => csvExportRow('spend', entry)).join('')));
+            });
+            controller.close();
+          } catch (error) {
+            controller.error(error);
+          }
         },
       });
+      return new Response(stream, { headers });
     }
 
     const events = await auth.listAudit(user.id, 500);
-    const body = {
-      exportedAt: at.toISOString(),
-      user: { id: user.id, email: user.email, displayName: user.displayName },
-      profile: {
-        accountId: profile.accountId,
-        currency: profile.currency,
-        periodLabel: profile.periodLabel,
-        periodStart: profile.periodStart,
-        walletCashMinor: profile.walletCashMinor,
-        creditOwedMinor: profile.creditOwedMinor,
-        weeklyBudgetMinor: profile.weeklyBudgetMinor,
-        spendLogsAffectWallet: profile.spendLogsAffectWallet,
-        updatedAt: profile.updatedAt,
-      },
-      income: income.map((entry) => ({
-        id: entry.id,
-        amountMinor: entry.amountMinor,
-        currency: entry.currency,
-        source: entry.source,
-        note: entry.note,
-        occurredAt: entry.occurredAt,
-      })),
-      spendLogs: spendLogs.map((entry) => ({
-        id: entry.id,
-        amountMinor: entry.amountMinor,
-        currency: entry.currency,
-        category: entry.category,
-        source: entry.source,
-        note: entry.note,
-        occurredAt: entry.occurredAt,
-      })),
-      sessions: sessions.map((session) => ({
-        id: session.id,
-        createdAt: session.createdAt.toISOString(),
-        lastSeenAt: session.lastSeenAt.toISOString(),
-        device: session.device,
-        ipPrefix: session.ipPrefix,
-      })),
-      audit: events.map((event) => ({
-        id: event.id,
-        type: event.type,
-        at: event.at.toISOString(),
-        ipPrefix: event.ipPrefix,
-        device: event.device,
-      })),
+    const userBody = { id: user.id, email: user.email, displayName: user.displayName };
+    const profileBody = {
+      accountId: profile.accountId,
+      currency: profile.currency,
+      periodLabel: profile.periodLabel,
+      periodStart: profile.periodStart,
+      walletCashMinor: profile.walletCashMinor,
+      creditOwedMinor: profile.creditOwedMinor,
+      weeklyBudgetMinor: profile.weeklyBudgetMinor,
+      spendLogsAffectWallet: profile.spendLogsAffectWallet,
+      updatedAt: profile.updatedAt,
     };
-    return new Response(JSON.stringify(body), {
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${filename}"`,
+    const sessionsBody = sessions.map((session) => ({
+      id: session.id,
+      createdAt: session.createdAt.toISOString(),
+      lastSeenAt: session.lastSeenAt.toISOString(),
+      device: session.device,
+      ipPrefix: session.ipPrefix,
+    }));
+    const auditBody = events.map((event) => ({
+      id: event.id,
+      type: event.type,
+      at: event.at.toISOString(),
+      ipPrefix: event.ipPrefix,
+      device: event.device,
+    }));
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        try {
+          controller.enqueue(encoder.encode(
+            '{"exportedAt":' + JSON.stringify(at.toISOString())
+            + ',"user":' + JSON.stringify(userBody)
+            + ',"profile":' + JSON.stringify(profileBody)
+            + ',"income":[',
+          ));
+          let first = true;
+          await pageRows(loadIncomePage, (rows) => {
+            const json = rows.map((entry) => JSON.stringify({
+              id: entry.id,
+              amountMinor: entry.amountMinor,
+              currency: entry.currency,
+              source: entry.source,
+              note: entry.note,
+              occurredAt: entry.occurredAt,
+            })).join(',');
+            controller.enqueue(encoder.encode((first ? '' : ',') + json));
+            first = false;
+          });
+          controller.enqueue(encoder.encode('],"spendLogs":['));
+          first = true;
+          await pageRows(loadSpendPage, (rows) => {
+            const json = rows.map((entry) => JSON.stringify({
+              id: entry.id,
+              amountMinor: entry.amountMinor,
+              currency: entry.currency,
+              category: entry.category,
+              source: entry.source,
+              note: entry.note,
+              occurredAt: entry.occurredAt,
+            })).join(',');
+            controller.enqueue(encoder.encode((first ? '' : ',') + json));
+            first = false;
+          });
+          controller.enqueue(encoder.encode(
+            '],"sessions":' + JSON.stringify(sessionsBody)
+            + ',"audit":' + JSON.stringify(auditBody) + '}',
+          ));
+          controller.close();
+        } catch (error) {
+          controller.error(error);
+        }
       },
     });
+    return new Response(stream, { headers });
   });
+
 
   /**
    * Account deletion. The ledger account itself survives: it is append-only
@@ -831,7 +888,8 @@ export function createApp(deps: {
     if (!verdict.ok) return c.json({ error: 'invalid_code' }, 400);
     const recoveryCodes = generateRecoveryCodes();
     const hashes = await Promise.all(recoveryCodes.map(hashRecoveryCode));
-    await auth.enableMfa(user.id, state.pendingSecret, hashes, verdict.step ?? null);
+    const enabled = await auth.enableMfa(user.id, state.pendingSecret, hashes, verdict.step ?? null);
+    if (!enabled) return c.json({ error: 'mfa_already_enabled' }, 409);
     await rotateSession(c, user.id);
     await audit(c, user.id, 'mfa_enabled');
     return c.json({ recoveryCodes });
@@ -841,21 +899,21 @@ export function createApp(deps: {
   app.post('/auth/mfa/verify', async (c) => {
     const parsed = mfaVerifyBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'invalid_code' }, 400);
-    const pending = mfaChallenges.get(parsed.data.challenge);
+    const pending = await securityState.getChallenge(parsed.data.challenge);
     if (!pending) return c.json({ error: 'invalid_code' }, 400);
     const at = now();
-    if (pending.expiresAt <= at.getTime()) {
-      mfaChallenges.delete(parsed.data.challenge);
+    if (pending.expiresAt.getTime() <= at.getTime()) {
+      await securityState.deleteChallenge(parsed.data.challenge);
       return c.json({ error: 'challenge_expired' }, 400);
     }
     const user = await auth.findById(pending.userId);
     const state = user ? await auth.getMfaState(user.id) : null;
     if (!user || !state?.secret || !mfaKey) {
-      mfaChallenges.delete(parsed.data.challenge);
+      await securityState.deleteChallenge(parsed.data.challenge);
       return c.json({ error: 'invalid_code' }, 400);
     }
     const throttleKey = 'mfa:' + user.id;
-    const throttle = mfaThrottle.check(throttleKey);
+    const throttle = await mfaThrottle.checkAsync(throttleKey);
     if (!throttle.allowed) return tooManyMfaAttempts(c, throttle.retryAfterSec);
     const secret = decryptSecret(state.secret, mfaKey);
     const verdict = verifyTotp(secret, parsed.data.code, at.getTime(),
@@ -869,19 +927,19 @@ export function createApp(deps: {
       accepted = usedRecoveryCode;
     }
     if (accepted) {
-      mfaThrottle.succeed(throttleKey);
-      mfaChallenges.delete(parsed.data.challenge);
+      await mfaThrottle.succeedAsync(throttleKey);
+      await securityState.deleteChallenge(parsed.data.challenge);
       await issueSession(c, user.id);
       await audit(c, user.id, 'login');
       if (usedRecoveryCode) await audit(c, user.id, 'recovery_code_used');
       return c.json({ ok: true });
     }
-    pending.attempts += 1;
-    if (pending.attempts >= 5) {
+    const attempts = await securityState.incrementChallengeAttempts(parsed.data.challenge);
+    if (attempts >= 5) {
       // One account-level failure per used-up challenge: a password holder gets
       // five guesses per sign-in, and repeated sign-ins back off up to 15 minutes.
-      mfaThrottle.fail(throttleKey);
-      mfaChallenges.delete(parsed.data.challenge);
+      await mfaThrottle.failAsync(throttleKey);
+      await securityState.deleteChallenge(parsed.data.challenge);
     }
     return c.json({ error: 'invalid_code' }, 400);
   });
@@ -891,7 +949,7 @@ export function createApp(deps: {
     if (!user) return c.json({ error: 'Sign in first.' }, 401);
     if (!mfaKey) return c.json({ error: 'mfa_unavailable' }, 503);
     const throttleKey = 'mfa:' + user.id;
-    const throttle = mfaThrottle.check(throttleKey);
+    const throttle = await mfaThrottle.checkAsync(throttleKey);
     if (!throttle.allowed) return tooManyMfaAttempts(c, throttle.retryAfterSec);
     const parsed = mfaCodeBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'invalid_code' }, 400);
@@ -907,10 +965,10 @@ export function createApp(deps: {
       accepted = await consumeRecoveryCode(user.id, parsed.data.code, at);
     }
     if (!accepted) {
-      mfaThrottle.fail(throttleKey);
+      await mfaThrottle.failAsync(throttleKey);
       return c.json({ error: 'invalid_code' }, 400);
     }
-    mfaThrottle.succeed(throttleKey);
+    await mfaThrottle.succeedAsync(throttleKey);
     await auth.disableMfa(user.id);
     await rotateSession(c, user.id);
     await audit(c, user.id, 'mfa_disabled');
@@ -924,7 +982,7 @@ export function createApp(deps: {
     const parsed = stepUpBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'invalid_credentials' }, 400);
     const throttleKey = 'mfa:' + user.id;
-    const throttle = mfaThrottle.check(throttleKey);
+    const throttle = await mfaThrottle.checkAsync(throttleKey);
     if (!throttle.allowed) return tooManyMfaAttempts(c, throttle.retryAfterSec);
     const at = now();
     const state = await auth.getMfaState(user.id);
@@ -945,10 +1003,10 @@ export function createApp(deps: {
       accepted = await verifyPassword(parsed.data.password, user.passwordHash);
     }
     if (!accepted) {
-      mfaThrottle.fail(throttleKey);
+      await mfaThrottle.failAsync(throttleKey);
       return c.json({ error: 'invalid_credentials' }, 400);
     }
-    mfaThrottle.succeed(throttleKey);
+    await mfaThrottle.succeedAsync(throttleKey);
     const token = getCookie(c, SESSION_COOKIE);
     if (!token) return c.json({ error: 'Sign in first.' }, 401);
     const until = new Date(at.getTime() + STEP_UP_MS);
@@ -1012,7 +1070,7 @@ export function createApp(deps: {
     // required before any session is issued.
     const mfa = await auth.getMfaState(userId);
     if (mfa.secret) {
-      const challenge = newMfaChallenge(userId);
+      const challenge = await newMfaChallenge(userId);
       await audit(c, userId, 'mfa_challenge');
       return c.json({ mfaRequired: true, challenge });
     }

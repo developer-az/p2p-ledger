@@ -19,27 +19,33 @@ export function csvCell(value: string | number | null | undefined): string {
   return text;
 }
 
+export const CSV_HEADER_ROW = CSV_HEADER.map(csvCell).join(',') + '\r\n';
+
 export interface CsvExportInput {
   income: IncomeLogEntry[];
   spendLogs: SpendLogEntry[];
 }
 
+/** One CRLF-terminated CSV line for a streamed export page. */
+export function csvExportRow(kind: 'income' | 'spend',
+  entry: IncomeLogEntry | SpendLogEntry): string {
+  return [
+    kind,
+    entry.occurredAt,
+    String(entry.amountMinor),
+    entry.currency,
+    entry.note ?? '',
+  ].map(csvCell).join(',') + '\r\n';
+}
+
 /** Renders income and spend rows with a single header row, CRLF terminated. */
 export function buildCsvExport({ income, spendLogs }: CsvExportInput): string {
-  const rows: string[][] = [[...CSV_HEADER]];
+  const lines: string[] = [CSV_HEADER_ROW];
   const dated = [
-    ...income.map((entry) => ({ kind: 'income', entry })),
-    ...spendLogs.map((entry) => ({ kind: 'spend', entry })),
+    ...income.map((entry) => ({ kind: 'income' as const, entry })),
+    ...spendLogs.map((entry) => ({ kind: 'spend' as const, entry })),
   ].sort((a, b) => a.entry.occurredAt.localeCompare(b.entry.occurredAt));
 
-  for (const { kind, entry } of dated) {
-    rows.push([
-      kind,
-      entry.occurredAt,
-      String(entry.amountMinor),
-      entry.currency,
-      entry.note ?? '',
-    ]);
-  }
-  return rows.map((row) => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
+  for (const { kind, entry } of dated) lines.push(csvExportRow(kind, entry));
+  return lines.join('');
 }

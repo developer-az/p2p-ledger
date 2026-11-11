@@ -121,9 +121,13 @@ export interface AuthStore {
   completeReset(tokenHash: string, now: Date, passwordHash: string): Promise<string | null>;
   getMfaState(userId: string): Promise<MfaState>;
   saveMfaPendingSecret(userId: string, encryptedSecret: string): Promise<void>;
-  /** Promotes the pending secret, replaces recovery codes, and records the used step. */
+  /**
+   * Promotes the pending secret, replaces recovery codes, and records the used
+   * step. Returns false when MFA was enabled first (or the pending secret no
+   * longer matches), so two concurrent confirmations cannot both succeed.
+   */
   enableMfa(userId: string, encryptedSecret: string, recoveryCodeHashes: string[],
-    lastUsedStep: number | null): Promise<void>;
+    lastUsedStep: number | null): Promise<boolean>;
   disableMfa(userId: string): Promise<void>;
   /** Remembers the newest accepted TOTP step so it cannot be replayed. */
   recordMfaStep(userId: string, step: number): Promise<void>;
@@ -439,12 +443,18 @@ export class InMemoryAuthStore implements AuthStore {
   }
 
   async enableMfa(userId: string, encryptedSecret: string, recoveryCodeHashes: string[],
-    lastUsedStep: number | null): Promise<void> {
+    lastUsedStep: number | null): Promise<boolean> {
+    const entry = this.mfa.get(userId);
+    if (entry?.secret) return false;
+    // Direct store callers may skip the setup step; the HTTP route always has a
+    // pending secret, and a mismatch means another confirmation replaced it.
+    if (entry?.pendingSecret != null && entry.pendingSecret !== encryptedSecret) return false;
     this.mfa.set(userId, { secret: encryptedSecret, pendingSecret: null, lastUsedStep });
     for (const [id, code] of this.recoveryCodes) if (code.userId === userId) this.recoveryCodes.delete(id);
     for (const codeHash of recoveryCodeHashes) {
       this.recoveryCodes.set(randomUUID(), { userId, codeHash, usedAt: null });
     }
+    return true;
   }
 
   async disableMfa(userId: string): Promise<void> {
@@ -652,7 +662,7 @@ export class PostgresAuthStore implements AuthStore {
   readonly persistent = true;
   private schemaReady = false;
 
-  constructor(private readonly connectionString: string) {}
+  constructor(readonly connectionString: string) {}
 
   private async client() {
     const { default: pg } = await import('pg');
@@ -949,20 +959,30 @@ export class PostgresAuthStore implements AuthStore {
   }
 
   async enableMfa(userId: string, encryptedSecret: string, recoveryCodeHashes: string[],
-    lastUsedStep: number | null): Promise<void> {
-    await this.run(async (c) => {
+    lastUsedStep: number | null): Promise<boolean> {
+    return this.run(async (c) => {
       await c.query('begin');
       try {
-        await c.query(
-          `update app_users set mfa_secret = $2, mfa_pending = null, mfa_last_step = $3 where id = $1`,
+        // The update and recovery-code insert share one transaction. The
+        // conditional update is the lock: only one concurrent confirmation can
+        // move a null mfa_secret, and a changed pending secret is rejected.
+        const updated = await c.query(
+          `update app_users set mfa_secret = mfa_pending, mfa_pending = null, mfa_last_step = $3
+            where id = $1 and mfa_secret is null and mfa_pending = $2
+            returning id`,
           [userId, encryptedSecret, lastUsedStep],
         );
+        if ((updated.rowCount ?? 0) === 0) {
+          await c.query('rollback');
+          return false;
+        }
         await c.query(`delete from app_recovery_codes where user_id = $1`, [userId]);
         for (const codeHash of recoveryCodeHashes) {
           await c.query(`insert into app_recovery_codes (user_id, code_hash) values ($1, $2)`,
             [userId, codeHash]);
         }
         await c.query('commit');
+        return true;
       } catch (error) {
         await c.query('rollback');
         throw error;

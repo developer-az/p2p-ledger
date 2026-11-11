@@ -83,6 +83,8 @@ export interface PersonalFinanceStore {
   startNewPeriod(accountId: string, currency: string, now?: Date): Promise<MoneyProfile>;
   recordIncome(accountId: string, input: RecordIncomeInput, now?: Date): Promise<IncomeLogEntry>;
   listIncome(accountId: string, opts?: { since?: Date; limit?: number }): Promise<IncomeLogEntry[]>;
+  /** Ascending id keyset page used by bounded data export. */
+  listIncomePage(accountId: string, afterId: string | null, limit: number): Promise<IncomeLogEntry[]>;
   /** Account deletion: removes the profile and every income row for this account. */
   deleteAll(accountId: string): Promise<void>;
 }
@@ -257,6 +259,13 @@ export class InMemoryPersonalFinanceStore implements PersonalFinanceStore {
       .slice(0, limit);
   }
 
+  async listIncomePage(accountId: string, afterId: string | null, limit: number): Promise<IncomeLogEntry[]> {
+    return this.incomes
+      .filter((entry) => entry.accountId === accountId && (afterId === null || entry.id > afterId))
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .slice(0, Math.max(1, limit));
+  }
+
   async deleteAll(accountId: string): Promise<void> {
     this.profiles.delete(accountId);
     this.incomes = this.incomes.filter((entry) => entry.accountId !== accountId);
@@ -287,6 +296,7 @@ create table if not exists income_logs (
     created_at    timestamptz not null default now()
 );
 create index if not exists income_logs_account_occurred_idx on income_logs (account_id, occurred_at desc);
+create index if not exists income_logs_account_id_idx on income_logs (account_id, id);
 `;
 
 export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
@@ -508,6 +518,37 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
       await withUser(c, accountId, async () => {
         await c.query(`delete from income_logs where account_id = $1`, [accountId]);
         await c.query(`delete from money_profiles where account_id = $1`, [accountId]);
+      });
+    } finally {
+      await c.end();
+    }
+  }
+
+  async listIncomePage(accountId: string, afterId: string | null, limit: number): Promise<IncomeLogEntry[]> {
+    const c = await this.client();
+    try {
+      await this.ensureSchema(c);
+      return await withUser(c, accountId, async () => {
+        const params: unknown[] = [accountId];
+        let sql = `select id, account_id, amount_minor, currency, source, note, occurred_at, created_at
+                   from income_logs where account_id = $1`;
+        if (afterId !== null) {
+          params.push(afterId);
+          sql += ` and id > $2::uuid`;
+        }
+        params.push(Math.max(1, limit));
+        sql += ` order by id asc limit $${params.length}`;
+        const res = await c.query(sql, params);
+        return res.rows.map((row: Record<string, unknown>) => ({
+          id: String(row.id),
+          accountId: String(row.account_id),
+          amountMinor: Number(row.amount_minor),
+          currency: String(row.currency),
+          source: row.source as IncomeSource,
+          note: row.note as string | null,
+          occurredAt: new Date(String(row.occurred_at)).toISOString(),
+          createdAt: new Date(String(row.created_at)).toISOString(),
+        }));
       });
     } finally {
       await c.end();

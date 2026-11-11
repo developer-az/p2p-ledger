@@ -58,6 +58,7 @@ export class JavaWorkflows {
 export class RoutedSpendLogStore implements SpendLogStore {
   constructor(private readonly practice: SpendLogStore, private readonly java: JavaWorkflows,
     private readonly isPractice: (accountId: string) => boolean) {}
+  private readonly pageTails = new Map<string, string>();
 
   record(accountId: string, input: RecordSpendInput, now?: Date, key?: string): Promise<SpendLogEntry> {
     if (this.isPractice(accountId)) return this.practice.record(accountId, input, now);
@@ -69,6 +70,31 @@ export class RoutedSpendLogStore implements SpendLogStore {
     const params = new URLSearchParams({ limit: String(opts?.limit ?? 100) });
     if (opts?.since) params.set('since', opts.since.toISOString());
     return this.java.request('GET', `/v1/accounts/${encodeURIComponent(accountId)}/spends?${params}`);
+  }
+  listSpendPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]> {
+    if (this.isPractice(accountId)) return this.practice.listSpendPage(accountId, afterId, limit);
+    // The Java route pages newest-first by the (occurredAt, id) keyset. The
+    // caller passes only the last id, so remember each page's tail timestamp.
+    const params = new URLSearchParams({ limit: String(Math.min(500, Math.max(1, limit))) });
+    if (afterId !== null) {
+      const before = this.pageTails.get(afterId);
+      if (!before) return Promise.resolve([]);
+      this.pageTails.delete(afterId);
+      params.set('before', before);
+      params.set('beforeId', afterId);
+    }
+    return this.java.request<SpendLogEntry[]>('GET', `/v1/accounts/${encodeURIComponent(accountId)}/spends?${params}`)
+      .then((rows) => {
+        const tail = rows[rows.length - 1];
+        if (tail) {
+          if (this.pageTails.size > 1000) this.pageTails.clear();
+          this.pageTails.set(tail.id, tail.occurredAt);
+        }
+        return rows;
+      });
+  }
+  listPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]> {
+    return this.listSpendPage(accountId, afterId, limit);
   }
   async remove(accountId: string, id: string): Promise<boolean> {
     if (this.isPractice(accountId)) return this.practice.remove(accountId, id);

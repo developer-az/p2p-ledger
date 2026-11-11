@@ -1,5 +1,5 @@
 import './styles/fonts.css';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LazyMotion } from 'motion/react';
 import './styles/tokens.css';
 import './styles/base.css';
@@ -13,16 +13,11 @@ import { buildFeed, type FeedItem } from './feed.js';
 import { dayLabel, displayName, money, parseMoney } from './format.js';
 import { Home } from './Home.js';
 import { InsightsTab } from './InsightsTab.js';
-import { ForecastView } from './ForecastView.js';
-import { AlertsView } from './AlertsView.js';
-import { ReportsView } from './ReportsView.js';
 import { clearSession, loadSession, saveSession, type Session } from './session.js';
 import { SetupSheet } from './SetupSheet.js';
 import { AddSheet } from './AddSheet.js';
 import { SettingsView } from './SettingsView.js';
-import { RulesView } from './RulesView.js';
-import { SubscriptionsTab } from './SubscriptionsTab.js';
-import { ErrorNotice, ToastProvider, useToast } from './ui.js';
+import { ErrorNotice, EmptyState, ToastProvider, useToast } from './ui.js';
 import { AppShell, appRoute, sectionLabel, settingsTabLabel, isPlannedSection } from './AppShell.js';
 import { PlannedView } from './PlannedView.js';
 import { AppPreloader } from './Preloader.js';
@@ -41,6 +36,27 @@ import { TourRail, type TourRailHandle } from './TourRail.js';
 
 /** Animation features load in their own chunk; `strict` rejects a stray full `motion.*` import. */
 const loadMotion = () => import('./motion-features.js').then((mod) => mod.default);
+
+/**
+ * Milestone pages are signed-in only and rarely the first screen, so each one
+ * loads on demand. Keeping them out of the initial chunk holds the bundle
+ * budget while the overview stays instant.
+ */
+const ImportsView = lazy(() => import('./ImportsView.js').then((mod) => ({ default: mod.ImportsView })));
+const RulesView = lazy(() => import('./RulesView.js').then((mod) => ({ default: mod.RulesView })));
+const SubscriptionsTab = lazy(() => import('./SubscriptionsTab.js').then((mod) => ({ default: mod.SubscriptionsTab })));
+const ForecastView = lazy(() => import('./ForecastView.js').then((mod) => ({ default: mod.ForecastView })));
+const AlertsView = lazy(() => import('./AlertsView.js').then((mod) => ({ default: mod.AlertsView })));
+const ReportsView = lazy(() => import('./ReportsView.js').then((mod) => ({ default: mod.ReportsView })));
+
+/** Shared fallback while a lazy view's chunk arrives. */
+function ViewFallback() {
+  return (
+    <EmptyState icon="file" title="Loading this view">
+      Fetching the latest from your ledger.
+    </EmptyState>
+  );
+}
 
 type Sheetname = null | 'log' | 'setup';
 
@@ -444,7 +460,8 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
           </div>
         ) : (
           <div className="view" key={viewSection}>
-            {viewSection === 'overview' ? (
+            <Suspense fallback={<ViewFallback />}>
+              {viewSection === 'overview' ? (
               <Home
                 me={me}
                 name={session.user?.displayName}
@@ -466,6 +483,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
               />
             ) : null}
             {viewSection === 'transactions' ? <ActivityTab data={data} onOpen={openFeedItem} /> : null}
+            {viewSection === 'imports' ? <ImportsView me={me} data={data} onChanged={reload} /> : null}
             {viewSection === 'insights' ? (
               <InsightsTab
                 data={data}
@@ -510,6 +528,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
               />
             ) : null}
             {isPlannedSection(viewSection) ? <PlannedView section={viewSection} /> : null}
+            </Suspense>
           </div>
         )}
       </AppShell>

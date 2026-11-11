@@ -71,6 +71,7 @@ export function feedGlyph(kind: FeedKind, category?: string): GlyphMeta | null {
   if (kind === 'income') return { icon: 'income', color: 'var(--pos)' };
   if (kind === 'sent') return { icon: 'send', color: 'var(--ink)' };
   if (kind === 'declined') return { icon: 'alert', color: 'var(--neg)' };
+  if (kind === 'imported' && !category) return { icon: 'upload', color: 'var(--ink)' };
   if (!category) return null;
   const meta = CATEGORY_META[category as SpendCategory];
   return meta ? { icon: meta.icon, color: meta.color } : null;

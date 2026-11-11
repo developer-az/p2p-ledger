@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { createDataKeyStore } from './envelope.js';
 import { HttpLedgerClient } from './ledger.js';
+import { createImportStore } from './imports-store.js';
 import { CompositeLedger, isLiveLedgerReachable, PracticeLedger } from './practice-ledger.js';
 import { createSpendLogStore } from './spend-log.js';
 import { createPersonalFinanceStore } from './personal-finance.js';
@@ -29,6 +30,7 @@ export function createAssistantApi() {
   const ledger = new CompositeLedger(liveLedger, practice, isLiveLedgerUp);
   const javaWorkflows = new JavaWorkflows(ledgerUrl, process.env.LEDGER_API_KEY ?? '', timeoutMs);
   const dataKeys = createDataKeyStore();
+  const imports = createImportStore(process.env, dataKeys);
   spendLogs = new RoutedSpendLogStore(createSpendLogStore(dataKeys), javaWorkflows, id => ledger.isPracticeAccount(id));
   personalFinance = createPersonalFinanceStore(process.env, dataKeys);
   enrichment = createEnrichmentStore(process.env);
@@ -42,6 +44,7 @@ export function createAssistantApi() {
     isLiveLedgerUp,
     spendLogs,
     personalFinance,
+    imports,
     enrichment,
     alertDismissals,
     paymentRequests,

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import './styles/settings.css';
 import { api, type AccountRef } from '../api.js';
 import { settingsTabLabel } from './AppShell.js';
@@ -7,9 +7,30 @@ import { densityLabel, type DensityPref } from './density.js';
 import { money } from './format.js';
 import { moneyPlan } from './money-plan.js';
 import { navigate, routeHref, SETTINGS_TABS, type SettingsTab } from './router.js';
-import { AuditRow, DataPrivacyPanel, PasskeysRow, SessionsRow, TwoFactorRow } from './SecuritySettings.js';
 import type { ThemePref } from './theme.js';
 import { TrustTab } from './TrustTab.js';
+import { Skeleton } from './ui.js';
+
+/**
+ * The security panels pull in passkeys, TOTP, session and audit code that most
+ * settings visits never open. They load as one chunk when the security or
+ * privacy tab renders.
+ */
+const TwoFactorRow = lazy(() => import('./SecuritySettings.js').then((mod) => ({ default: mod.TwoFactorRow })));
+const PasskeysRow = lazy(() => import('./SecuritySettings.js').then((mod) => ({ default: mod.PasskeysRow })));
+const SessionsRow = lazy(() => import('./SecuritySettings.js').then((mod) => ({ default: mod.SessionsRow })));
+const AuditRow = lazy(() => import('./SecuritySettings.js').then((mod) => ({ default: mod.AuditRow })));
+const DataPrivacyPanel = lazy(() => import('./SecuritySettings.js').then((mod) => ({ default: mod.DataPrivacyPanel })));
+
+function SecurityFallback() {
+  return (
+    <div className="set-rows" role="status" aria-live="polite">
+      <p className="set-copy muted">Loading security settings…</p>
+      <Skeleton height={44} />
+      <Skeleton height={44} />
+    </div>
+  );
+}
 
 const THEME_OPTIONS: { value: ThemePref; label: string }[] = [
   { value: 'system', label: 'System' },
@@ -125,12 +146,14 @@ export function SettingsView({
               <section className="v-panel set-panel glass" aria-labelledby="set-signin">
                 <h2 id="set-signin">Sign-in protection</h2>
                 {!real ? <p className="set-copy muted">Sign in to a real account to use this.</p> : null}
-                <ul className="set-rows">
-                  <TwoFactorRow real={real} />
-                  <PasskeysRow real={real} />
-                  <SessionsRow real={real} />
-                  <AuditRow real={real} />
-                </ul>
+                <Suspense fallback={<SecurityFallback />}>
+                  <ul className="set-rows">
+                    <TwoFactorRow real={real} />
+                    <PasskeysRow real={real} />
+                    <SessionsRow real={real} />
+                    <AuditRow real={real} />
+                  </ul>
+                </Suspense>
                 {demo ? (
                   <p className="set-copy muted">Google sign-in connects to an account, so it starts after you create one.</p>
                 ) : (
@@ -166,7 +189,9 @@ export function SettingsView({
               <section className="v-panel set-panel glass" aria-labelledby="set-retention">
                 <h2 id="set-retention">Control and removal</h2>
                 {!real ? <p className="set-copy muted">Sign in to a real account to use this.</p> : null}
-                <DataPrivacyPanel real={real} onSignOut={onSignOut} />
+                <Suspense fallback={<SecurityFallback />}>
+                  <DataPrivacyPanel real={real} onSignOut={onSignOut} />
+                </Suspense>
                 <ul className="set-rows">
                   <PlannedRow label="Retention settings" description="Choose how long logs and backups are kept." milestone="M3" />
                 </ul>

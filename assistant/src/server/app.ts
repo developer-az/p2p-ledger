@@ -60,6 +60,10 @@ import {
 } from './enrichment/store.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
 import type { DataKeyStore } from './envelope.js';
+import { ImportParseError, type ImportColumnMapping } from './importers.js';
+import { InMemoryImportStore, type ImportStore } from './imports-store.js';
+import { runImport } from './imports-pipeline.js';
+import { importedTransactionsToSpendEntries, normalizeTransactionList } from './normalized-transactions.js';
 import { loadAccountView, type WeeklyFinance } from './tools.js';
 import {
   InMemoryPaymentRequestStore,
@@ -242,6 +246,97 @@ const recordIncomeBody = z.object({
   occurredAt: z.string().datetime().optional(),
 });
 
+/** M3 import upload limits: 2 MB is enough for years of CSV, and PDF is out. */
+const IMPORT_MAX_CHARS = 2_000_000;
+const importMappingBody = z.object({
+  date: z.string().trim().min(1).max(120),
+  description: z.string().trim().min(1).max(120),
+  amount: z.string().max(120).nullable().optional(),
+  debit: z.string().max(120).nullable().optional(),
+  credit: z.string().max(120).nullable().optional(),
+  balance: z.string().max(120).nullable().optional(),
+  category: z.string().max(120).nullable().optional(),
+  dateFormat: z.enum(['auto', 'YMD', 'MDY', 'DMY']).optional(),
+  amountSign: z.enum(['as-is', 'invert']).optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+});
+const importUploadBody = z.object({
+  filename: z.string().trim().min(1).max(255),
+  content: z.string().min(1).max(5_000_000),
+  mapping: importMappingBody.optional(),
+  presetId: z.string().max(120).nullable().optional(),
+  accountKind: z.enum(['checking', 'credit']).optional(),
+  expectedRowCount: z.number().int().nonnegative().max(1_000_000).optional(),
+  expectedOutflowMinor: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+  openingBalanceMinor: z.number().int().nullable().optional(),
+});
+const importPresetBody = z.object({
+  name: z.string().trim().min(1).max(80),
+  source: z.enum(['csv', 'ofx', 'qfx']),
+  mapping: importMappingBody,
+});
+const importPreviewBody = z.object({
+  filename: z.string().trim().min(1).max(255),
+  content: z.string().min(1).max(5_000_000),
+});
+
+/**
+ * Reject oversized bodies before parsing. Content-Length is only a hint: a
+ * chunked upload has none, so the body is counted while it is read and the
+ * request is abandoned as soon as it passes the limit.
+ */
+async function readImportBody(c: Context): Promise<{ tooLarge: true } | { tooLarge: false; value: unknown }> {
+  const declared = Number(c.req.header('content-length'));
+  if (Number.isFinite(declared) && declared > IMPORT_MAX_CHARS) return { tooLarge: true };
+  const body = c.req.raw.body;
+  if (!body) return { tooLarge: false, value: null };
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > IMPORT_MAX_CHARS) {
+        await reader.cancel().catch(() => undefined);
+        return { tooLarge: true };
+      }
+      chunks.push(value);
+    }
+  } catch {
+    await reader.cancel().catch(() => undefined);
+    return { tooLarge: false, value: null };
+  }
+  try {
+    const text = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString('utf8');
+    return { tooLarge: false, value: JSON.parse(text) as unknown };
+  } catch {
+    return { tooLarge: false, value: null };
+  }
+}
+
+/** Import detail lists every row for one import, paging by import id in the store. */
+async function importTransactions(
+  store: ImportStore,
+  accountId: string,
+  importId: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<Awaited<ReturnType<ImportStore['listTransactions']>>> {
+  const all: Awaited<ReturnType<ImportStore['listTransactions']>> = [];
+  const offset = Math.max(0, opts.offset ?? 0);
+  const max = opts.limit;
+  if (max !== undefined && max <= 0) return all;
+  const pageSize = 1_000;
+  for (let cursor = offset; ; cursor += pageSize) {
+    const take = max === undefined ? pageSize : Math.min(pageSize, max - all.length);
+    if (take <= 0) return all;
+    const page = await store.listTransactions(accountId, { importId, limit: take, offset: cursor });
+    all.push(...page);
+    if (page.length < take) return all;
+  }
+}
+
 /** How long /wake waits on the ledger before answering "still asleep". */
 const WAKE_PROBE_TIMEOUT_MS = 9_000;
 
@@ -290,6 +385,8 @@ export function createApp(deps: {
   practice: PracticeLedger;
   spendLogs: SpendLogStore;
   personalFinance?: PersonalFinanceStore;
+  /** M3 imports. Tests inject memory; production builds Postgres when a DB URL is set. */
+  imports?: ImportStore;
   /** Merchant aliases, rules and category corrections. Defaults to memory. */
   enrichment?: EnrichmentStore;
   /** Dismissed alert ids. Defaults to memory; production passes Postgres. */
@@ -326,6 +423,7 @@ export function createApp(deps: {
   const now = deps.now ?? (() => new Date());
   const mfaKey = resolveMfaKey(deps.mfaKey);
   const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
+  const imports = deps.imports ?? new InMemoryImportStore();
   const enrichment = deps.enrichment ?? new InMemoryEnrichmentStore(now);
   const alertDismissals = deps.alertDismissals ?? new InMemoryAlertDismissalStore();
   const subscriptionMarks = deps.subscriptionMarks ?? new InMemorySubscriptionTrackerStore();
@@ -1053,6 +1151,7 @@ export function createApp(deps: {
     await deps.dataKeys?.shred(user.accountId);
     await deps.dataKeys?.shred(user.id);
     await personalFinance.deleteAll(user.accountId);
+    await imports.deleteAll(user.accountId);
     await alertDismissals.deleteAll(user.accountId);
     await deps.spendLogs.deleteAll?.(user.accountId);
     await subscriptionMarks.deleteAll(user.accountId);
@@ -1535,7 +1634,7 @@ export function createApp(deps: {
       const denied = await walletAccessError(c, id);
       if (denied) return denied;
       await ensurePracticeDemoSeeded(id);
-      return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, subscriptionMarks, id, Math.min(limit, 100), now, tzOffsetFrom(c)));
+      return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, imports, subscriptionMarks, id, Math.min(limit, 100), now, tzOffsetFrom(c)));
     }
     const owner = c.req.query('owner');
     if (!owner) return c.json({ error: 'owner is required' }, 400);
@@ -1923,7 +2022,104 @@ export function createApp(deps: {
   app.get('/accounts/:id', async (c) => {
     const id = c.req.param('id');
     await ensurePracticeDemoSeeded(id);
-    return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, subscriptionMarks, id, 30, now, tzOffsetFrom(c)));
+    return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, imports, subscriptionMarks, id, 30, now, tzOffsetFrom(c)));
+  });
+
+  /**
+   * M3 imports run in-process. The file bytes never leave this request: parse,
+   * validate, stage, dedupe and post all happen before the response.
+   */
+  app.post('/accounts/:id/imports/preview', async (c) => {
+    const body = await readImportBody(c);
+    if (body.tooLarge) return c.json({ error: 'file_too_large' }, 413);
+    const parsed = importPreviewBody.safeParse(body.value);
+    if (!parsed.success) return c.json({ error: 'file_too_large' }, 400);
+    const filename = parsed.data.filename.toLowerCase();
+    if (!/\.(csv|ofx|qfx)$/.test(filename)) return c.json({ error: 'unsupported_type' }, 400);
+    if (Buffer.byteLength(parsed.data.content, 'utf8') > IMPORT_MAX_CHARS) {
+      return c.json({ error: 'file_too_large' }, 413);
+    }
+    if (!filename.endsWith('.csv')) {
+      return c.json({ source: filename.endsWith('.qfx') ? 'qfx' : 'ofx', columns: [], suggestedMapping: null, sampleRows: [] });
+    }
+    try {
+      const { previewCsvImport } = await import('./importers.js');
+      const preview = previewCsvImport(parsed.data.content);
+      return c.json({ source: 'csv', ...preview });
+    } catch (error) {
+      const reason = error instanceof ImportParseError ? error.reason : 'missing_header';
+      return c.json({ error: reason }, 400);
+    }
+  });
+
+  app.get('/accounts/:id/imports', async (c) => {
+    const id = c.req.param('id');
+    return c.json({ imports: await imports.listImports(id) });
+  });
+
+  app.get('/accounts/:id/imports/presets', async (c) => {
+    return c.json({ presets: await imports.listPresets(c.req.param('id')) });
+  });
+
+  app.post('/accounts/:id/imports/presets', async (c) => {
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const parsed = importPresetBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'invalid_preset' }, 400);
+    const preset = await imports.savePreset(c.req.param('id'), {
+      name: parsed.data.name,
+      source: parsed.data.source,
+      mapping: parsed.data.mapping as ImportColumnMapping,
+    });
+    return c.json({ preset }, 201);
+  });
+
+  app.get('/accounts/:id/imports/:importId', async (c) => {
+    const accountId = c.req.param('id');
+    const record = await imports.getImport(accountId, c.req.param('importId'));
+    if (!record) return c.json({ error: 'not_found' }, 404);
+    const limit = c.req.query('limit') === undefined
+      ? undefined
+      : Math.min(1_000, Math.max(1, Number(c.req.query('limit')) || 1));
+    const offset = Math.max(0, Number(c.req.query('offset')) || 0);
+    const transactions = (await importTransactions(imports, accountId, record.id, { limit, offset }))
+      .map((row) => importTransactionView(row, record.filename));
+    return c.json({
+      import: record,
+      transactions,
+      pagination: { limit: limit ?? null, offset },
+      reconciled: record.reconciliation.reconciled,
+    });
+  });
+
+  app.post('/accounts/:id/imports', async (c) => {
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const body = await readImportBody(c);
+    if (body.tooLarge) return c.json({ error: 'file_too_large' }, 413);
+    const parsed = importUploadBody.safeParse(body.value);
+    if (!parsed.success) return c.json({ error: 'invalid_import' }, 400);
+    const filename = parsed.data.filename.toLowerCase();
+    if (!/\.(csv|ofx|qfx)$/.test(filename)) return c.json({ error: 'unsupported_type' }, 400);
+    if (Buffer.byteLength(parsed.data.content, 'utf8') > IMPORT_MAX_CHARS) {
+      return c.json({ error: 'file_too_large' }, 413);
+    }
+    const result = await runImport(imports, {
+      accountId: c.req.param('id'),
+      filename: parsed.data.filename,
+      content: parsed.data.content,
+      mapping: parsed.data.mapping as ImportColumnMapping | undefined,
+      presetId: parsed.data.presetId ?? null,
+      accountKind: parsed.data.accountKind,
+      expectedRowCount: parsed.data.expectedRowCount,
+      expectedOutflowMinor: parsed.data.expectedOutflowMinor,
+      openingBalanceMinor: parsed.data.openingBalanceMinor,
+      enrichment,
+    }, now);
+    return c.json({
+      import: result.import,
+      created: result.created,
+      reconciled: result.import.reconciliation.reconciled,
+      transactions: result.transactions.map((row) => importTransactionView(row, result.import.filename)),
+    }, 201);
   });
 
   app.post('/accounts/:id/subscriptions/:streamId/mark', async (c) => {
@@ -2239,7 +2435,7 @@ export function createApp(deps: {
   app.get('/accounts/:id/statement.txt', async (c) => {
     const id = c.req.param('id');
     if (!z.string().uuid().safeParse(id).success) return c.text('Invalid account id', 400);
-    const view = await accountView(deps.ledger, deps.spendLogs, personalFinance, subscriptionMarks, id, 100, now, tzOffsetFrom(c));
+    const view = await accountView(deps.ledger, deps.spendLogs, personalFinance, imports, subscriptionMarks, id, 100, now, tzOffsetFrom(c));
     if (!view) return c.text('Account not found', 404);
     const entries = await deps.ledger.entries(id, 200);
     const body = formatLedgerStatement(view, entries, {
@@ -2545,6 +2741,7 @@ async function accountView(
   ledger: LedgerReader,
   spendLogs: SpendLogStore,
   personalFinance: PersonalFinanceStore,
+  imports: ImportStore,
   subscriptionMarks: SubscriptionTrackerStore,
   id: string,
   limit = 30,
@@ -2557,11 +2754,19 @@ async function accountView(
   const profile = await personalFinance.getProfile(id, base.currency, now());
   const allSpends = await spendLogs.list(id, { limit: 500 });
   const allIncomes = await personalFinance.listIncome(id, { limit: 500 });
-  const habits = buildHabitsFromEntries(allSpends, now(), base.currency, profile.periodStart);
+  const importedRows = await imports.listTransactions(id, { limit: 1000 });
+  const importRecords = await imports.listImports(id, { limit: 50 });
+  const importedSpends = importedTransactionsToSpendEntries(importedRows);
+  // The existing detector takes SpendLogEntry, so imported expenses join the
+  // same normalized list. Manual logs stay first in the feed.
+  const detectedSpends = [...allSpends, ...importedSpends];
+  const habits = buildHabitsFromEntries(detectedSpends, now(), base.currency, profile.periodStart);
   const spends = allSpends.slice(0, 80);
   const incomes = allIncomes.slice(0, 80);
-  const patterns = buildSpendingPatterns(allSpends, allIncomes, now(), profile, tzOffsetMinutes);
-  const subscriptions = buildSubscriptionReport(allSpends, now(), await subscriptionMarks.list(id));
+  const patterns = buildSpendingPatterns(detectedSpends, allIncomes, now(), profile, tzOffsetMinutes);
+  const normalized = normalizeTransactionList({ spends: allSpends, incomes: allIncomes, imports: importedRows });
+  const filenameFor = new Map(importRecords.map((record) => [record.id, record.filename]));
+  const subscriptions = buildSubscriptionReport(detectedSpends, now(), await subscriptionMarks.list(id));
   const activityFeed = buildActivityFeed(
     base.transfers,
     spends,
@@ -2579,6 +2784,18 @@ async function accountView(
     moneyProfile: profile,
     activityFeed,
     insights,
+    normalizedTransactions: normalized.slice(0, 200),
+    importedTransactions: importedRows.map((row) => importTransactionView(row, filenameFor.get(row.importId) ?? null)),
+    reconciliations: importRecords.map((record) => ({
+      importId: record.id,
+      filename: record.filename,
+      periodStart: record.statement.start,
+      periodEnd: record.statement.end,
+      reconciled: record.reconciliation.reconciled,
+      statementClosingMinor: record.reconciliation.statementClosedMinor,
+      computedClosingMinor: record.reconciliation.computedClosedMinor,
+      differenceMinor: record.reconciliation.differenceMinor,
+    })),
     spendEntries: spends.map((s) => ({
       id: s.id,
       amount: formatMoney(s.amountMinor, s.currency),
@@ -2587,6 +2804,28 @@ async function accountView(
       note: s.note,
       occurredAt: s.occurredAt,
     })),
+  };
+}
+
+function importTransactionView(
+  row: {
+    id: string; importId: string; postedDate: string; amountMinor: number; currency: string;
+    descriptorRaw: string; descriptorClean: string; categoryId: string; source: string;
+  },
+  filename: string | null,
+) {
+  return {
+    id: row.id,
+    importId: row.importId,
+    postedDate: row.postedDate,
+    amountMinor: row.amountMinor,
+    amount: formatMoney(row.amountMinor, row.currency),
+    currency: row.currency,
+    descriptor: row.descriptorRaw,
+    descriptorClean: row.descriptorClean,
+    category: row.categoryId,
+    source: row.source,
+    filename,
   };
 }
 

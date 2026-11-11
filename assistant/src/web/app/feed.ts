@@ -1,7 +1,7 @@
 import type { AccountView } from '../api.js';
 import { displayName, parseMoney } from './format.js';
 
-export type FeedKind = 'sent' | 'received' | 'deposit' | 'declined' | 'spend' | 'income';
+export type FeedKind = 'sent' | 'received' | 'deposit' | 'declined' | 'spend' | 'income' | 'imported';
 
 /** One line in the activity list, whether it came from the ledger or from the person's own logs. */
 export interface FeedItem {
@@ -67,6 +67,18 @@ export function buildFeed(view: AccountView): FeedItem[] {
     } else {
       items.push({ ...base, kind: 'sent', title: t.memo || `To ${name}`, subtitle: `To ${name}`, signedMinor: -minor, counterparty: t.counterparty });
     }
+  }
+
+  for (const row of view.importedTransactions ?? []) {
+    items.push({
+      id: `import-${row.id}`,
+      kind: 'imported',
+      title: row.descriptorClean || row.descriptor,
+      subtitle: `Imported${row.filename ? ` · ${row.filename}` : ''}`,
+      signedMinor: row.amountMinor,
+      occurredAt: `${row.postedDate}T12:00:00.000Z`,
+      category: row.category,
+    });
   }
 
   for (const row of view.activityFeed ?? []) {

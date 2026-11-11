@@ -222,9 +222,20 @@
 }
 
 .app .shell-item[aria-current="page"] {
-  background: var(--surface-3);
+  --tint: var(--accent);
+  --tint-strength: var(--tint-state);
   color: var(--ink);
   font-weight: 500;
+}
+
+/* The active item keeps its tint under the pointer instead of flattening to
+   the hover surface. */
+.app .shell-item[aria-current="page"]:hover {
+  background-color: color-mix(
+    in srgb,
+    var(--tint) calc(var(--tint-strength) + 8%),
+    var(--glass-under)
+  );
 }
 
 .app .shell-item:focus-visible {
@@ -475,13 +486,13 @@
 }
 
 .app .shell-badge {
+  --tint: var(--ink);
+  --tint-strength: var(--tint-neutral);
   display: inline-flex;
   align-items: center;
   flex: none;
   padding: var(--s1) var(--s2);
-  border: 1px solid var(--line);
   border-radius: var(--r1);
-  background: var(--surface-2);
   color: var(--muted);
   font-size: var(--t-xs);
   font-weight: 500;
@@ -534,34 +545,39 @@
 }
 
 .app .shell-search kbd {
+  --tint: var(--ink);
+  --tint-strength: var(--tint-neutral);
   margin-left: auto;
   padding: 1px var(--s1);
-  border: 1px solid var(--line);
   border-radius: var(--r1);
-  background: var(--surface);
   color: var(--muted);
   font-family: var(--mono);
   font-size: var(--t-xs);
 }
 
 .app .shell-new {
+  --tint: var(--accent);
+  --tint-strength: var(--tint-accent);
+  --tint-sheen: var(--glass-sheen-fill);
   display: inline-flex;
   align-items: center;
   gap: var(--s2);
   flex: none;
   height: 32px;
   padding: 0 var(--s3);
-  border: 1px solid var(--accent);
   border-radius: var(--r2);
-  background: var(--accent);
   color: var(--accent-ink);
   font-size: var(--t-sm);
   font-weight: 500;
 }
 
 .app .shell-new:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background-color: color-mix(
+    in srgb,
+    var(--accent-hover) 94%,
+    var(--glass-under)
+  );
+  box-shadow: var(--glass-shadow-hover);
 }
 
 .app .shell-new:focus-visible {
@@ -774,12 +790,12 @@
 }
 
 .app .planned-tag {
+  --tint: var(--ink);
+  --tint-strength: var(--tint-neutral);
   display: inline-flex;
   align-items: center;
   padding: var(--s1) var(--s2);
-  border: 1px solid var(--line);
   border-radius: var(--r1);
-  background: var(--surface-2);
   color: var(--muted);
   font-family: var(--mono);
   font-size: var(--t-xs);

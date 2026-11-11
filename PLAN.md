@@ -63,6 +63,16 @@ Model: like Actual Budget or Firefly III (self-host, BYO keys), but the enrichme
 [done] 0.5 Carry-over: `verify-settle` proof of Patterns at 390px/1024px, light and dark.
 **Milestone check:** diff read in full, lint, look-check, PR.
 
+## M1 + M2 streamlined (2026-11-11, at the user's request)
+
+**M1 — docs, one PR, Pi writes, the user approves (decision gate).** Four short documents, each under ~150 lines: (a) `docs/PRODUCT.md` rewrite (thesis, three personas, surfaces, non-goals, data-handling stance); (b) ADRs 0001 ledger as system of record, 0002 ingestion runtime (Python worker, the accepted default), 0003 cloud split (AWS only), 0004 encryption model (folds 2.5b); 0005 already exists; (c) `docs/THREAT-MODEL.md` merged with the data model: data classes, lineage raw → normalized → enriched → ledger, STRIDE per component in one table, each threat mapped to a plan step; (d) nothing else. The old 1.4 DATA-MODEL is folded into (c).
+
+**M2 — security core, spec-complete, run in QUEUE MODE** (tests written first by Pi in each brief pair, frozen; one unattended chain; the orchestrator verifies at the end). Kept, in order:
+2.3b database TLS verification → 2.1 session hardening (rotation, idle + absolute timeouts, `__Host-` cookie, Origin/Sec-Fetch-Site CSRF check, sessions table) → 2.3 login abuse controls (backoff, no enumeration, HIBP k-anonymity) → 2.2 TOTP MFA + recovery codes (node:crypto) → 2.6 append-only audit log shown in Settings → Security → 2.4 Postgres RLS on per-user tables → 2.7-lite data rights (JSON+CSV export, account delete with step-up; the 7-day grace and crypto-shred follow 2.5) → 2.9-lite CI security (gitleaks, `npm audit --omit=dev`, CodeQL, Dependabot; all free).
+Settings → Security and Data & privacy swap their "Planned · M2" tags for the real controls as each lands (a short UI brief at the end of the chain, with a look-check by the orchestrator).
+**Deferred:** 2.2b passkeys (after MFA proves out), 2.5 envelope encryption + KMS (costs about $1/month; it ships with M3, when there is sensitive imported data to protect), 2.8 BYO keys (M4), 2.10 legal pages (waits for decision 5, the operator's legal name).
+**Orchestrator model:** M2 is SPEC-COMPLETE and may be orchestrated on a Sonnet-class model; the UI brief at the end and any disputed review findings run on the top tier.
+
 ## M1 — Rescope on paper first  (PR 2, docs only)
 
 1.1 Rewrite `docs/PRODUCT.md` around the thesis above: personas (owner, invited household member, recruiter evaluating the demo), surfaces, non-goals, data-handling stance.

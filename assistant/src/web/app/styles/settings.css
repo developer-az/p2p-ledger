@@ -55,9 +55,18 @@
 }
 
 .app .set-tab[aria-current="page"] {
-  background: var(--surface-3);
+  --tint: var(--accent);
+  --tint-strength: var(--tint-state);
   color: var(--ink);
   font-weight: 500;
+}
+
+.app .set-tab[aria-current="page"]:hover {
+  background-color: color-mix(
+    in srgb,
+    var(--tint) calc(var(--tint-strength) + 8%),
+    var(--glass-under)
+  );
 }
 
 .app .set-tab:focus-visible {
@@ -205,11 +214,12 @@
 }
 
 .app .planned {
+  --tint: var(--ink);
+  --tint-strength: var(--tint-neutral);
   display: inline-block;
   flex: 0 0 auto;
   margin-left: auto;
   padding: 0 var(--s1);
-  border: 1px solid var(--line);
   border-radius: var(--r1);
   color: var(--muted);
   font-size: var(--t-xs);

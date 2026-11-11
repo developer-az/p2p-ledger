@@ -7,8 +7,6 @@ import { displayName, money } from './format.js';
 import { moneyPlan } from './money-plan.js';
 import { NeedsYouCard } from './SettleUp.js';
 import type { WalletData } from './data.js';
-import { CountUp, TiltCard } from './motion-kit.js';
-import { Mascot, mascotMood, type MascotMood } from './Mascot.js';
 import { EmptyState, Icon, ProgressRing, Skeleton } from './ui.js';
 
 export interface HomeActions {
@@ -33,7 +31,7 @@ function weekDots(days: { date: string; count: number }[], todayKey: string) {
   }));
 }
 
-export function Home({ me, name, data, actions, guide, cheer = 0 }: { me: AccountRef; name?: string; data: WalletData | null; actions: HomeActions; guide?: ReactNode; cheer?: number }) {
+export function Home({ me, name, data, actions, guide }: { me: AccountRef; name?: string; data: WalletData | null; actions: HomeActions; guide?: ReactNode }) {
   const feed = useMemo(() => (data ? buildFeed(data.view) : []), [data]);
   if (!data) return <HomeSkeleton />;
 
@@ -44,24 +42,13 @@ export function Home({ me, name, data, actions, guide, cheer = 0 }: { me: Accoun
   const weekChange = plan.patterns
     ? plan.patterns.week.spentMinor - plan.patterns.week.lastWeekSpentMinor
     : 0;
-  const loggedToday = dots.some((d) => d.today && d.logged);
-  const mood = mascotMood({ overBudget: plan.overBudget, streakDays: plan.streakDays, loggedToday, hasData: habitFeed.length > 0 });
 
   return (
     <div className="home stagger-in">
       <header className="hello">
-        <Mascot mood={mood} cheer={cheer} size={92} greet onTap={() => actions.logSpend()} />
         <div className="hello-copy">
           <p className="eyebrow">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</p>
           <h1>Hi, {name ?? displayName(me.owner)}.</h1>
-          <p className="mascot-says" aria-live="polite"><span>{mascotLine(mood, plan)}</span></p>
-        </div>
-        <div className="hello-badges">
-          <span className="streak-pill" title="Consecutive days with a logged spend">
-            <span className="streak-flame"><Icon name="flame" size={15} /></span>
-            <strong>{plan.streakDays}</strong>
-            <span>{plan.streakDays === 1 ? 'day' : 'days'}</span>
-          </span>
         </div>
       </header>
 
@@ -82,10 +69,10 @@ export function Home({ me, name, data, actions, guide, cheer = 0 }: { me: Accoun
             </div>
             {habitFeed.length === 0 ? (
               <EmptyState
-                title="Log one thing"
-                action={<button type="button" className="btn btn-primary" onClick={() => actions.logSpend()}>Log a coffee</button>}
+                title="No spending logged yet"
+                action={<button type="button" className="btn btn-primary" onClick={() => actions.logSpend()}>Add a transaction</button>}
               >
-                One log wakes Settle up and unlocks your week ring. About five seconds.
+                Add a transaction to see it here.
               </EmptyState>
             ) : (
               <FeedList items={habitFeed.slice(0, 5)} onOpen={actions.openItem} grouped={false} />
@@ -100,23 +87,6 @@ export function Home({ me, name, data, actions, guide, cheer = 0 }: { me: Accoun
       </div>
     </div>
   );
-}
-
-function mascotLine(mood: MascotMood, plan: ReturnType<typeof moneyPlan>): string {
-  switch (mood) {
-    case 'worried':
-      return plan.budgetMinor === null
-        ? 'Something looks off. Check your pace?'
-        : `${money(plan.weekSpentMinor - plan.budgetMinor)} past your pace. A lighter day fixes it.`;
-    case 'sleepy':
-      return 'Nothing logged yet today. Tap me, or the + below, to add the first thing.';
-    case 'happy':
-      return plan.weekLeftMinor === null
-        ? `${plan.streakDays}-day streak. Keep it going.`
-        : `${plan.streakDays}-day streak and ${money(plan.weekLeftMinor)} left this week. Nice.`;
-    default:
-      return plan.budgetMinor === null ? 'Log a few things and I’ll start spotting patterns.' : 'All calm. You’re on pace.';
-  }
 }
 
 /** Example questions the ask bar cycles through as its placeholder. */
@@ -176,13 +146,13 @@ function MoneyHero({
   const noPace = plan.budgetMinor === null;
   return (
     <section className="money-hero" aria-labelledby="net-label">
-      <TiltCard className={`s-card${over ? ' is-over' : ''}`} max={5}>
+      <div className={`s-card${over ? ' is-over' : ''}`}>
         <div className="s-card-top">
           <span className="s-card-brand">settle</span>
           <span className="s-card-private"><Icon name="lock" size={12} /> Private</span>
         </div>
         <p className="s-card-label" id="net-label">Net position</p>
-        <p className="s-card-amount num" aria-live="polite"><CountUp minor={net} /></p>
+        <p className="s-card-amount num" aria-live="polite">{money(net)}</p>
         <p className="s-card-sub num">
           {plan.cashMinor === null ? 'Cash not set yet' : (
             <>
@@ -226,7 +196,7 @@ function MoneyHero({
           </button>
         </div>
         <HabitDots dots={dots} label="Days with a log this week" />
-      </TiltCard>
+      </div>
     </section>
   );
 }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
-import { InMemoryAuthStore } from '../src/server/auth.js';
+import { InMemoryAuthStore, hashSessionToken } from '../src/server/auth.js';
 import { googleConfig, installGoogleAuth } from '../src/server/google-auth.js';
 
 afterEach(() => vi.unstubAllEnvs());
@@ -15,7 +15,7 @@ function setup() {
   const provision = vi.fn();
   const app = new Hono();
   installGoogleAuth(app, auth, issue, provision);
-  return { app, issue, provision };
+  return { app, issue, provision, auth };
 }
 describe('Google authorization boundary', () => {
   it('requires configured HTTPS credentials', () => {
@@ -29,8 +29,20 @@ describe('Google authorization boundary', () => {
   it('does not convert an unauthenticated link request into a signup', async () => {
     const { app } = setup();
     const response = await app.request('https://settle.example/auth/google/start?link=1');
-    expect(response.headers.get('Location')).toContain('authError=link-required');
+    expect(response.headers.get('Location')).toContain('/signin?authError=link-required');
     expect(response.headers.get('Set-Cookie')).toBeNull();
+  });
+  it('sends a failed Google link back to the account page, which a signed-in user can see', async () => {
+    const { app, auth, issue } = setup();
+    await auth.insert({ id: 'u1', email: 'a@example.com', passwordHash: 'x', displayName: 'A', accountId: 'acc1', ownerId: 'o1' });
+    await auth.saveSession(hashSessionToken('tok'), 'u1', new Date(Date.now() + 3_600_000));
+    const start = await app.request('https://settle.example/auth/google/start?link=1', { headers: { Cookie: 'settle_session=tok' } });
+    const flow = start.headers.get('Set-Cookie')!.split(';')[0]!;
+    const response = await app.request('https://settle.example/auth/google/callback?state=wrong&code=forged', {
+      headers: { Cookie: flow + '; settle_session=tok' },
+    });
+    expect(response.headers.get('Location')).toContain('/account-access?authError=google-link');
+    expect(issue).not.toHaveBeenCalled();
   });
   it('rejects a mismatched callback state before contacting Google', async () => {
     const { app, issue, provision } = setup();
@@ -38,7 +50,7 @@ describe('Google authorization boundary', () => {
     const response = await app.request('https://settle.example/auth/google/callback?state=wrong&code=forged', {
       headers: { Cookie: start.headers.get('Set-Cookie')!.split(';')[0]! },
     });
-    expect(response.headers.get('Location')).toContain('authError=google');
+    expect(response.headers.get('Location')).toContain('/signin?authError=google');
     expect(issue).not.toHaveBeenCalled(); expect(provision).not.toHaveBeenCalled();
   });
   it('uses minimal identity scopes, PKCE, state, nonce and a secure HTTP-only cookie', async () => {
@@ -57,7 +69,7 @@ describe('Google authorization boundary', () => {
   it('rejects unsolicited callbacks without provisioning or issuing a session', async () => {
     const { app, provision, issue } = setup();
     const response = await app.request('https://settle.example/auth/google/callback?code=forged&state=forged');
-    expect(response.headers.get('Location')).toContain('authError=google');
+    expect(response.headers.get('Location')).toContain('/signin?authError=google');
     expect(provision).not.toHaveBeenCalled();
     expect(issue).not.toHaveBeenCalled();
   });

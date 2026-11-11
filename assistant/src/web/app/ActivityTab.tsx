@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { buildFeed, filterFeed, type FeedFilter, type FeedItem } from './feed.js';
 import { FeedList } from './FeedList.js';
-import { CountUp } from './motion-kit.js';
+import { money } from './format.js';
 import { EmptyState, Icon, Skeleton } from './ui.js';
 import type { WalletData } from './data.js';
 
@@ -38,11 +38,11 @@ export function ActivityTab({ data, onOpen }: { data: WalletData | null; onOpen:
       <div className="stat-strip" aria-label="This month">
         <div className="stat-tile stat-tile-ink">
           <span className="stat-label">Out this month</span>
-          <strong className="num"><CountUp minor={out} /></strong>
+          <strong className="num">{money(out)}</strong>
         </div>
         <div className="stat-tile">
           <span className="stat-label">In this month</span>
-          <strong className="num"><CountUp minor={inn} /></strong>
+          <strong className="num">{money(inn)}</strong>
         </div>
         <div className="stat-tile">
           <span className="stat-label">Active days, 30d</span>

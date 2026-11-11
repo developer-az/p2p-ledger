@@ -1,0 +1,274 @@
+/* Landing page: paper, hairlines and numbers. Tokens only, no decoration.
+   See PLAN.md 7a.7. Every section is a 12-column row with a numbered label
+   column; under 768px the grid drops to 4 columns and the label stacks. */
+
+.app .lp {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--s6);
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--s6);
+  color: var(--ink);
+  font-family: var(--font);
+}
+
+/* ---------- Header ---------- */
+
+.app .lp-header {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4) var(--s6);
+  padding: var(--s6) 0;
+}
+.app .lp-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--ink);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+.app .lp-brand:hover { text-decoration: underline; text-underline-offset: 4px; }
+.app .lp-nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s6); }
+.app .lp-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  text-decoration: none;
+}
+.app .lp-nav a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
+.app .lp-nav a.lp-btn-secondary { color: var(--ink); padding: 0 var(--s5); }
+
+/* ---------- Buttons and links ---------- */
+
+.app .lp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 var(--s5);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: transparent;
+  color: var(--ink);
+  font: 500 var(--t-sm) var(--font);
+  text-decoration: none;
+  cursor: pointer;
+}
+.app .lp-btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.app .lp-btn-primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+.app .lp-btn-secondary { background: transparent; color: var(--ink); }
+.app .lp-btn-secondary:hover { border-color: var(--ink); }
+.app .lp-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.app .lp-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--accent);
+  font-size: var(--t-sm);
+  text-decoration: none;
+}
+.app .lp-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+.app .lp :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r1); }
+
+/* ---------- Sections ---------- */
+
+.app .lp-section {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--s6);
+  row-gap: var(--s6);
+  padding: var(--s16) 0;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+.app .lp-label { grid-column: span 3; display: grid; gap: var(--s2); align-content: start; }
+.app .lp-content { grid-column: span 9; display: grid; gap: var(--s6); align-content: start; min-width: 0; }
+.app .lp-num { font-size: var(--t-sm); font-variant-numeric: tabular-nums; color: var(--accent); }
+.app .lp-label-text {
+  margin: 0;
+  font-family: var(--font);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.app .lp h1,
+.app .lp-h1 {
+  margin: 0;
+  font-family: var(--font);
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  max-width: 22ch;
+}
+.app .lp-lede {
+  margin: 0;
+  font-size: var(--t-md);
+  line-height: 1.6;
+  color: var(--ink-2);
+  max-width: 60ch;
+}
+.app .lp-body { margin: 0; font-size: var(--t-md); line-height: 1.6; color: var(--ink-2); max-width: 60ch; }
+.app .lp-kicker { margin: 0; font-size: var(--t-sm); color: var(--muted); }
+.app .lp-note { margin: 0; font-size: var(--t-sm); color: var(--muted); max-width: 60ch; }
+.app .lp-error { margin: 0; font-size: var(--t-sm); color: var(--neg); }
+.app .lp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s6); }
+
+/* ---------- 02 Pipeline ---------- */
+
+.app .lp-flow { display: block; width: 100%; height: auto; color: var(--ink); overflow-wrap: anywhere; }
+/* Under 640px the diagram is too dense to read; the numbered list stands alone. */
+@media (max-width: 639px) {
+  .app .lp-flow { display: none; }
+}
+.app .lp-flow-box { fill: none; stroke: currentColor; stroke-width: 1; }
+.app .lp-flow-link { fill: none; stroke: currentColor; stroke-width: 1; }
+.app .lp-flow text { fill: currentColor; font-family: var(--font); }
+.app .lp-flow-step { font-size: 13px; fill: var(--muted); }
+.app .lp-flow-name { font-size: 17px; font-weight: 500; }
+
+.app .lp-stages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--s5);
+}
+.app .lp-stage { display: grid; gap: var(--s2); align-content: start; min-width: 0; }
+.app .lp-stage-head { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2); }
+.app .lp-stage-name { font-size: var(--t-base); font-weight: 600; color: var(--ink); }
+.app .lp-stage-body { margin: 0; font-size: var(--t-sm); line-height: 1.55; color: var(--muted); }
+.app .lp-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--s2);
+  border: 1px solid var(--accent);
+  border-radius: var(--r1);
+  color: var(--accent);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.app .lp-tag.is-planned { border-color: var(--line-strong); color: var(--muted); }
+
+/* ---------- 03 Sample data ---------- */
+
+.app .lp-figs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border-block: 1px solid var(--line);
+  min-width: 0;
+}
+.app .lp-fig {
+  display: grid;
+  gap: var(--s2);
+  align-content: start;
+  min-height: 104px;
+  min-width: 0;
+  padding: var(--s4);
+  background: var(--bg);
+}
+.app .lp-fig-label {
+  margin: 0;
+  font-size: var(--t-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.app .lp-fig-value {
+  margin: 0;
+  min-height: 34px;
+  font-size: clamp(20px, 6vw, var(--t-xl));
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--ink);
+  white-space: nowrap;
+}
+/* The category name keeps together; the share drops under it when they do not fit. */
+.app .lp-fig-category { white-space: normal; }
+.app .lp-fig-name { white-space: nowrap; }
+.app .lp-fig-share { display: inline-block; white-space: nowrap; margin-left: var(--s2); font-size: var(--t-sm); color: var(--muted); }
+.app .lp-fig-wide { grid-column: 1 / -1; min-height: 0; }
+.app .lp-chart { display: block; width: 100%; height: 104px; }
+.app .lp-bar { fill: var(--ink); fill-opacity: 0.7; }
+.app .lp-baseline { stroke: var(--line); stroke-width: 1; }
+.app .lp-axis {
+  display: flex;
+  justify-content: space-between;
+  margin: var(--s2) 0 0;
+  font-size: var(--t-xs);
+  color: var(--muted);
+}
+
+/* ---------- 04 Security ---------- */
+
+.app .lp-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s4); max-width: 60ch; }
+.app .lp-line { display: grid; grid-template-columns: var(--s6) minmax(0, 1fr); gap: var(--s3); align-items: baseline; }
+.app .lp-line-num { font-size: var(--t-sm); color: var(--accent); }
+.app .lp-line-body { margin: 0; font-size: var(--t-md); line-height: 1.5; color: var(--ink-2); }
+
+/* ---------- 05 Run it ---------- */
+
+.app .lp-code {
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  padding: 2px var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--surface-2);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* Screen-reader-only text that repeats a chart's total. */
+.app .lp-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------- Under 768px: 4 columns, label above the content ---------- */
+
+@media (max-width: 767px) {
+  .app .lp {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: var(--s4);
+    padding: 0 var(--s4);
+  }
+  .app .lp-header { padding: var(--s4) 0; }
+  .app .lp-nav { gap: var(--s2) var(--s4); }
+  .app .lp-nav a:not(.lp-nav-signin) { display: none; }
+  .app .lp-section {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: var(--s4);
+    row-gap: var(--s4);
+    padding: var(--s10) 0;
+  }
+  .app .lp-label,
+  .app .lp-content { grid-column: 1 / -1; }
+  .app .lp-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s3); }
+  .app .lp-stages { grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
+  .app .lp-figs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

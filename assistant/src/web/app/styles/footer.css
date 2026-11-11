@@ -1,0 +1,128 @@
+/* Footer: the same paper as the page, one hairline, two rows of small links.
+   Replaces the old evening-ink band. Tokens only. */
+
+.app .site-footer {
+  width: 100%;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: var(--t-sm);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* ---------- Full footer ---------- */
+
+.app .site-footer-full { border-top: 1px solid var(--line); }
+.app .site-footer-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--s10) var(--s6) var(--s8);
+  display: grid;
+  gap: var(--s6);
+}
+.app .site-footer-row {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--s6);
+  row-gap: var(--s6);
+}
+.app .site-footer-brand {
+  grid-column: span 3;
+  display: grid;
+  gap: var(--s3);
+  align-content: start;
+  justify-items: start;
+  min-width: 0;
+}
+.app .site-footer-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+.app .site-footer-logo:hover { text-decoration: underline; text-underline-offset: 4px; }
+.app .site-footer-pitch { margin: 0; color: var(--muted); line-height: 1.5; }
+.app .site-footer-status { display: inline-flex; align-items: center; gap: var(--s2); margin: 0; color: var(--muted); }
+.app .site-footer-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+}
+.app .site-footer-status.is-live .site-footer-dot { border-color: var(--accent); background: var(--accent); }
+
+.app .site-footer-col { grid-column: span 3; display: grid; gap: var(--s3); align-content: start; min-width: 0; }
+.app .site-footer-heading {
+  margin: 0;
+  font-family: var(--font);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.app .site-footer-links { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
+.app .site-footer-links a {
+  display: inline-block;
+  padding-block: 2px;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.app .site-footer-links a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
+.app .site-footer-links a:focus-visible,
+.app .site-footer-logo:focus-visible,
+.app .site-footer-compact-nav a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.app .site-footer-fine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2) var(--s6);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--line);
+}
+.app .site-footer-fine p { margin: 0; color: var(--muted); font-size: var(--t-sm); }
+
+/* ---------- Compact footer: the slim bar under a signed-in wallet ---------- */
+
+.app .site-footer-compact {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2) var(--s5);
+  padding: var(--s5) var(--s6);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+.app .site-footer-note { margin: 0; }
+.app .site-footer-compact-nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s5); }
+.app .site-footer-compact-nav a { color: var(--muted); text-decoration: none; }
+.app .site-footer-compact-nav a:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
+
+@media (max-width: 767px) {
+  .app .site-footer-inner { padding: var(--s8) var(--s4) var(--s6); }
+  .app .site-footer-row { grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: var(--s4); }
+  .app .site-footer-brand { grid-column: 1 / -1; }
+  .app .site-footer-col { grid-column: span 2; }
+  .app .site-footer-compact { padding: var(--s5) var(--s4) var(--s6); }
+}
+
+/* Clear the fixed bottom dock on small screens; after the compact rules so it wins. */
+@media (max-width: 900px) {
+  .app .site-footer-compact { padding-bottom: calc(var(--s16) + var(--s12)); }
+}

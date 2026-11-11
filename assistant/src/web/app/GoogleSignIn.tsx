@@ -6,7 +6,7 @@ export function GoogleSignIn() {
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   return <div className="app auth-page">
-    <header className="auth-header"><a className="brand" href="/" aria-label="Settle home"><span className="brand-word">settle</span></a><a href="/#own-wallet">Use email instead</a></header>
+    <header className="auth-header"><a className="brand" href="/" aria-label="Settle home"><span className="brand-word">settle</span></a><a href="/signin">Use email instead</a></header>
     <main className="auth-main" id="main">
       <section className="auth-panel" aria-labelledby="auth-title">
         <span className="auth-eyebrow">YOUR SETTLE ACCOUNT</span>

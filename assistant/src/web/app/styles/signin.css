@@ -1,0 +1,295 @@
+/* Sign-in and create-account page. Tokens and the 4px grid only:
+   see styles/tokens.css. */
+
+.signin {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: var(--s8) var(--s6) var(--s16);
+  color: var(--ink);
+}
+
+.signin-top {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--s10);
+}
+
+.signin .signin-home {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--ink);
+  font-size: var(--t-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+.signin .signin-home:hover span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.signin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 400px) minmax(0, 1fr);
+  gap: var(--s12);
+  align-items: start;
+}
+
+.signin-main {
+  width: 100%;
+  max-width: 400px;
+}
+
+.signin-main h1 {
+  margin: 0 0 var(--s2);
+  font-size: var(--t-xl);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.signin .signin-lede {
+  margin: 0 0 var(--s6);
+  color: var(--muted);
+  font-size: var(--t-base);
+  line-height: 1.5;
+}
+
+.signin-form {
+  display: grid;
+  gap: var(--s4);
+}
+
+.signin .signin-field {
+  display: grid;
+  gap: var(--s1);
+}
+
+.signin-label {
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+
+.signin-field input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--t-base);
+  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+}
+
+.signin-field input:hover {
+  border-color: var(--muted);
+}
+
+.signin-field input:focus {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.signin-secret {
+  position: relative;
+  display: grid;
+}
+
+.signin-secret input {
+  padding-right: var(--s10);
+}
+
+.signin-reveal {
+  position: absolute;
+  right: var(--s1);
+  top: 50%;
+  transform: translateY(-50%);
+  min-height: var(--s8);
+  padding: 0 var(--s2);
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  text-decoration: none;
+  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+}
+
+.signin-reveal:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.signin-reveal:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.signin-submit {
+  min-height: 44px;
+  padding: 0 var(--s4);
+  border: 1px solid var(--accent);
+  border-radius: var(--r2);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: var(--t-base);
+  font-weight: 600;
+  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+}
+
+.signin-submit:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.signin-submit:disabled {
+  border-color: var(--line);
+  background: var(--surface-3);
+  color: var(--muted);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.signin-ghost {
+  min-height: 44px;
+  padding: 0 var(--s4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--t-base);
+  font-weight: 500;
+  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+}
+
+.signin-ghost:hover {
+  background: var(--surface-2);
+}
+
+.signin-text {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  text-decoration: underline 1px;
+  text-underline-offset: 2px;
+  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+}
+
+.signin-text:hover {
+  color: var(--ink);
+}
+
+.signin-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+.signin-error {
+  margin: 0;
+  color: var(--neg);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+.signin .signin-switch {
+  margin: var(--s4) 0 0;
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+
+.signin .signin-switch a {
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  text-decoration: underline 1px;
+  text-underline-offset: 2px;
+}
+
+.signin-aside {
+  padding: var(--s6);
+  border-left: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.signin .signin-aside-label {
+  margin: 0 0 var(--s3);
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.signin-aside-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+.signin-aside-list li {
+  padding: var(--s3) 0;
+}
+
+.signin-aside-list li + li {
+  border-top: 1px solid var(--line);
+}
+
+.planned {
+  display: inline-block;
+  margin-left: var(--s2);
+  padding: 0 var(--s1);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
+.signin :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 768px) {
+  .signin {
+    padding: var(--s6) var(--s4) var(--s12);
+  }
+
+  .signin-top {
+    margin-bottom: var(--s6);
+  }
+
+  .signin-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s8);
+  }
+
+  .signin-main {
+    max-width: none;
+  }
+
+  .signin-aside {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+}
+
+@media (max-width: 639px) {
+  .signin-reveal {
+    min-height: 44px;
+  }
+}

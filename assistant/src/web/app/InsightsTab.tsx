@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { categoryMeta } from './categories.js';
 import { money } from './format.js';
-import { milestones, nextMilestone } from './milestones.js';
 import { moneyPlan, moneyStory, monthsToClear } from './money-plan.js';
 import { CategoryMoversChart, DailyTrendChart, MonthPaceChart } from './pattern-charts.js';
 import { buildActions, habitPeak, patternsState } from './pattern-insights.js';
@@ -33,8 +32,6 @@ export function InsightsTab({
   if (!data || !plan) return <Skeleton height={420} />;
 
   const stories = moneyStory(plan);
-  const badges = milestones(plan, data.view.summary);
-  const next = nextMilestone(badges);
   const state = patternsState(data.view);
   const selected = patterns?.days.find((d) => d.date === selectedDay) ?? null;
   const peak = patterns ? habitPeak(patterns) : null;
@@ -54,16 +51,12 @@ export function InsightsTab({
           <p className="page-sub">Built only from what you log. No bank feed, no guessing.</p>
         </div>
         <div className="patterns-head-badges">
-          <span className="streak-pill"><span className="streak-flame"><Icon name="flame" size={15} /></span><strong>{plan.streakDays}</strong><span>day streak</span></span>
           <button type="button" className="btn btn-sm" onClick={onAsk}><Icon name="sparkle" size={16} /> Ask about this</button>
         </div>
       </header>
 
       {state.kind === 'none' ? (
         <section className="card empty-patterns">
-          <div className="empty-illustration" aria-hidden="true">
-            <span>☕</span><span>🚌</span><span>🛒</span>
-          </div>
           <h2>Your first pattern is one log away.</h2>
           <p className="muted">Log a coffee, a bus ride, a grocery run. After a few days, this page starts to look like you.</p>
           <div className="row-wrap" style={{ justifyContent: 'center', marginTop: 16 }}>
@@ -272,22 +265,6 @@ export function InsightsTab({
               </div>
             </section>
           ) : null}
-
-          <section className="card badges-card" aria-labelledby="badges-title">
-            <div className="card-head">
-              <div><p className="eyebrow">Small wins</p><h2 id="badges-title">Milestones</h2></div>
-              {next ? <span className="pill">{next.title}</span> : <span className="pill pill-good">All earned</span>}
-            </div>
-            <div className="badge-row">
-              {badges.map((badge) => (
-                <div key={badge.id} className={`badge${badge.earned ? ' is-earned' : ''}`} title={badge.body}>
-                  <span className="badge-emoji" aria-hidden="true">{badge.emoji}</span>
-                  <span className="badge-title">{badge.title}</span>
-                  <span className="badge-progress" aria-hidden="true"><span style={{ width: `${Math.round(badge.progress * 100)}%` }} /></span>
-                </div>
-              ))}
-            </div>
-          </section>
         </>
       )}
     </div>

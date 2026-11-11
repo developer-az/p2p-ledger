@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { pgSsl } from './db-tls.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
 import { formatMoney } from './money.js';
+import { RLS_DDL, withUser } from './rls.js';
 import type { SpendLogEntry } from './spend-log.js';
 
 export const INCOME_SOURCES = ['salary', 'freelance', 'gift', 'refund', 'other'] as const;
@@ -296,6 +297,9 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
   private async ensureSchema(c: import('pg').Client) {
     if (this.schemaReady) return;
     await c.query(SCHEMA_SQL);
+    // FORCE RLS applies to the owner too, so every row query below must run
+    // through withUser(). Policies are dropped and recreated to stay idempotent.
+    await c.query(RLS_DDL);
     this.schemaReady = true;
   }
 
@@ -321,30 +325,32 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
     const c = await this.client();
     try {
       await this.ensureSchema(c);
-      const res = await c.query(
-        `select account_id, currency, period_label, period_start, wallet_cash_minor, credit_owed_minor,
-                weekly_budget_minor, spend_logs_affect_wallet, updated_at from money_profiles where account_id = $1`,
-        [accountId],
-      );
-      if (res.rows[0]) return this.rowToProfile(res.rows[0] as Record<string, unknown>);
-      const p = defaultMoneyProfile(accountId, currency, now);
-      await c.query(
-        `insert into money_profiles (account_id, currency, period_label, period_start, wallet_cash_minor,
-         credit_owed_minor, weekly_budget_minor, spend_logs_affect_wallet, updated_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-          accountId,
-          currency,
-          p.periodLabel,
-          p.periodStart,
-          null,
-          0,
-          null,
-          true,
-          now.toISOString(),
-        ],
-      );
-      return p;
+      return await withUser(c, accountId, async () => {
+        const res = await c.query(
+          `select account_id, currency, period_label, period_start, wallet_cash_minor, credit_owed_minor,
+                  weekly_budget_minor, spend_logs_affect_wallet, updated_at from money_profiles where account_id = $1`,
+          [accountId],
+        );
+        if (res.rows[0]) return this.rowToProfile(res.rows[0] as Record<string, unknown>);
+        const p = defaultMoneyProfile(accountId, currency, now);
+        await c.query(
+          `insert into money_profiles (account_id, currency, period_label, period_start, wallet_cash_minor,
+           credit_owed_minor, weekly_budget_minor, spend_logs_affect_wallet, updated_at)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            accountId,
+            currency,
+            p.periodLabel,
+            p.periodStart,
+            null,
+            0,
+            null,
+            true,
+            now.toISOString(),
+          ],
+        );
+        return p;
+      });
     } finally {
       await c.end();
     }
@@ -378,29 +384,31 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
     const c = await this.client();
     try {
       await this.ensureSchema(c);
-      await c.query(
-        `update money_profiles set
-           period_label = $2,
-           period_start = $3,
-           wallet_cash_minor = $4,
-           credit_owed_minor = $5,
-           weekly_budget_minor = $6,
-           spend_logs_affect_wallet = $7,
-           updated_at = $8
-         where account_id = $1`,
-        [
-          accountId,
-          fields.periodLabel,
-          fields.periodStart,
-          fields.walletCashMinor,
-          fields.creditOwedMinor,
-          fields.weeklyBudgetMinor,
-          fields.spendLogsAffectWallet,
-          now.toISOString(),
-        ],
-      );
-      const res = await c.query(`select * from money_profiles where account_id = $1`, [accountId]);
-      return this.rowToProfile(res.rows[0] as Record<string, unknown>);
+      return await withUser(c, accountId, async () => {
+        await c.query(
+          `update money_profiles set
+             period_label = $2,
+             period_start = $3,
+             wallet_cash_minor = $4,
+             credit_owed_minor = $5,
+             weekly_budget_minor = $6,
+             spend_logs_affect_wallet = $7,
+             updated_at = $8
+           where account_id = $1`,
+          [
+            accountId,
+            fields.periodLabel,
+            fields.periodStart,
+            fields.walletCashMinor,
+            fields.creditOwedMinor,
+            fields.weeklyBudgetMinor,
+            fields.spendLogsAffectWallet,
+            now.toISOString(),
+          ],
+        );
+        const res = await c.query(`select * from money_profiles where account_id = $1`, [accountId]);
+        return this.rowToProfile(res.rows[0] as Record<string, unknown>);
+      });
     } finally {
       await c.end();
     }
@@ -421,20 +429,22 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
     const c = await this.client();
     try {
       await this.ensureSchema(c);
-      await c.query(
-        `insert into income_logs (id, account_id, amount_minor, currency, source, note, occurred_at, created_at)
-         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          id,
-          accountId,
-          input.amountMinor,
-          input.currency ?? 'USD',
-          input.source,
-          input.note ?? null,
-          occurredAt,
-          now.toISOString(),
-        ],
-      );
+      await withUser(c, accountId, async () => {
+        await c.query(
+          `insert into income_logs (id, account_id, amount_minor, currency, source, note, occurred_at, created_at)
+           values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            id,
+            accountId,
+            input.amountMinor,
+            input.currency ?? 'USD',
+            input.source,
+            input.note ?? null,
+            occurredAt,
+            now.toISOString(),
+          ],
+        );
+      });
     } finally {
       await c.end();
     }
@@ -455,28 +465,30 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
     const c = await this.client();
     try {
       await this.ensureSchema(c);
-      const params: unknown[] = [accountId];
-      let sql = `select id, account_id, amount_minor, currency, source, note, occurred_at, created_at
-                 from income_logs where account_id = $1`;
-      if (opts?.since) {
-        params.push(opts.since.toISOString());
-        sql += ` and occurred_at >= $2 order by occurred_at desc limit $3`;
-        params.push(limit);
-      } else {
-        sql += ` order by occurred_at desc limit $2`;
-        params.push(limit);
-      }
-      const res = await c.query(sql, params);
-      return res.rows.map((row: Record<string, unknown>) => ({
-        id: String(row.id),
-        accountId: String(row.account_id),
-        amountMinor: Number(row.amount_minor),
-        currency: String(row.currency),
-        source: row.source as IncomeSource,
-        note: row.note as string | null,
-        occurredAt: new Date(String(row.occurred_at)).toISOString(),
-        createdAt: new Date(String(row.created_at)).toISOString(),
-      }));
+      return await withUser(c, accountId, async () => {
+        const params: unknown[] = [accountId];
+        let sql = `select id, account_id, amount_minor, currency, source, note, occurred_at, created_at
+                   from income_logs where account_id = $1`;
+        if (opts?.since) {
+          params.push(opts.since.toISOString());
+          sql += ` and occurred_at >= $2 order by occurred_at desc limit $3`;
+          params.push(limit);
+        } else {
+          sql += ` order by occurred_at desc limit $2`;
+          params.push(limit);
+        }
+        const res = await c.query(sql, params);
+        return res.rows.map((row: Record<string, unknown>) => ({
+          id: String(row.id),
+          accountId: String(row.account_id),
+          amountMinor: Number(row.amount_minor),
+          currency: String(row.currency),
+          source: row.source as IncomeSource,
+          note: row.note as string | null,
+          occurredAt: new Date(String(row.occurred_at)).toISOString(),
+          createdAt: new Date(String(row.created_at)).toISOString(),
+        }));
+      });
     } finally {
       await c.end();
     }

@@ -40,7 +40,7 @@ const PLANNED: Record<PlannedSection, { milestone: string; copy: string }> = {
 export function PlannedView({ section }: { section: PlannedSection }) {
   const entry = PLANNED[section];
   return (
-    <div className="planned">
+    <div className="planned-view">
       <span className="planned-mark">
         <BrandMark size={32} />
       </span>

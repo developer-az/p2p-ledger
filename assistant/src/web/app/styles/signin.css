@@ -223,6 +223,11 @@
   background: var(--surface-2);
 }
 
+.signin .signin-aside-mark {
+  display: block;
+  margin-bottom: var(--s4);
+}
+
 .signin .signin-aside-label {
   margin: 0 0 var(--s3);
   color: var(--muted);

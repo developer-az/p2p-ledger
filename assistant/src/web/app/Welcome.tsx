@@ -192,6 +192,7 @@ export function Welcome({
           <p className="lp-label-text">Overview</p>
         </div>
         <div className="lp-content">
+          <BrandMark size={72} className="lp-emblem" />
           <h1 className="lp-h1" id="lp-title">Transaction intelligence you run yourself.</h1>
           <p className="lp-lede">
             Settle is a spending ledger being rebuilt into transaction intelligence you can run

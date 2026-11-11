@@ -181,10 +181,13 @@ animations, parallax, auto-scrolling and celebratory effects are out.
 
 ## Brand mark
 
-A static geometric "S": three horizontal ledger rules joined by short verticals,
-with a short hook at each end so it does not read as a 5. Drawn in `currentColor`
-(`BrandMark.tsx`, 24px viewBox, 3-unit stroke); the favicon is the same shape on an
-ink square. It replaces the mascot everywhere.
+The emblem is an engine-turned (guilloché) watch dial: a bezel, a minute track
+(60 ticks, every fifth longer) and a 30-circle rose-engine rosette around a
+centre boss. `DIAL_SMALL` — 12 ticks, 12 heavier circles, a larger boss — is the
+simplified cut for 24px and below. The geometry lives in `brand-dial.ts` (pure,
+tested) and is rendered by `BrandMark.tsx`. It is drawn in `--brand-gold`
+(`#a8874a` light, `#c8a96a` dark), the only gold in the product. The app icon is
+the champagne dial on `#0f1012`.
 
 ## Stylesheets
 

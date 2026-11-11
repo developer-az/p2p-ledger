@@ -103,10 +103,11 @@ body:has(.app), body:has(.app-preloader) {
   letter-spacing: -0.01em;
 }
 
-.app .brand-mark {
+.app .brand-mark,
+.app-preloader .brand-mark {
   display: block;
   flex: none;
-  color: var(--ink);
+  color: var(--brand-gold);
 }
 
 /* ---------- Layout helpers ---------- */
@@ -954,6 +955,12 @@ html.settle-smooth-scroll {
   font-size: var(--t-md);
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+.app-preloader-brand {
+  display: grid;
+  justify-items: center;
+  gap: var(--s2);
 }
 
 .app-preloader :focus-visible {

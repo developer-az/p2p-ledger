@@ -1,8 +1,9 @@
 import { createHash, randomBytes, randomUUID, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { isIP } from 'node:net';
 import { promisify } from 'node:util';
-import { pgConfig } from './db-tls.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
+import { sharedPool } from './pg-pool.js';
+import { ensureSchemaOnce } from './schema-gate.js';
 
 const scrypt = promisify(scryptCb);
 
@@ -747,39 +748,30 @@ export class PostgresAuthStore implements AuthStore {
   }
   async findByGoogleSubject(subject: string): Promise<AuthRecord | null> {
     return this.run(async c => {
-      await c.query('create table if not exists app_google_identities (subject text primary key, user_id uuid unique not null references app_users(id) on delete cascade)');
       const result = await c.query('select u.* from app_users u join app_google_identities g on g.user_id=u.id where g.subject=$1', [subject]);
       return result.rows[0] ? this.row(result.rows[0]) : null;
     });
   }
   async linkGoogleSubject(subject: string, userId: string): Promise<void> {
     await this.run(async c => {
-      await c.query('create table if not exists app_google_identities (subject text primary key, user_id uuid unique not null references app_users(id) on delete cascade)');
       await c.query('insert into app_google_identities(subject,user_id) values($1,$2)', [subject, userId]);
     });
   }
   readonly persistent = true;
-  private schemaReady = false;
 
   constructor(readonly connectionString: string) {}
 
   private async client() {
-    const { default: pg } = await import('pg');
-    const client = new pg.Client(pgConfig(this.connectionString));
-    await client.connect();
-    return client;
+    return sharedPool(this.connectionString).connect();
   }
 
-  private async ensureSchema(c: import('pg').Client) {
-    if (this.schemaReady) return;
-    await c.query('begin');
-    try {
-      await c.query("select pg_advisory_xact_lock(hashtextextended('settle:identity-schema', 0))");
+  private async ensureSchema(c: import('pg').PoolClient) {
+    // Bumped to 2: the schema gained the MFA, session, recovery-code and
+    // passkey columns after the first version shipped.
+    await ensureSchemaOnce(c, this.connectionString, 'auth', 2, async () => {
       await c.query(AUTH_SCHEMA);
       await c.query(AUDIT_DDL);
-      await c.query('commit');
-      this.schemaReady = true;
-    } catch (error) { await c.query('rollback'); throw error; }
+    });
   }
 
   private row(row: Record<string, unknown>): AuthRecord {
@@ -831,7 +823,7 @@ export class PostgresAuthStore implements AuthStore {
       await c.query('rollback').catch(() => {});
       throw error;
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -845,7 +837,7 @@ export class PostgresAuthStore implements AuthStore {
       );
       return res.rows[0] ? this.row(res.rows[0] as Record<string, unknown>) : null;
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -859,7 +851,7 @@ export class PostgresAuthStore implements AuthStore {
       );
       return res.rows[0] ? this.row(res.rows[0] as Record<string, unknown>) : null;
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -887,7 +879,7 @@ export class PostgresAuthStore implements AuthStore {
       if (code === '23505') throw new EmailTakenError();
       throw e;
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -904,7 +896,7 @@ export class PostgresAuthStore implements AuthStore {
           normalizeDevice(meta?.device), meta?.ipPrefix ?? null],
       );
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -937,7 +929,7 @@ export class PostgresAuthStore implements AuthStore {
       }
       return this.row(res.rows[0] as Record<string, unknown>);
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -971,16 +963,16 @@ export class PostgresAuthStore implements AuthStore {
       await this.ensureSchema(c);
       await c.query(`delete from app_sessions where token_hash = $1`, [tokenHash]);
     } finally {
-      await c.end();
+      c.release();
     }
   }
-  private async run<T>(fn: (c: import('pg').Client) => Promise<T>): Promise<T> {
+  private async run<T>(fn: (c: import('pg').PoolClient) => Promise<T>): Promise<T> {
     const c = await this.client();
     try {
       await this.ensureSchema(c);
       return await fn(c);
     } finally {
-      await c.end();
+      c.release();
     }
   }
 

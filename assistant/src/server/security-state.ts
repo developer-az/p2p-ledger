@@ -7,8 +7,9 @@
  * are bearer tokens, so Postgres only ever sees their SHA-256 digest.
  */
 import { createHash } from 'node:crypto';
-import { pgConfig } from './db-tls.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
+import { sharedPool } from './pg-pool.js';
+import { ensureSchemaOnce } from './schema-gate.js';
 import type { AuthStore } from './auth.js';
 import { PostgresAuthStore } from './auth.js';
 
@@ -158,25 +159,23 @@ create index if not exists app_mfa_challenges_expires_idx on app_mfa_challenges 
 
 type PgPool = import('pg').Pool;
 
-const pools = new Map<string, Promise<PgPool>>();
+/** Schema readiness per connection string; the pool itself is shared per process. */
 const schemas = new Map<string, Promise<void>>();
-
-function poolFor(connectionString: string): Promise<PgPool> {
-  let pool = pools.get(connectionString);
-  if (!pool) {
-    pool = (async () => {
-      const { default: pg } = await import('pg');
-      return new pg.Pool({ ...pgConfig(connectionString), max: 2, idleTimeoutMillis: 10_000 });
-    })();
-    pools.set(connectionString, pool);
-  }
-  return pool;
-}
 
 function ensureSchema(connectionString: string, pool: PgPool): Promise<void> {
   let ready = schemas.get(connectionString);
   if (!ready) {
-    ready = pool.query(SECURITY_SCHEMA).then(() => undefined);
+    ready = (async () => {
+      const client = await pool.connect();
+      try {
+        // Bumped to 2: `purpose` and the nullable user_id came after v1.
+        await ensureSchemaOnce(client, connectionString, 'security-state', 2, async () => {
+          await client.query(SECURITY_SCHEMA);
+        });
+      } finally {
+        client.release();
+      }
+    })();
     void ready.catch(() => schemas.delete(connectionString));
     schemas.set(connectionString, ready);
   }
@@ -214,7 +213,7 @@ export class PostgresSecurityStateStore implements SecurityStateStore {
   constructor(private readonly connectionString: string) {}
 
   private async pool(): Promise<PgPool> {
-    const pool = await poolFor(this.connectionString);
+    const pool = sharedPool(this.connectionString);
     await ensureSchema(this.connectionString, pool);
     return pool;
   }

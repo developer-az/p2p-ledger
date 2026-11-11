@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { pgConfig } from './db-tls.js';
 import type { FieldCipher } from './envelope.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
 import { formatMoney } from './money.js';
+import { sharedPool } from './pg-pool.js';
 import { RLS_DDL, withUser } from './rls.js';
+import { ensureSchemaOnce } from './schema-gate.js';
 import type { SpendLogEntry } from './spend-log.js';
 
 export const INCOME_SOURCES = ['salary', 'freelance', 'gift', 'refund', 'other'] as const;
@@ -315,8 +316,6 @@ create index if not exists income_logs_account_id_idx on income_logs (account_id
 `;
 
 export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
-  private schemaReady = false;
-
   constructor(
     private readonly connectionString: string,
     private readonly cipher?: FieldCipher,
@@ -332,20 +331,36 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
     return this.cipher.decryptField(accountId, note);
   }
 
-  private async client() {
-    const { default: pg } = await import('pg');
-    const client = new pg.Client(pgConfig(this.connectionString));
-    await client.connect();
-    return client;
+  /**
+   * Map a raw row to an entry. Note decryption may check out another pooled
+   * client, so callers must only run this after their own client is released.
+   */
+  private async rowToEntry(accountId: string, row: Record<string, unknown>): Promise<IncomeLogEntry> {
+    return {
+      id: String(row.id),
+      accountId: String(row.account_id),
+      amountMinor: Number(row.amount_minor),
+      currency: String(row.currency),
+      source: row.source as IncomeSource,
+      note: await this.decodeNote(accountId, row.note as string | null),
+      occurredAt: new Date(String(row.occurred_at)).toISOString(),
+      createdAt: new Date(String(row.created_at)).toISOString(),
+    };
   }
 
-  private async ensureSchema(c: import('pg').Client) {
-    if (this.schemaReady) return;
-    await c.query(SCHEMA_SQL);
-    // FORCE RLS applies to the owner too, so every row query below must run
-    // through withUser(). Policies are dropped and recreated to stay idempotent.
-    await c.query(RLS_DDL);
-    this.schemaReady = true;
+  private async client() {
+    return sharedPool(this.connectionString).connect();
+  }
+
+  private async ensureSchema(c: import('pg').PoolClient) {
+    // Bumped to 2: weekly_budget_minor was added after the first version.
+    await ensureSchemaOnce(c, this.connectionString, 'personal-finance', 2, async () => {
+      await c.query(SCHEMA_SQL);
+      // FORCE RLS applies to the owner too, so every row query below must run
+      // through withUser(). The policies are dropped and recreated only when
+      // the DDL actually runs (once per database version, not every start).
+      await c.query(RLS_DDL);
+    });
   }
 
   private rowToProfile(row: Record<string, unknown>): MoneyProfile {
@@ -397,7 +412,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
         return p;
       });
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -455,7 +470,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
         return this.rowToProfile(res.rows[0] as Record<string, unknown>);
       });
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
@@ -471,6 +486,8 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
     if (input.amountMinor <= 0) throw new Error('amountMinor must be positive');
     const id = randomUUID();
     const occurredAt = input.occurredAt ?? now.toISOString();
+    // Encrypt before checking out the transaction client: encryptField may
+    // check out its own pooled client.
     const note = await this.encodeNote(accountId, input.note);
     const c = await this.client();
     try {
@@ -492,7 +509,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
         );
       });
     } finally {
-      await c.end();
+      c.release();
     }
     return {
       id,
@@ -509,9 +526,10 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
   async listIncome(accountId: string, opts?: { since?: Date; limit?: number }): Promise<IncomeLogEntry[]> {
     const limit = opts?.limit ?? 100;
     const c = await this.client();
+    let rows: Record<string, unknown>[];
     try {
       await this.ensureSchema(c);
-      return await withUser(c, accountId, async () => {
+      rows = await withUser(c, accountId, async () => {
         const params: unknown[] = [accountId];
         let sql = `select id, account_id, amount_minor, currency, source, note, occurred_at, created_at
                    from income_logs where account_id = $1`;
@@ -524,20 +542,14 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
           params.push(limit);
         }
         const res = await c.query(sql, params);
-        return await Promise.all(res.rows.map(async (row: Record<string, unknown>) => ({
-          id: String(row.id),
-          accountId: String(row.account_id),
-          amountMinor: Number(row.amount_minor),
-          currency: String(row.currency),
-          source: row.source as IncomeSource,
-          note: await this.decodeNote(accountId, row.note as string | null),
-          occurredAt: new Date(String(row.occurred_at)).toISOString(),
-          createdAt: new Date(String(row.created_at)).toISOString(),
-        })));
+        return res.rows as Record<string, unknown>[];
       });
     } finally {
-      await c.end();
+      // Release before decrypting: decryptField may check out its own pooled
+      // client, which must not happen while this transaction holds one.
+      c.release();
     }
+    return Promise.all(rows.map((row) => this.rowToEntry(accountId, row)));
   }
 
   async deleteAll(accountId: string): Promise<void> {
@@ -549,15 +561,16 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
         await c.query(`delete from money_profiles where account_id = $1`, [accountId]);
       });
     } finally {
-      await c.end();
+      c.release();
     }
   }
 
   async listIncomePage(accountId: string, afterId: string | null, limit: number): Promise<IncomeLogEntry[]> {
     const c = await this.client();
+    let rows: Record<string, unknown>[];
     try {
       await this.ensureSchema(c);
-      return await withUser(c, accountId, async () => {
+      rows = await withUser(c, accountId, async () => {
         const params: unknown[] = [accountId];
         let sql = `select id, account_id, amount_minor, currency, source, note, occurred_at, created_at
                    from income_logs where account_id = $1`;
@@ -568,20 +581,13 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
         params.push(Math.max(1, limit));
         sql += ` order by id asc limit $${params.length}`;
         const res = await c.query(sql, params);
-        return await Promise.all(res.rows.map(async (row: Record<string, unknown>) => ({
-          id: String(row.id),
-          accountId: String(row.account_id),
-          amountMinor: Number(row.amount_minor),
-          currency: String(row.currency),
-          source: row.source as IncomeSource,
-          note: await this.decodeNote(accountId, row.note as string | null),
-          occurredAt: new Date(String(row.occurred_at)).toISOString(),
-          createdAt: new Date(String(row.created_at)).toISOString(),
-        })));
+        return res.rows as Record<string, unknown>[];
       });
     } finally {
-      await c.end();
+      // See listIncome: notes are decrypted only after the client is released.
+      c.release();
     }
+    return Promise.all(rows.map((row) => this.rowToEntry(accountId, row)));
   }
 }
 

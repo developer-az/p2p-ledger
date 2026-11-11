@@ -1,6 +1,7 @@
 import './styles/fonts.css';
 import { useEffect, useState } from 'react';
-import { api } from '../api.js';
+import { api, isMfaChallenge } from '../api.js';
+import { navigate } from './router.js';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/components.css';
@@ -32,8 +33,14 @@ export function ResetPassword() {
     setBusy(true);
     setError(null);
     try {
-      await api.confirmPasswordReset(token, password);
+      const result = await api.confirmPasswordReset(token, password);
       try { localStorage.removeItem('settle:session'); } catch { /* ignore */ }
+      // An MFA account still owes the second factor. Hand the challenge to the
+      // sign-in page, which already renders the authenticator-code step.
+      if (isMfaChallenge(result)) {
+        navigate({ kind: 'signin' }, { search: `?mfa=${encodeURIComponent(result.challenge)}` });
+        return;
+      }
       setDone(true);
     } catch (e) {
       setError((e as Error).message);

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { LedgerError, type Transfer } from './ledger.js';
 import type { PaymentRequest } from './payment-requests.js';
-import type { RecordSpendInput, SpendLogEntry, SpendLogStore } from './spend-log.js';
+import type { RecordSpendInput, SpendCursorPage, SpendLogEntry, SpendLogStore } from './spend-log.js';
 
 /** Transport only: Java owns live request validation, persistence, and settlement. */
 export class JavaWorkflows {
@@ -54,6 +54,28 @@ export class JavaWorkflows {
   }
 }
 
+/** Java pages newest-first by (occurredAt, id); the cursor carries both. */
+function encodeSpendCursor(row: SpendLogEntry): string {
+  return Buffer.from(JSON.stringify({
+    before: row.occurredAt,
+    beforeId: row.id,
+  }), 'utf8').toString('base64url');
+}
+
+function decodeSpendCursor(cursor: string): { before: string; beforeId: string } | null {
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as {
+      before?: unknown;
+      beforeId?: unknown;
+    };
+    if (typeof parsed.before !== 'string' || typeof parsed.beforeId !== 'string') return null;
+    if (!parsed.before || !parsed.beforeId) return null;
+    return { before: parsed.before, beforeId: parsed.beforeId };
+  } catch {
+    return null;
+  }
+}
+
 /** There is no live-to-memory fallback: a Java outage must not acknowledge a lost expense. */
 export class RoutedSpendLogStore implements SpendLogStore {
   constructor(private readonly practice: SpendLogStore, private readonly java: JavaWorkflows,
@@ -69,6 +91,34 @@ export class RoutedSpendLogStore implements SpendLogStore {
     const params = new URLSearchParams({ limit: String(opts?.limit ?? 100) });
     if (opts?.since) params.set('since', opts.since.toISOString());
     return this.java.request('GET', `/v1/accounts/${encodeURIComponent(accountId)}/spends?${params}`);
+  }
+  async listSpendPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]> {
+    if (this.isPractice(accountId)) return this.practice.listSpendPage(accountId, afterId, limit);
+    // The old signature cannot carry the timestamp half of the Java keyset. It
+    // accepts an opaque cursor too, and an unrecognised id means "no more rows".
+    return (await this.listSpendCursorPage(accountId, afterId, limit)).rows;
+  }
+  async listSpendCursorPage(accountId: string, cursor: string | null, limit: number): Promise<SpendCursorPage> {
+    if (this.isPractice(accountId)) return this.practice.listSpendCursorPage(accountId, cursor, limit);
+    const pageSize = Math.min(500, Math.max(1, limit));
+    const params = new URLSearchParams({ limit: String(pageSize) });
+    if (cursor !== null) {
+      const decoded = decodeSpendCursor(cursor);
+      if (!decoded) return { rows: [], next: null };
+      params.set('before', decoded.before);
+      params.set('beforeId', decoded.beforeId);
+    }
+    const rows = await this.java.request<SpendLogEntry[]>(
+      'GET', `/v1/accounts/${encodeURIComponent(accountId)}/spends?${params}`,
+    );
+    const tail = rows[rows.length - 1];
+    return {
+      rows,
+      next: rows.length < pageSize || !tail ? null : encodeSpendCursor(tail),
+    };
+  }
+  listPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]> {
+    return this.listSpendPage(accountId, afterId, limit);
   }
   async remove(accountId: string, id: string): Promise<boolean> {
     if (this.isPractice(accountId)) return this.practice.remove(accountId, id);

@@ -1,0 +1,8 @@
+# Extend the built-in gitleaks ruleset; only fake test values are allowlisted.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake API key placeholder used by a unit test"
+paths = ['''^assistant/test/release-config\.test\.ts$''']
+regexes = ['''test-placeholder''']

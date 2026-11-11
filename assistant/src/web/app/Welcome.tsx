@@ -546,8 +546,8 @@ export function Welcome({
             <li className="lp-line">
               <span className="lp-line-num">d</span>
               <p className="lp-line-body">
-                Two-factor sign-in, row-level security and per-user encryption{' '}
-                <span className="lp-tag is-planned">Planned · M2</span>
+                Two-factor sign-in and row-level security in Postgres. Per-user encryption{' '}
+                <span className="lp-tag is-planned">Planned · M3</span>
               </p>
             </li>
           </ol>

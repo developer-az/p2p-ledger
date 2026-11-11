@@ -1,16 +1,27 @@
-import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
+import { isIP } from 'node:net';
 import { promisify } from 'node:util';
+import { pgConfig } from './db-tls.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
 
 const scrypt = promisify(scryptCb);
 
-export const SESSION_COOKIE = 'settle_session';
-export const SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 30;
+export const SESSION_COOKIE = '__Host-settle_session';
+export const SESSION_IDLE_MS = 30 * 60 * 1000;
+export const SESSION_ABSOLUTE_MS = 7 * 24 * 60 * 60 * 1000;
+export const SESSION_MAX_AGE_SEC = SESSION_ABSOLUTE_MS / 1000;
 
 export class EmailTakenError extends Error {
   constructor() {
     super('An account with that email already exists. Sign in instead.');
     this.name = 'EmailTakenError';
+  }
+}
+
+export class PasskeyExistsError extends Error {
+  constructor() {
+    super('That passkey is already registered.');
+    this.name = 'PasskeyExistsError';
   }
 }
 
@@ -23,6 +34,88 @@ export interface AuthRecord {
   ownerId: string;
 }
 
+export interface SessionSummary {
+  id: string;
+  createdAt: Date;
+  lastSeenAt: Date;
+  device: string;
+  ipPrefix: string | null;
+  /** Internal only: the route compares this to the caller's token hash. */
+  tokenHash: string;
+}
+
+export interface SessionMeta {
+  createdAt?: Date;
+  device?: string;
+  ipPrefix?: string | null;
+}
+
+/** Encrypted MFA material. Secrets are AES-GCM blobs, never plaintext. */
+export interface MfaState {
+  /** Encrypted secret once MFA is enabled. */
+  secret: string | null;
+  /** Encrypted secret awaiting confirmation with the first valid code. */
+  pendingSecret: string | null;
+  lastUsedStep: number | null;
+  recoveryCodesLeft: number;
+}
+
+export interface StoredRecoveryCode {
+  id: string;
+  codeHash: string;
+}
+
+export interface PasskeyRecord {
+  /** WebAuthn credential id, base64url. */
+  id: string;
+  userId: string;
+  publicKeyJwk: Record<string, string>;
+  /** COSE algorithm: -7 (ES256) or -257 (RS256). */
+  alg: number;
+  signCount: number;
+  transports: string[];
+  name: string;
+  createdAt: Date;
+  lastUsedAt: Date | null;
+}
+
+/** Security events worth keeping after the fact. The log is append-only. */
+export type AuditType =
+  | 'login'
+  | 'login_failed'
+  | 'logout'
+  | 'mfa_challenge'
+  | 'mfa_enabled'
+  | 'mfa_disabled'
+  | 'recovery_code_used'
+  | 'step_up'
+  | 'session_revoked'
+  | 'password_changed'
+  | 'password_reset_requested'
+  | 'passkey_added'
+  | 'passkey_removed'
+  | 'passkey_login'
+  | 'export'
+  | 'account_deleted';
+
+export interface AuditInput {
+  userId: string;
+  type: AuditType;
+  at: Date;
+  ipPrefix: string | null;
+  device: string | null;
+  detail?: Record<string, string | number | boolean>;
+}
+
+export interface AuditEvent {
+  id: string;
+  type: AuditType;
+  at: Date;
+  ipPrefix: string | null;
+  device: string | null;
+  detail?: Record<string, string | number | boolean>;
+}
+
 export interface AuthStore {
   unlinkGoogle(userId: string): Promise<void>;
   findByGoogleSubject(subject: string): Promise<AuthRecord | null>;
@@ -31,12 +124,16 @@ export interface AuthStore {
   readonly persistent: boolean;
   allowAuthAttempt(bucket: string, now: Date, limit?: number): Promise<boolean>;
   findByEmail(email: string): Promise<AuthRecord | null>;
+  findById(userId: string): Promise<AuthRecord | null>;
   findByAccountId(accountId: string): Promise<AuthRecord | null>;
   insert(user: AuthRecord): Promise<void>;
   provision(input: { email: string; password: string; displayName: string },
     createAccount: (user: AuthRecord) => Promise<void>): Promise<AuthRecord>;
-  saveSession(tokenHash: string, userId: string, expiresAt: Date): Promise<void>;
+  saveSession(tokenHash: string, userId: string, expiresAt: Date, meta?: SessionMeta): Promise<void>;
   userForToken(tokenHash: string, now: Date): Promise<AuthRecord | null>;
+  listSessions(userId: string): Promise<SessionSummary[]>;
+  /** True only when the public id belongs to this user. */
+  revokeSession(userId: string, publicId: string): boolean | Promise<boolean>;
   deleteSession(tokenHash: string): Promise<void>;
   /** Ends every session of a user (after a password reset). */
   deleteSessionsForUser(userId: string): Promise<void>;
@@ -46,6 +143,38 @@ export interface AuthStore {
   consumeResetToken(tokenHash: string, now: Date): Promise<string | null>;
   updatePassword(userId: string, passwordHash: string): Promise<void>;
   completeReset(tokenHash: string, now: Date, passwordHash: string): Promise<string | null>;
+  getMfaState(userId: string): Promise<MfaState>;
+  saveMfaPendingSecret(userId: string, encryptedSecret: string): Promise<void>;
+  /**
+   * Promotes the pending secret, replaces recovery codes, and records the used
+   * step. Returns false when MFA was enabled first (or the pending secret no
+   * longer matches), so two concurrent confirmations cannot both succeed.
+   */
+  enableMfa(userId: string, encryptedSecret: string, recoveryCodeHashes: string[],
+    lastUsedStep: number | null): Promise<boolean>;
+  disableMfa(userId: string): Promise<void>;
+  /** Remembers the newest accepted TOTP step so it cannot be replayed. */
+  /** Claims a TOTP step: true only for the first caller to use a step newer than the last one. */
+  recordMfaStep(userId: string, step: number): Promise<boolean>;
+  listRecoveryCodes(userId: string): Promise<StoredRecoveryCode[]>;
+  /** Single use: returns false when the code was already spent. */
+  useRecoveryCode(userId: string, id: string, now: Date): Promise<boolean>;
+  addPasskey(record: PasskeyRecord): Promise<void>;
+  listPasskeys(userId: string): Promise<PasskeyRecord[]>;
+  getPasskey(id: string): Promise<PasskeyRecord | null>;
+  deletePasskey(userId: string, id: string): Promise<boolean>;
+  touchPasskey(id: string, signCount: number, lastUsedAt: Date): Promise<void>;
+  getSessionStepUp(tokenHash: string): Promise<Date | null>;
+  setSessionStepUp(tokenHash: string, until: Date): Promise<void>;
+  /** Append-only: there is deliberately no update or delete counterpart. */
+  appendAudit(event: AuditInput): Promise<void>;
+  /** Newest first. Defaults to the fifty most recent events. */
+  listAudit(userId: string, limit?: number): Promise<AuditEvent[]>;
+  /**
+   * Erases the identity and its security state for account deletion.
+   * Callers append the account_deleted audit event first; this removes it too.
+   */
+  deleteUser(userId: string): Promise<void>;
 }
 
 export const RESET_TOKEN_TTL_SEC = 30 * 60;
@@ -69,6 +198,61 @@ export function hashSessionToken(token: string): string {
 
 export function newSessionToken(): string {
   return randomBytes(32).toString('base64url');
+}
+
+/** Short, non-identifying browser/OS label such as "Chrome on Windows". */
+export function deviceLabel(userAgent: string | undefined | null): string {
+  const ua = (userAgent ?? '').trim();
+  if (!ua) return 'Unknown device';
+  let browser: string;
+  if (/Edg\//i.test(ua)) browser = 'Edge';
+  else if (/OPR\//i.test(ua)) browser = 'Opera';
+  else if (/Firefox\//i.test(ua)) browser = 'Firefox';
+  else if (/Chrome\//i.test(ua) || /CriOS\//i.test(ua)) browser = 'Chrome';
+  else if (/Safari\//i.test(ua)) browser = 'Safari';
+  else if (/^curl\//i.test(ua)) browser = 'curl';
+  else if (/PostmanRuntime\//i.test(ua)) browser = 'Postman';
+  else browser = ua.split(/[\s/]/)[0]?.slice(0, 24) || 'Unknown';
+  let os = '';
+  if (/Windows/i.test(ua)) os = 'Windows';
+  else if (/iPhone|iPad|iPod/i.test(ua)) os = 'iOS';
+  else if (/Android/i.test(ua)) os = 'Android';
+  else if (/Macintosh|Mac OS X/i.test(ua)) os = 'macOS';
+  else if (/Linux/i.test(ua)) os = 'Linux';
+  return (os ? `${browser} on ${os}` : browser).slice(0, 40);
+}
+
+/** /24 for an IPv4 first hop, /48 for IPv6, else null. */
+export function ipPrefix(forwardedFor: string | undefined | null): string | null {
+  let host = forwardedFor?.split(',')[0]?.trim() ?? '';
+  if (!host) return null;
+  if (host.startsWith('[')) {
+    const end = host.indexOf(']');
+    host = end > 0 ? host.slice(1, end) : host;
+  } else if (!isIP(host) && /^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(host)) {
+    host = host.slice(0, host.lastIndexOf(':'));
+  }
+  const kind = isIP(host);
+  if (kind === 4) {
+    const octets = host.split('.');
+    return `${octets[0]}.${octets[1]}.${octets[2]}.0/24`;
+  }
+  if (kind !== 6) return null;
+  const [head, tail] = host.toLowerCase().split('::');
+  const left = head ? head.split(':').filter(Boolean) : [];
+  const right = tail ? tail.split(':').filter(Boolean) : [];
+  const groups = tail === undefined
+    ? left
+    : [...left, ...Array<string>(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right];
+  return `${groups.slice(0, 3).join(':')}::/48`;
+}
+
+function sessionCreatedAt(expiresAt: Date, meta?: SessionMeta): Date {
+  return meta?.createdAt ?? new Date(expiresAt.getTime() - SESSION_ABSOLUTE_MS);
+}
+
+function normalizeDevice(device?: string): string {
+  return (device?.trim() || 'Unknown device').slice(0, 40);
 }
 
 export async function hashPassword(password: string): Promise<string> {
@@ -109,7 +293,19 @@ export class InMemoryAuthStore implements AuthStore {
   readonly persistent = false;
   private readonly byEmail = new Map<string, AuthRecord>();
   private readonly byId = new Map<string, AuthRecord>();
-  private readonly sessions = new Map<string, { userId: string; expiresAt: number }>();
+  private readonly sessions = new Map<string, {
+    userId: string; createdAt: number; lastSeenAt: number; expiresAt: number;
+    publicId: string; device: string; ipPrefix: string | null; stepUpUntil: number | null;
+  }>();
+  private readonly mfa = new Map<string, {
+    secret: string | null; pendingSecret: string | null; lastUsedStep: number | null;
+  }>();
+  private readonly recoveryCodes = new Map<string, {
+    userId: string; codeHash: string; usedAt: number | null;
+  }>();
+  private readonly passkeys = new Map<string, PasskeyRecord>();
+  /** The only audit storage is an append list; reads hand out deep copies. */
+  private readonly audit: Array<AuditEvent & { userId: string }> = [];
 
   private readonly attempts = new Map<string, { window: number; count: number }>();
   async allowAuthAttempt(bucket: string, now: Date, limit = 10): Promise<boolean> {
@@ -146,6 +342,10 @@ export class InMemoryAuthStore implements AuthStore {
     return this.byEmail.get(email) ?? null;
   }
 
+  async findById(userId: string): Promise<AuthRecord | null> {
+    return this.byId.get(userId) ?? null;
+  }
+
   async findByAccountId(accountId: string): Promise<AuthRecord | null> {
     for (const user of this.byId.values()) {
       if (user.accountId === accountId) return user;
@@ -159,18 +359,56 @@ export class InMemoryAuthStore implements AuthStore {
     this.byId.set(user.id, user);
   }
 
-  async saveSession(tokenHash: string, userId: string, expiresAt: Date): Promise<void> {
-    this.sessions.set(tokenHash, { userId, expiresAt: expiresAt.getTime() });
+  async saveSession(tokenHash: string, userId: string, expiresAt: Date, meta?: SessionMeta): Promise<void> {
+    const createdAt = sessionCreatedAt(expiresAt, meta);
+    this.sessions.set(tokenHash, {
+      userId,
+      createdAt: createdAt.getTime(),
+      lastSeenAt: createdAt.getTime(),
+      expiresAt: expiresAt.getTime(),
+      publicId: randomUUID(),
+      device: normalizeDevice(meta?.device),
+      ipPrefix: meta?.ipPrefix ?? null,
+      stepUpUntil: null,
+    });
   }
 
   async userForToken(tokenHash: string, now: Date): Promise<AuthRecord | null> {
     const session = this.sessions.get(tokenHash);
     if (!session) return null;
-    if (session.expiresAt <= now.getTime()) {
+    const time = now.getTime();
+    if (session.expiresAt <= time || time - session.lastSeenAt >= SESSION_IDLE_MS) {
       this.sessions.delete(tokenHash);
       return null;
     }
+    session.lastSeenAt = time;
     return this.byId.get(session.userId) ?? null;
+  }
+
+  async listSessions(userId: string): Promise<SessionSummary[]> {
+    const sessions: SessionSummary[] = [];
+    for (const [tokenHash, session] of this.sessions) {
+      if (session.userId !== userId) continue;
+      sessions.push({
+        id: session.publicId,
+        createdAt: new Date(session.createdAt),
+        lastSeenAt: new Date(session.lastSeenAt),
+        device: session.device,
+        ipPrefix: session.ipPrefix,
+        tokenHash,
+      });
+    }
+    return sessions;
+  }
+
+  async revokeSession(userId: string, publicId: string): Promise<boolean> {
+    for (const [tokenHash, session] of this.sessions) {
+      if (session.userId === userId && session.publicId === publicId) {
+        this.sessions.delete(tokenHash);
+        return true;
+      }
+    }
+    return false;
   }
 
   async deleteSession(tokenHash: string): Promise<void> {
@@ -215,6 +453,175 @@ export class InMemoryAuthStore implements AuthStore {
     this.byId.set(userId, next);
     this.byEmail.set(next.email, next);
   }
+
+  async getMfaState(userId: string): Promise<MfaState> {
+    const entry = this.mfa.get(userId);
+    let recoveryCodesLeft = 0;
+    for (const code of this.recoveryCodes.values()) {
+      if (code.userId === userId && code.usedAt === null) recoveryCodesLeft++;
+    }
+    return {
+      secret: entry?.secret ?? null,
+      pendingSecret: entry?.pendingSecret ?? null,
+      lastUsedStep: entry?.lastUsedStep ?? null,
+      recoveryCodesLeft,
+    };
+  }
+
+  async saveMfaPendingSecret(userId: string, encryptedSecret: string): Promise<void> {
+    const entry = this.mfa.get(userId) ?? { secret: null, pendingSecret: null, lastUsedStep: null };
+    this.mfa.set(userId, { ...entry, pendingSecret: encryptedSecret });
+  }
+
+  async enableMfa(userId: string, encryptedSecret: string, recoveryCodeHashes: string[],
+    lastUsedStep: number | null): Promise<boolean> {
+    const entry = this.mfa.get(userId);
+    if (entry?.secret) return false;
+    // Direct store callers may skip the setup step; the HTTP route always has a
+    // pending secret, and a mismatch means another confirmation replaced it.
+    if (entry?.pendingSecret != null && entry.pendingSecret !== encryptedSecret) return false;
+    this.mfa.set(userId, { secret: encryptedSecret, pendingSecret: null, lastUsedStep });
+    for (const [id, code] of this.recoveryCodes) if (code.userId === userId) this.recoveryCodes.delete(id);
+    for (const codeHash of recoveryCodeHashes) {
+      this.recoveryCodes.set(randomUUID(), { userId, codeHash, usedAt: null });
+    }
+    return true;
+  }
+
+  async disableMfa(userId: string): Promise<void> {
+    this.mfa.delete(userId);
+    for (const [id, code] of this.recoveryCodes) if (code.userId === userId) this.recoveryCodes.delete(id);
+  }
+
+  async recordMfaStep(userId: string, step: number): Promise<boolean> {
+    const entry = this.mfa.get(userId);
+    if (!entry) return false;
+    if (entry.lastUsedStep != null && entry.lastUsedStep >= step) return false;
+    entry.lastUsedStep = step;
+    return true;
+  }
+
+  async listRecoveryCodes(userId: string): Promise<StoredRecoveryCode[]> {
+    const codes: StoredRecoveryCode[] = [];
+    for (const [id, code] of this.recoveryCodes) {
+      if (code.userId === userId && code.usedAt === null) codes.push({ id, codeHash: code.codeHash });
+    }
+    return codes;
+  }
+
+  async useRecoveryCode(userId: string, id: string, now: Date): Promise<boolean> {
+    const code = this.recoveryCodes.get(id);
+    if (!code || code.userId !== userId || code.usedAt !== null) return false;
+    code.usedAt = now.getTime();
+    return true;
+  }
+
+  async addPasskey(record: PasskeyRecord): Promise<void> {
+    if (this.passkeys.has(record.id)) throw new PasskeyExistsError();
+    this.passkeys.set(record.id, {
+      ...record,
+      publicKeyJwk: { ...record.publicKeyJwk },
+      transports: [...record.transports],
+      createdAt: new Date(record.createdAt.getTime()),
+      lastUsedAt: record.lastUsedAt ? new Date(record.lastUsedAt.getTime()) : null,
+    });
+  }
+
+  async listPasskeys(userId: string): Promise<PasskeyRecord[]> {
+    return [...this.passkeys.values()]
+      .filter((passkey) => passkey.userId === userId)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .map((passkey) => ({
+        ...passkey,
+        publicKeyJwk: { ...passkey.publicKeyJwk },
+        transports: [...passkey.transports],
+        createdAt: new Date(passkey.createdAt.getTime()),
+        lastUsedAt: passkey.lastUsedAt ? new Date(passkey.lastUsedAt.getTime()) : null,
+      }));
+  }
+
+  async getPasskey(id: string): Promise<PasskeyRecord | null> {
+    const passkey = this.passkeys.get(id);
+    if (!passkey) return null;
+    return {
+      ...passkey,
+      publicKeyJwk: { ...passkey.publicKeyJwk },
+      transports: [...passkey.transports],
+      createdAt: new Date(passkey.createdAt.getTime()),
+      lastUsedAt: passkey.lastUsedAt ? new Date(passkey.lastUsedAt.getTime()) : null,
+    };
+  }
+
+  async deletePasskey(userId: string, id: string): Promise<boolean> {
+    const passkey = this.passkeys.get(id);
+    if (!passkey || passkey.userId !== userId) return false;
+    this.passkeys.delete(id);
+    return true;
+  }
+
+  async touchPasskey(id: string, signCount: number, lastUsedAt: Date): Promise<void> {
+    const passkey = this.passkeys.get(id);
+    if (!passkey) return;
+    this.passkeys.set(id, {
+      ...passkey,
+      signCount,
+      lastUsedAt: new Date(lastUsedAt.getTime()),
+    });
+  }
+
+  async getSessionStepUp(tokenHash: string): Promise<Date | null> {
+    const session = this.sessions.get(tokenHash);
+    return session?.stepUpUntil == null ? null : new Date(session.stepUpUntil);
+  }
+
+  async setSessionStepUp(tokenHash: string, until: Date): Promise<void> {
+    const session = this.sessions.get(tokenHash);
+    if (session) session.stepUpUntil = until.getTime();
+  }
+
+  async appendAudit(event: AuditInput): Promise<void> {
+    this.audit.push({
+      id: randomUUID(),
+      userId: event.userId,
+      type: event.type,
+      at: new Date(event.at.getTime()),
+      ipPrefix: event.ipPrefix,
+      device: event.device,
+      ...(event.detail ? { detail: { ...event.detail } } : {}),
+    });
+  }
+
+  async listAudit(userId: string, limit = 50): Promise<AuditEvent[]> {
+    const max = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 50;
+    return this.audit
+      .map((event, index) => ({ event, index }))
+      .filter(({ event }) => event.userId === userId)
+      .sort((a, b) => b.event.at.getTime() - a.event.at.getTime() || b.index - a.index)
+      .slice(0, max)
+      .map(({ event }) => ({
+        id: event.id,
+        type: event.type,
+        at: new Date(event.at.getTime()),
+        ipPrefix: event.ipPrefix,
+        device: event.device,
+        ...(event.detail ? { detail: { ...event.detail } } : {}),
+      }));
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    this.mfa.delete(userId);
+    for (const [id, code] of this.recoveryCodes) if (code.userId === userId) this.recoveryCodes.delete(id);
+    for (const [id, passkey] of this.passkeys) if (passkey.userId === userId) this.passkeys.delete(id);
+    for (const [hash, session] of this.sessions) if (session.userId === userId) this.sessions.delete(hash);
+    for (const [hash, reset] of this.resets) if (reset.userId === userId) this.resets.delete(hash);
+    for (const [subject, id] of this.googleSubjects) if (id === userId) this.googleSubjects.delete(subject);
+    for (let index = this.audit.length - 1; index >= 0; index--) {
+      if (this.audit[index]!.userId === userId) this.audit.splice(index, 1);
+    }
+    const user = this.byId.get(userId);
+    if (user) this.byEmail.delete(user.email);
+    this.byId.delete(userId);
+  }
 }
 
 const AUTH_SCHEMA = `
@@ -238,10 +645,21 @@ create table if not exists app_signup_attempts (
     created_at timestamptz not null default now()
 );
 create table if not exists app_sessions (
-    token_hash text primary key,
-    user_id    uuid        not null references app_users (id) on delete cascade,
-    expires_at timestamptz not null
+    token_hash   text primary key,
+    user_id      uuid        not null references app_users (id) on delete cascade,
+    expires_at   timestamptz not null,
+    public_id    uuid        not null default gen_random_uuid(),
+    created_at   timestamptz not null default now(),
+    last_seen_at timestamptz not null default now(),
+    device       text,
+    ip_prefix    text
 );
+alter table app_sessions add column if not exists public_id uuid default gen_random_uuid();
+alter table app_sessions add column if not exists created_at timestamptz default now();
+alter table app_sessions add column if not exists last_seen_at timestamptz default now();
+alter table app_sessions add column if not exists device text;
+alter table app_sessions add column if not exists ip_prefix text;
+create unique index if not exists app_sessions_public_id_idx on app_sessions (public_id);
 create table if not exists app_password_resets (
     token_hash text primary key,
     user_id    uuid        not null references app_users (id) on delete cascade,
@@ -252,6 +670,68 @@ create index if not exists app_password_resets_user_idx on app_password_resets (
 create table if not exists app_google_identities (
   subject text primary key, user_id uuid unique not null references app_users(id) on delete cascade
 );
+alter table app_users add column if not exists mfa_secret text;
+alter table app_users add column if not exists mfa_pending text;
+alter table app_users add column if not exists mfa_last_step bigint;
+create table if not exists app_recovery_codes (
+    id        bigserial primary key,
+    user_id   uuid        not null references app_users (id) on delete cascade,
+    code_hash text        not null,
+    used_at   timestamptz
+);
+create index if not exists app_recovery_codes_user_idx on app_recovery_codes (user_id) where used_at is null;
+alter table app_sessions add column if not exists step_up_until timestamptz;
+create table if not exists app_passkeys (
+    id             text primary key,
+    user_id        uuid        not null references app_users (id) on delete cascade,
+    public_key_jwk jsonb       not null,
+    alg            integer     not null,
+    sign_count     bigint      not null default 0,
+    transports     text[]      not null default '{}',
+    name           text        not null,
+    created_at     timestamptz not null default now(),
+    last_used_at   timestamptz
+);
+create index if not exists app_passkeys_user_idx on app_passkeys (user_id);
+`;
+
+/**
+ * Security audit log. Append-only: the trigger always rejects UPDATE and
+ * rejects DELETE unless the transaction has set settle.allow_audit_purge='on'
+ * (used only by account deletion). There is intentionally no foreign key to
+ * app_users; deletion removes a user's audit rows explicitly as part of its
+ * retention policy (a cascade would fight the trigger).
+ */
+export const AUDIT_DDL = `
+create table if not exists app_audit_log (
+    id        bigserial primary key,
+    user_id   uuid        not null,
+    type      text        not null,
+    at        timestamptz not null default now(),
+    ip_prefix text,
+    device    text,
+    detail    jsonb
+);
+create index if not exists app_audit_log_user_at_idx on app_audit_log (user_id, at desc);
+
+create or replace function reject_audit_mutation() returns trigger
+    language plpgsql as
+$$
+begin
+    -- UPDATE is always refused. Account deletion may purge one user's rows in
+    -- its own transaction, but only after setting this narrowly scoped flag.
+    if tg_op = 'DELETE'
+       and coalesce(current_setting('settle.allow_audit_purge', true), '') = 'on' then
+        return old;
+    end if;
+    raise exception 'app_audit_log is append-only';
+end
+$$;
+
+drop trigger if exists app_audit_log_append_only on app_audit_log;
+create trigger app_audit_log_append_only
+    before update or delete on app_audit_log
+    for each row execute function reject_audit_mutation();
 `;
 
 export class PostgresAuthStore implements AuthStore {
@@ -281,12 +761,11 @@ export class PostgresAuthStore implements AuthStore {
   readonly persistent = true;
   private schemaReady = false;
 
-  constructor(private readonly connectionString: string) {}
+  constructor(readonly connectionString: string) {}
 
   private async client() {
     const { default: pg } = await import('pg');
-    const ssl = /supabase|sslmode=require/i.test(this.connectionString) ? { rejectUnauthorized: false } : undefined;
-    const client = new pg.Client({ connectionString: this.connectionString, ssl });
+    const client = new pg.Client(pgConfig(this.connectionString));
     await client.connect();
     return client;
   }
@@ -297,6 +776,7 @@ export class PostgresAuthStore implements AuthStore {
     try {
       await c.query("select pg_advisory_xact_lock(hashtextextended('settle:identity-schema', 0))");
       await c.query(AUTH_SCHEMA);
+      await c.query(AUDIT_DDL);
       await c.query('commit');
       this.schemaReady = true;
     } catch (error) { await c.query('rollback'); throw error; }
@@ -383,6 +863,16 @@ export class PostgresAuthStore implements AuthStore {
     }
   }
 
+  async findById(userId: string): Promise<AuthRecord | null> {
+    return this.run(async (c) => {
+      const res = await c.query(
+        `select id, email, password_hash, display_name, account_id, owner_id from app_users where id = $1`,
+        [userId],
+      );
+      return res.rows[0] ? this.row(res.rows[0] as Record<string, unknown>) : null;
+    });
+  }
+
   async insert(user: AuthRecord): Promise<void> {
     const c = await this.client();
     try {
@@ -401,13 +891,17 @@ export class PostgresAuthStore implements AuthStore {
     }
   }
 
-  async saveSession(tokenHash: string, userId: string, expiresAt: Date): Promise<void> {
+  async saveSession(tokenHash: string, userId: string, expiresAt: Date, meta?: SessionMeta): Promise<void> {
     const c = await this.client();
     try {
       await this.ensureSchema(c);
+      const createdAt = sessionCreatedAt(expiresAt, meta);
       await c.query(
-        `insert into app_sessions (token_hash, user_id, expires_at) values ($1, $2, $3)`,
-        [tokenHash, userId, expiresAt.toISOString()],
+        `insert into app_sessions
+           (token_hash, user_id, expires_at, public_id, created_at, last_seen_at, device, ip_prefix)
+         values ($1, $2, $3, $4, $5, $5, $6, $7)`,
+        [tokenHash, userId, expiresAt.toISOString(), randomUUID(), createdAt.toISOString(),
+          normalizeDevice(meta?.device), meta?.ipPrefix ?? null],
       );
     } finally {
       await c.end();
@@ -418,16 +912,57 @@ export class PostgresAuthStore implements AuthStore {
     const c = await this.client();
     try {
       await this.ensureSchema(c);
+      const idleSeconds = SESSION_IDLE_MS / 1000;
       const res = await c.query(
-        `select u.id, u.email, u.password_hash, u.display_name, u.account_id, u.owner_id
-         from app_sessions s join app_users u on u.id = s.user_id
-         where s.token_hash = $1 and s.expires_at > $2`,
-        [tokenHash, now.toISOString()],
+        `with valid as (
+           update app_sessions
+              set last_seen_at = $2
+            where token_hash = $1
+              and expires_at > $2
+              and last_seen_at > $2::timestamptz - make_interval(secs => $3)
+           returning user_id
+         )
+         select u.id, u.email, u.password_hash, u.display_name, u.account_id, u.owner_id
+           from valid v join app_users u on u.id = v.user_id`,
+        [tokenHash, now.toISOString(), idleSeconds],
       );
-      return res.rows[0] ? this.row(res.rows[0] as Record<string, unknown>) : null;
+      if (!res.rows[0]) {
+        await c.query(
+          `delete from app_sessions
+            where token_hash = $1
+              and (expires_at <= $2 or last_seen_at <= $2::timestamptz - make_interval(secs => $3))`,
+          [tokenHash, now.toISOString(), idleSeconds],
+        );
+        return null;
+      }
+      return this.row(res.rows[0] as Record<string, unknown>);
     } finally {
       await c.end();
     }
+  }
+
+  async listSessions(userId: string): Promise<SessionSummary[]> {
+    const res = await this.run((c) => c.query(
+      `select token_hash, public_id, created_at, last_seen_at, device, ip_prefix
+         from app_sessions where user_id = $1 order by last_seen_at desc`,
+      [userId],
+    ));
+    return res.rows.map((row) => ({
+      id: String(row.public_id),
+      createdAt: new Date(row.created_at as string | Date),
+      lastSeenAt: new Date(row.last_seen_at as string | Date),
+      device: normalizeDevice(row.device == null ? undefined : String(row.device)),
+      ipPrefix: row.ip_prefix == null ? null : String(row.ip_prefix),
+      tokenHash: String(row.token_hash),
+    }));
+  }
+
+  async revokeSession(userId: string, publicId: string): Promise<boolean> {
+    const res = await this.run((c) => c.query(
+      `delete from app_sessions where user_id = $1 and public_id::text = $2 returning token_hash`,
+      [userId, publicId],
+    ));
+    return (res.rowCount ?? 0) > 0;
   }
 
   async deleteSession(tokenHash: string): Promise<void> {
@@ -493,6 +1028,245 @@ export class PostgresAuthStore implements AuthStore {
 
   async updatePassword(userId: string, passwordHash: string): Promise<void> {
     await this.run((c) => c.query(`update app_users set password_hash = $2 where id = $1`, [userId, passwordHash]));
+  }
+
+  async getMfaState(userId: string): Promise<MfaState> {
+    return this.run(async (c) => {
+      const res = await c.query(
+        `select mfa_secret, mfa_pending, mfa_last_step,
+                (select count(*) from app_recovery_codes r
+                  where r.user_id = app_users.id and r.used_at is null) as recovery_left
+           from app_users where id = $1`,
+        [userId],
+      );
+      const row = res.rows[0] as Record<string, unknown> | undefined;
+      if (!row) return { secret: null, pendingSecret: null, lastUsedStep: null, recoveryCodesLeft: 0 };
+      return {
+        secret: row.mfa_secret == null ? null : String(row.mfa_secret),
+        pendingSecret: row.mfa_pending == null ? null : String(row.mfa_pending),
+        lastUsedStep: row.mfa_last_step == null ? null : Number(row.mfa_last_step),
+        recoveryCodesLeft: Number(row.recovery_left ?? 0),
+      };
+    });
+  }
+
+  async saveMfaPendingSecret(userId: string, encryptedSecret: string): Promise<void> {
+    await this.run((c) => c.query(
+      `update app_users set mfa_pending = $2 where id = $1`,
+      [userId, encryptedSecret],
+    ));
+  }
+
+  async enableMfa(userId: string, encryptedSecret: string, recoveryCodeHashes: string[],
+    lastUsedStep: number | null): Promise<boolean> {
+    return this.run(async (c) => {
+      await c.query('begin');
+      try {
+        // The update and recovery-code insert share one transaction. The
+        // conditional update is the lock: only one concurrent confirmation can
+        // move a null mfa_secret, and a changed pending secret is rejected.
+        const updated = await c.query(
+          `update app_users set mfa_secret = mfa_pending, mfa_pending = null, mfa_last_step = $3
+            where id = $1 and mfa_secret is null and mfa_pending = $2
+            returning id`,
+          [userId, encryptedSecret, lastUsedStep],
+        );
+        if ((updated.rowCount ?? 0) === 0) {
+          await c.query('rollback');
+          return false;
+        }
+        await c.query(`delete from app_recovery_codes where user_id = $1`, [userId]);
+        for (const codeHash of recoveryCodeHashes) {
+          await c.query(`insert into app_recovery_codes (user_id, code_hash) values ($1, $2)`,
+            [userId, codeHash]);
+        }
+        await c.query('commit');
+        return true;
+      } catch (error) {
+        await c.query('rollback');
+        throw error;
+      }
+    });
+  }
+
+  async disableMfa(userId: string): Promise<void> {
+    await this.run(async (c) => {
+      await c.query('begin');
+      try {
+        await c.query(
+          `update app_users set mfa_secret = null, mfa_pending = null, mfa_last_step = null where id = $1`,
+          [userId],
+        );
+        await c.query(`delete from app_recovery_codes where user_id = $1`, [userId]);
+        await c.query('commit');
+      } catch (error) {
+        await c.query('rollback');
+        throw error;
+      }
+    });
+  }
+
+  async recordMfaStep(userId: string, step: number): Promise<boolean> {
+    const res = await this.run((c) => c.query(
+      `update app_users set mfa_last_step = $2
+        where id = $1 and (mfa_last_step is null or mfa_last_step < $2) returning id`,
+      [userId, step],
+    ));
+    return (res.rowCount ?? 0) === 1;
+  }
+
+  async listRecoveryCodes(userId: string): Promise<StoredRecoveryCode[]> {
+    const res = await this.run((c) => c.query(
+      `select id, code_hash from app_recovery_codes where user_id = $1 and used_at is null`,
+      [userId],
+    ));
+    return res.rows.map((row) => ({ id: String(row.id), codeHash: String(row.code_hash) }));
+  }
+
+  async useRecoveryCode(userId: string, id: string, now: Date): Promise<boolean> {
+    const res = await this.run((c) => c.query(
+      `update app_recovery_codes set used_at = $3
+        where id = $1 and user_id = $2 and used_at is null returning id`,
+      [id, userId, now.toISOString()],
+    ));
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  private passkeyRow(row: Record<string, unknown>): PasskeyRecord {
+    const rawJwk = typeof row.public_key_jwk === 'string'
+      ? JSON.parse(row.public_key_jwk) as unknown
+      : row.public_key_jwk;
+    return {
+      id: String(row.id),
+      userId: String(row.user_id),
+      publicKeyJwk: (rawJwk ?? {}) as Record<string, string>,
+      alg: Number(row.alg),
+      signCount: Number(row.sign_count),
+      transports: Array.isArray(row.transports) ? row.transports.map(String) : [],
+      name: String(row.name),
+      createdAt: new Date(row.created_at as string | Date),
+      lastUsedAt: row.last_used_at == null
+        ? null
+        : new Date(row.last_used_at as string | Date),
+    };
+  }
+
+  async addPasskey(record: PasskeyRecord): Promise<void> {
+    try {
+      await this.run((c) => c.query(
+        `insert into app_passkeys
+          (id, user_id, public_key_jwk, alg, sign_count, transports, name, created_at, last_used_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [record.id, record.userId, JSON.stringify(record.publicKeyJwk), record.alg,
+          record.signCount, record.transports, record.name, record.createdAt.toISOString(),
+          record.lastUsedAt?.toISOString() ?? null],
+      ));
+    } catch (error) {
+      if (typeof error === 'object' && error !== null
+        && (error as { code?: unknown }).code === '23505') {
+        throw new PasskeyExistsError();
+      }
+      throw error;
+    }
+  }
+
+  async listPasskeys(userId: string): Promise<PasskeyRecord[]> {
+    const res = await this.run((c) => c.query(
+      `select id, user_id, public_key_jwk, alg, sign_count, transports, name, created_at, last_used_at
+         from app_passkeys where user_id = $1 order by created_at desc, id`,
+      [userId],
+    ));
+    return res.rows.map((row) => this.passkeyRow(row as Record<string, unknown>));
+  }
+
+  async getPasskey(id: string): Promise<PasskeyRecord | null> {
+    const res = await this.run((c) => c.query(
+      `select id, user_id, public_key_jwk, alg, sign_count, transports, name, created_at, last_used_at
+         from app_passkeys where id = $1`,
+      [id],
+    ));
+    const row = res.rows[0] as Record<string, unknown> | undefined;
+    return row ? this.passkeyRow(row) : null;
+  }
+
+  async deletePasskey(userId: string, id: string): Promise<boolean> {
+    const res = await this.run((c) => c.query(
+      `delete from app_passkeys where id = $1 and user_id = $2 returning id`,
+      [id, userId],
+    ));
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  async touchPasskey(id: string, signCount: number, lastUsedAt: Date): Promise<void> {
+    await this.run((c) => c.query(
+      `update app_passkeys set sign_count = $2, last_used_at = $3 where id = $1`,
+      [id, signCount, lastUsedAt.toISOString()],
+    ));
+  }
+
+  async getSessionStepUp(tokenHash: string): Promise<Date | null> {
+    const res = await this.run((c) => c.query(
+      `select step_up_until from app_sessions where token_hash = $1`,
+      [tokenHash],
+    ));
+    const value = res.rows[0]?.step_up_until;
+    return value == null ? null : new Date(value as string | Date);
+  }
+
+  async setSessionStepUp(tokenHash: string, until: Date): Promise<void> {
+    await this.run((c) => c.query(
+      `update app_sessions set step_up_until = $2 where token_hash = $1`,
+      [tokenHash, until.toISOString()],
+    ));
+  }
+
+  async appendAudit(event: AuditInput): Promise<void> {
+    await this.run((c) => c.query(
+      `insert into app_audit_log (user_id, type, at, ip_prefix, device, detail)
+       values ($1, $2, $3, $4, $5, $6)`,
+      [event.userId, event.type, event.at.toISOString(), event.ipPrefix, event.device,
+        event.detail ? JSON.stringify(event.detail) : null],
+    ));
+  }
+
+  async listAudit(userId: string, limit = 50): Promise<AuditEvent[]> {
+    const max = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 50;
+    const res = await this.run((c) => c.query(
+      `select id, type, at, ip_prefix, device, detail
+         from app_audit_log where user_id = $1 order by at desc, id desc limit $2`,
+      [userId, max],
+    ));
+    return res.rows.map((row) => ({
+      id: String(row.id),
+      type: String(row.type) as AuditType,
+      at: new Date(row.at as string | Date),
+      ipPrefix: row.ip_prefix == null ? null : String(row.ip_prefix),
+      device: row.device == null ? null : String(row.device),
+      ...(row.detail == null ? {} : {
+        detail: (typeof row.detail === 'string' ? JSON.parse(row.detail) : row.detail) as Record<string, string | number | boolean>,
+      }),
+    }));
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    await this.run(async (c) => {
+      await c.query('begin');
+      try {
+        // The audit trigger refuses DELETE unless this transaction-local flag is on.
+        await c.query(`set local settle.allow_audit_purge = 'on'`);
+        await c.query('delete from app_recovery_codes where user_id = $1', [userId]);
+        await c.query('delete from app_passkeys where user_id = $1', [userId]);
+        await c.query('delete from app_sessions where user_id = $1', [userId]);
+        await c.query('delete from app_password_resets where user_id = $1', [userId]);
+        await c.query('delete from app_google_identities where user_id = $1', [userId]);
+        await c.query('delete from app_audit_log where user_id = $1', [userId]);
+        await c.query('delete from app_users where id = $1', [userId]);
+        await c.query('commit');
+      } catch (error) {
+        await c.query('rollback');
+        throw error;
+      }
+    });
   }
 }
 

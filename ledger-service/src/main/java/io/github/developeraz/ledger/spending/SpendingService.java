@@ -58,10 +58,19 @@ public class SpendingService {
 
     @Transactional(readOnly=true)
     public List<SpendLog> list(UUID account, Instant since, int limit) {
+        return list(account, since, null, null, limit);
+    }
+
+    /** Newest first; before + beforeId is a keyset cursor (the last row of the previous page). */
+    @Transactional(readOnly=true)
+    public List<SpendLog> list(UUID account, Instant since, Instant before, UUID beforeId, int limit) {
+        boolean paged = before != null && beforeId != null;
         return jdbc.sql("""
                 select * from spend_logs where account_id=:account and occurred_at>=:since
-                order by occurred_at desc,id desc limit :limit
+                """ + (paged ? " and (occurred_at, id) < (:before, :beforeId)" : "") + """
+                 order by occurred_at desc,id desc limit :limit
                 """).param("account", account).param("since", Timestamp.from(since == null ? Instant.EPOCH : since))
+                .param("before", Timestamp.from(paged ? before : Instant.EPOCH)).param("beforeId", paged ? beforeId : new UUID(0, 0))
                 .param("limit", limit).query(SpendingService::map).list();
     }
 

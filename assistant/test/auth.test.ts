@@ -38,7 +38,7 @@ const json = { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113
 function cookieFrom(res: Response): string {
   const raw = res.headers.get('set-cookie') ?? '';
   const pair = raw.split(';')[0] ?? '';
-  if (!pair.startsWith('settle_session=')) throw new Error(`missing session cookie: ${raw}`);
+  if (!pair.startsWith('__Host-settle_session=')) throw new Error(`missing session cookie: ${raw}`);
   return pair;
 }
 

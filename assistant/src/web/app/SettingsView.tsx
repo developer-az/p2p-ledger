@@ -7,6 +7,7 @@ import { densityLabel, type DensityPref } from './density.js';
 import { money } from './format.js';
 import { moneyPlan } from './money-plan.js';
 import { navigate, routeHref, SETTINGS_TABS, type SettingsTab } from './router.js';
+import { AuditRow, DataPrivacyPanel, PasskeysRow, SessionsRow, TwoFactorRow } from './SecuritySettings.js';
 import type { ThemePref } from './theme.js';
 import { TrustTab } from './TrustTab.js';
 
@@ -55,6 +56,7 @@ export function SettingsView({
   onEditBalances,
   onReload,
 }: SettingsViewProps) {
+  const real = !demo;
   return (
     <div className="v-view">
       <header className="v-head">
@@ -100,7 +102,7 @@ export function SettingsView({
               <section className="v-panel set-panel glass" aria-labelledby="set-profile-edit">
                 <h2 id="set-profile-edit">Your details</h2>
                 <ul className="set-rows">
-                  <PlannedRow label="Edit profile" description="Change the name and email on this account." milestone="M2" />
+                  <PlannedRow label="Edit profile" description="Change the name and email on this account." milestone="M3" />
                 </ul>
               </section>
             </>
@@ -122,10 +124,12 @@ export function SettingsView({
 
               <section className="v-panel set-panel glass" aria-labelledby="set-signin">
                 <h2 id="set-signin">Sign-in protection</h2>
+                {!real ? <p className="set-copy muted">Sign in to a real account to use this.</p> : null}
                 <ul className="set-rows">
-                  <PlannedRow label="Two-factor sign-in" description="A second step when signing in from a new device." milestone="M2" />
-                  <PlannedRow label="Active sessions" description="See every browser signed in to this account and end one." milestone="M2" />
-                  <PlannedRow label="Audit log" description="A record of sign-ins, password changes and account edits." milestone="M2" />
+                  <TwoFactorRow real={real} />
+                  <PasskeysRow real={real} />
+                  <SessionsRow real={real} />
+                  <AuditRow real={real} />
                 </ul>
                 {demo ? (
                   <p className="set-copy muted">Google sign-in connects to an account, so it starts after you create one.</p>
@@ -161,14 +165,11 @@ export function SettingsView({
 
               <section className="v-panel set-panel glass" aria-labelledby="set-retention">
                 <h2 id="set-retention">Control and removal</h2>
+                {!real ? <p className="set-copy muted">Sign in to a real account to use this.</p> : null}
+                <DataPrivacyPanel real={real} onSignOut={onSignOut} />
                 <ul className="set-rows">
-                  <PlannedRow label="Export all data" description="Take every entry, profile field and log in one file." milestone="M2" />
-                  <PlannedRow label="Delete account and data" description="Remove the account and its ledger entries for good." milestone="M2" />
-                  <PlannedRow label="Retention settings" description="Choose how long logs and backups are kept." milestone="M2" />
+                  <PlannedRow label="Retention settings" description="Choose how long logs and backups are kept." milestone="M3" />
                 </ul>
-                <p className="set-copy">
-                  To delete your account today, follow the steps on <a className="set-link" href="/account-access">Account access</a>.
-                </p>
               </section>
             </>
           ) : null}
@@ -191,7 +192,7 @@ export function SettingsView({
                 <h2 id="set-integrations">Connections</h2>
                 <ul className="set-rows">
                   <PlannedRow label="Bank statement import" description="Read a statement export without editing it first." milestone="M3" />
-                  <PlannedRow label="Bring your own API keys" description="Point Settle at the model provider you already pay for." milestone="M3" />
+                  <PlannedRow label="Bring your own API keys" description="Point Settle at the model provider you already pay for." milestone="M4" />
                   <PlannedRow label="Bank connector" description="Read balances and transactions directly from a bank." milestone="M3" />
                 </ul>
               </section>

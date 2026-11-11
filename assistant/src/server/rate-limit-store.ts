@@ -18,6 +18,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { pgConfig } from './db-tls.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
 import { rateLimiter, type Limiter } from './rate-limit.js';
 
@@ -156,8 +157,7 @@ function poolFor(connectionString: string): Promise<PgPool> {
   if (!pool) {
     pool = (async () => {
       const { default: pg } = await import('pg');
-      const ssl = /supabase|sslmode=require/i.test(connectionString) ? { rejectUnauthorized: false } : undefined;
-      return new pg.Pool({ connectionString, ssl, max: 2, idleTimeoutMillis: 10_000 });
+      return new pg.Pool({ ...pgConfig(connectionString), max: 2, idleTimeoutMillis: 10_000 });
     })();
     pools.set(connectionString, pool);
   }

@@ -19,6 +19,18 @@ class SpendingServiceTest {
     @Autowired AccountService accounts;
     private UUID account() { return accounts.open("spending-" + UUID.randomUUID(), "USD").id(); }
 
+    @Test void keysetPagesWalkEveryRowExactlyOnce() {
+        UUID account=account();
+        for (int i=0;i<7;i++) spending.record(account,new SpendingService.Input(100+i,"other","row "+i,null,null,"USD"),"page-"+i);
+        var seen=new java.util.ArrayList<UUID>();
+        var page=spending.list(account,null,null,null,3);
+        while (!page.isEmpty()) {
+            page.forEach(r -> seen.add(r.id()));
+            var tail=page.getLast();
+            page=spending.list(account,null,tail.occurredAt(),tail.id(),3);
+        }
+        assertThat(seen).hasSize(7).doesNotHaveDuplicates();
+    }
     @Test void provisioningReplayCreatesExactlyOneAccountAndRejectsConflicts() {
         UUID id = UUID.randomUUID();
         String owner = "signup-" + id;

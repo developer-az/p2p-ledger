@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import type { FieldCipher } from './envelope.js';
 import { formatMoney } from './money.js';
 
 export const SPEND_CATEGORIES = [
@@ -38,11 +39,29 @@ export interface RecordSpendInput {
   currency?: string;
 }
 
+export interface SpendCursorPage {
+  rows: SpendLogEntry[];
+  /** Opaque cursor for the next page, or null at the end. */
+  next: string | null;
+}
+
 export interface SpendLogStore {
   record(accountId: string, input: RecordSpendInput, now?: Date, idempotencyKey?: string): Promise<SpendLogEntry>;
   list(accountId: string, opts?: { since?: Date; limit?: number }): Promise<SpendLogEntry[]>;
+  /** Ascending id keyset page used by older callers. */
+  listSpendPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]>;
+  /** Opaque-cursor page used by bounded data export. */
+  listSpendCursorPage(accountId: string, cursor: string | null, limit: number): Promise<SpendCursorPage>;
+  /** Alias kept for callers that use the same name as the income store. */
+  listPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]>;
   /** Remove one manual log. Returns false when it was already gone. */
   remove(accountId: string, spendId: string): Promise<boolean>;
+  /**
+   * Account deletion: removes every spend log for this account. Optional because
+   * the live Java ledger owns its own spend logs and keeps the append-only
+   * financial history; only the TS-backed stores can purge here.
+   */
+  deleteAll?(accountId: string): Promise<void>;
 }
 
 export interface CategoryTotal {
@@ -234,8 +253,19 @@ export function buildHabitsFromEntries(
 export class InMemorySpendLogStore implements SpendLogStore {
   private readonly events: SpendLogEntry[];
 
-  constructor(seed?: SpendLogEntry[]) {
+  constructor(seed?: SpendLogEntry[], private readonly cipher?: FieldCipher) {
     this.events = seed ? [...seed] : [];
+  }
+
+  /** Notes are the sensitive column (PLAN 2.5); legacy plaintext stays readable. */
+  private async encodeNote(accountId: string, note: string | null | undefined): Promise<string | null> {
+    if (note == null) return null;
+    return this.cipher ? await this.cipher.encryptField(accountId, note) : note;
+  }
+
+  private async decodeEntry(entry: SpendLogEntry): Promise<SpendLogEntry> {
+    if (entry.note == null || !this.cipher) return entry;
+    return { ...entry, note: await this.cipher.decryptField(entry.accountId, entry.note) };
   }
 
   async record(accountId: string, input: RecordSpendInput, now = new Date()): Promise<SpendLogEntry> {
@@ -246,22 +276,43 @@ export class InMemorySpendLogStore implements SpendLogStore {
       amountMinor: input.amountMinor,
       currency: input.currency ?? 'USD',
       category: input.category,
-      note: input.note ?? null,
+      note: await this.encodeNote(accountId, input.note),
       occurredAt: input.occurredAt ?? now.toISOString(),
       source: input.source ?? 'manual',
       createdAt: now.toISOString(),
     };
     this.events.push(event);
-    return event;
+    return { ...event, note: input.note ?? null };
   }
 
   async list(accountId: string, opts?: { since?: Date; limit?: number }): Promise<SpendLogEntry[]> {
     const limit = opts?.limit ?? 100;
     const since = opts?.since?.getTime();
-    return this.events
+    const rows = this.events
       .filter((e) => e.accountId === accountId && (since === undefined || Date.parse(e.occurredAt) >= since))
       .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
       .slice(0, limit);
+    return Promise.all(rows.map((entry) => this.decodeEntry(entry)));
+  }
+
+  async listSpendPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]> {
+    const rows = this.events
+      .filter((entry) => entry.accountId === accountId && (afterId === null || entry.id > afterId))
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .slice(0, Math.max(1, limit));
+    return Promise.all(rows.map((entry) => this.decodeEntry(entry)));
+  }
+
+  async listSpendCursorPage(accountId: string, cursor: string | null, limit: number): Promise<SpendCursorPage> {
+    const pageSize = Math.max(1, limit);
+    // Keep the old method as the seam so test subclasses still observe page sizes.
+    const rows = await this.listSpendPage(accountId, cursor, pageSize);
+    const next = rows.length < pageSize ? null : rows[rows.length - 1]!.id;
+    return { rows, next };
+  }
+
+  async listPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]> {
+    return this.listSpendPage(accountId, afterId, limit);
   }
 
   async remove(accountId: string, spendId: string): Promise<boolean> {
@@ -270,9 +321,15 @@ export class InMemorySpendLogStore implements SpendLogStore {
     this.events.splice(index, 1);
     return true;
   }
+
+  async deleteAll(accountId: string): Promise<void> {
+    for (let index = this.events.length - 1; index >= 0; index--) {
+      if (this.events[index]!.accountId === accountId) this.events.splice(index, 1);
+    }
+  }
 }
 
 // Practice-only; live persistence is routed to the Java ledger in instance.ts.
-export function createSpendLogStore(): SpendLogStore {
-  return new InMemorySpendLogStore();
+export function createSpendLogStore(cipher?: FieldCipher): SpendLogStore {
+  return new InMemorySpendLogStore(undefined, cipher);
 }

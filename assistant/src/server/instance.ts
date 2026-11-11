@@ -1,4 +1,5 @@
 import { createApp } from './app.js';
+import { createDataKeyStore } from './envelope.js';
 import { HttpLedgerClient } from './ledger.js';
 import { CompositeLedger, isLiveLedgerReachable, PracticeLedger } from './practice-ledger.js';
 import { createSpendLogStore } from './spend-log.js';
@@ -21,8 +22,9 @@ export function createAssistantApi() {
   const isLiveLedgerUp = () => isLiveLedgerReachable(ledgerUrl);
   const ledger = new CompositeLedger(liveLedger, practice, isLiveLedgerUp);
   const javaWorkflows = new JavaWorkflows(ledgerUrl, process.env.LEDGER_API_KEY ?? '', timeoutMs);
-  spendLogs = new RoutedSpendLogStore(createSpendLogStore(), javaWorkflows, id => ledger.isPracticeAccount(id));
-  personalFinance = createPersonalFinanceStore();
+  const dataKeys = createDataKeyStore();
+  spendLogs = new RoutedSpendLogStore(createSpendLogStore(dataKeys), javaWorkflows, id => ledger.isPracticeAccount(id));
+  personalFinance = createPersonalFinanceStore(process.env, dataKeys);
   paymentRequests = createPaymentRequestStore();
   return createApp({
     ledger,
@@ -33,6 +35,7 @@ export function createAssistantApi() {
     personalFinance,
     paymentRequests,
     javaWorkflows,
+    dataKeys,
     auth: createAuthStore(),
     rateLimitStore: createRateLimitStore(),
   });

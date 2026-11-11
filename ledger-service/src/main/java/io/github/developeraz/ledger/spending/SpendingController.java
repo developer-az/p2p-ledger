@@ -26,8 +26,9 @@ public class SpendingController {
     }
     @GetMapping
     public List<SpendLog> list(@PathVariable UUID account, @RequestParam(required=false) Instant since,
+                              @RequestParam(required=false) Instant before, @RequestParam(required=false) UUID beforeId,
                               @RequestParam(defaultValue="100") @Min(1) @Max(500) int limit) {
-        return service.list(account,since,limit);
+        return service.list(account,since,before,beforeId,limit);
     }
     @DeleteMapping("/{id}")
     public Map<String,Boolean> remove(@PathVariable UUID account, @PathVariable UUID id) {

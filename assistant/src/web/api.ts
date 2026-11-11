@@ -376,6 +376,95 @@ export interface AuthResult {
   account: AccountRef;
 }
 
+/** Password sign-in stopped after the first factor; finish it with /auth/mfa/verify. */
+export interface MfaChallenge {
+  mfaRequired: true;
+  challenge: string;
+}
+
+export type LoginResult = AuthResult | MfaChallenge;
+
+export function isMfaChallenge(result: unknown): result is MfaChallenge {
+  return typeof result === 'object' && result !== null
+    && (result as { mfaRequired?: unknown }).mfaRequired === true
+    && typeof (result as { challenge?: unknown }).challenge === 'string';
+}
+
+export interface AuthSessionRow {
+  id: string;
+  current: boolean;
+  createdAt: string;
+  lastSeenAt: string;
+  device: string | null;
+  ipPrefix: string | null;
+}
+
+export interface MfaStatus {
+  enabled: boolean;
+  recoveryCodesLeft: number;
+}
+
+export interface MfaSetup {
+  secret: string;
+  otpauthUri: string;
+}
+
+export interface PasskeySummary {
+  id: string;
+  name: string;
+  transports: string[];
+  alg: number;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export interface PasskeyCreationOptions {
+  rp: { id: string; name: string };
+  user: { id: string; name: string; displayName: string };
+  challenge: string;
+  pubKeyCredParams: { type: 'public-key'; alg: number }[];
+  timeout: number;
+  attestation: 'none';
+  authenticatorSelection: {
+    residentKey: 'preferred';
+    requireResidentKey: boolean;
+    userVerification: 'preferred' | 'required' | 'discouraged';
+  };
+  excludeCredentials: { type: 'public-key'; id: string; transports: string[] }[];
+}
+
+export interface PasskeyRequestOptions {
+  challenge: string;
+  rpId: string;
+  timeout: number;
+  userVerification: 'preferred' | 'required' | 'discouraged';
+  allowCredentials: { type: 'public-key'; id: string; transports: string[] }[];
+}
+
+/** Browser credential response in the base64url JSON shape the server accepts. */
+export interface PasskeyCredentialJson {
+  id: string;
+  rawId: string;
+  type: 'public-key';
+  response: {
+    clientDataJSON: string;
+    attestationObject?: string;
+    authenticatorData?: string;
+    signature?: string;
+    userHandle?: string | null;
+    transports?: string[];
+  };
+  clientExtensionResults?: unknown;
+}
+
+export interface AuditEventRow {
+  id: string;
+  type: string;
+  at: string;
+  ipPrefix: string | null;
+  device: string | null;
+}
+
 export interface ToolCall { tool: string; args: unknown; result: unknown; ms: number }
 export interface Turn {
   role: 'user' | 'assistant';
@@ -388,7 +477,45 @@ export interface Turn {
 const API_DOWN =
   'Cannot reach the assistant API. If this is the live site, wait a moment and refresh (Vercel cold start). Locally: npm run dev or npm run dev:stack.';
 
+/** An HTTP failure that keeps the server's machine-readable code for callers that branch on it. */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code: string | undefined;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError;
+}
+
+/** Machine-readable auth codes from the server, shown as plain sentences. */
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  invalid_code: 'That code did not work. Try again.',
+  challenge_expired: 'That sign-in timed out. Enter your email and password again.',
+  step_up_required: 'Confirm it is you to continue.',
+  invalid_credentials: 'That code or password did not work.',
+  mfa_unavailable: 'Two-factor sign-in is not available on this server.',
+  passkey_cloned: 'This passkey may have been copied. Sign in another way and remove it.',
+  unsupported_attestation: 'This passkey type is not supported.',
+  unsupported_algorithm: 'This passkey type is not supported.',
+  passkey_exists: 'That passkey is already added.',
+  passkey_not_found: 'That passkey is no longer on this account.',
+  confirm_required: 'Type DELETE to confirm.',
+  unsupported_format: 'Choose JSON or CSV.',
+};
+
 function requestError(status: number, path: string, body: { error?: string; code?: string }): string {
+  if (body.error === 'too_many_attempts') return 'Too many attempts. Try again in a few minutes.';
+  if (body.error === 'breached_password') return 'This password has appeared in a data breach. Choose a different one.';
+  if (body.error === 'signup_failed') return "We couldn't create that account. If you already have one, sign in instead.";
+  const authMessage = body.error ? AUTH_ERROR_MESSAGES[body.error] : undefined;
+  if (authMessage) return authMessage;
   if (body.error) return body.error;
   if (status === 502 || status === 504) {
     return 'Assistant API timed out. Redeploy or retry in a few seconds (serverless cold start).';
@@ -512,8 +639,26 @@ export async function call<T>(path: string, init?: RequestInit): Promise<T> {
       await wakeTiming.sleep(delay);
       continue;
     }
-    throw new Error(requestError(res.status, path, body));
+    throw new ApiError(requestError(res.status, path, body), res.status, body.error);
   }
+}
+
+/** The export routes answer with a file, so the generic JSON helper cannot read them. */
+async function fetchExport(format: 'json' | 'csv'): Promise<{ blob: Blob; filename: string }> {
+  const path = `/api/account/export?format=${format}`;
+  let res: Response;
+  try {
+    res = await fetch(path, { cache: 'no-store' });
+  } catch {
+    throw new Error(API_DOWN);
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string; code?: string };
+    throw new ApiError(requestError(res.status, path, body), res.status, body.error);
+  }
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  return { blob: await res.blob(), filename: match?.[1] ?? `settle-export.${format}` };
 }
 
 /** fetch rejects with a DOMException named AbortError when its signal fires. */
@@ -540,12 +685,45 @@ export const api = {
   register: (body: { email: string; password: string; displayName: string }) =>
     call<AuthResult>('/api/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   login: (body: { email: string; password: string }) =>
-    call<AuthResult>('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
+    call<LoginResult>('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   requestPasswordReset: (email: string) =>
     call<{ ok: boolean; message: string }>('/api/auth/password-reset/request', { method: 'POST', body: JSON.stringify({ email }) }),
   confirmPasswordReset: (token: string, password: string) =>
-    call<{ ok: boolean }>('/api/auth/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token, password }) }),
+    call<{ ok: true } | MfaChallenge>('/api/auth/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token, password }) }),
   logout: () => call<{ ok: boolean }>('/api/auth/logout', { method: 'POST', body: '{}' }),
+  mfaVerify: (challenge: string, code: string) =>
+    call<{ ok: boolean }>('/api/auth/mfa/verify', { method: 'POST', body: JSON.stringify({ challenge, code }) }),
+  stepUp: (body: { code: string } | { password: string } | { passkey: PasskeyCredentialJson }) =>
+    call<{ ok: boolean; until: string }>('/api/auth/step-up', { method: 'POST', body: JSON.stringify(body) }),
+  stepUpPasskeyOptions: () =>
+    call<PasskeyRequestOptions>('/api/auth/step-up/passkey/options', { method: 'POST', body: '{}' }),
+  passkeys: () => call<{ passkeys: PasskeySummary[] }>('/api/auth/passkeys'),
+  passkeyRegisterOptions: () =>
+    call<PasskeyCreationOptions>('/api/auth/passkeys/register/options', { method: 'POST', body: '{}' }),
+  passkeyRegister: (credential: PasskeyCredentialJson, name: string) =>
+    call<{ ok: boolean; passkey: PasskeySummary | null }>('/api/auth/passkeys/register', {
+      method: 'POST',
+      body: JSON.stringify({ credential, name }),
+    }),
+  deletePasskey: (id: string) =>
+    call<{ ok: boolean }>(`/api/auth/passkeys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  passkeyLoginOptions: () =>
+    call<PasskeyRequestOptions>('/api/auth/passkeys/login/options', { method: 'POST', body: '{}' }),
+  passkeyLogin: (credential: PasskeyCredentialJson) =>
+    call<LoginResult>('/api/auth/passkeys/login', { method: 'POST', body: JSON.stringify({ credential }) }),
+  mfa: () => call<MfaStatus>('/api/auth/mfa'),
+  mfaSetup: () => call<MfaSetup>('/api/auth/mfa/setup', { method: 'POST', body: '{}' }),
+  mfaEnable: (code: string) =>
+    call<{ recoveryCodes: string[] }>('/api/auth/mfa/enable', { method: 'POST', body: JSON.stringify({ code }) }),
+  mfaDisable: (code: string) =>
+    call<{ ok: boolean }>('/api/auth/mfa/disable', { method: 'POST', body: JSON.stringify({ code }) }),
+  sessions: () => call<{ sessions: AuthSessionRow[] }>('/api/auth/sessions'),
+  revokeSession: (id: string) =>
+    call<{ ok: boolean }>(`/api/auth/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  audit: () => call<{ events: AuditEventRow[] }>('/api/auth/audit'),
+  exportAccount: (format: 'json' | 'csv') => fetchExport(format),
+  deleteAccount: () =>
+    call<{ deleted: boolean }>('/api/account', { method: 'DELETE', body: JSON.stringify({ confirm: 'DELETE' }) }),
   seedDemo: () => call<{ accounts: AccountRef[]; focusAccountId: string; stopped: StoppedPayment }>('/api/demo', { method: 'POST' }),
   seedPracticeDemo: () => call<{ accounts: AccountRef[]; focusAccountId: string; seeded: boolean }>('/api/demo/practice', { method: 'POST' }),
   findAccounts: (owner: string) => call<AccountRef[]>(`/api/accounts?owner=${encodeURIComponent(owner)}`),

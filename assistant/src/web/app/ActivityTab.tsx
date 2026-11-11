@@ -48,7 +48,7 @@ export function ActivityTab({ data, onOpen }: { data: WalletData | null; onOpen:
         </div>
       </section>
 
-      <section className="v-panel">
+      <section className="v-panel" data-tour="transactions-list">
         <div className="v-toolbar">
           <div className="v-seg" role="group" aria-label="Filter activity">
             {FILTERS.map((f) => (

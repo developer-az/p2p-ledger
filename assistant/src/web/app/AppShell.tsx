@@ -589,6 +589,7 @@ export function AppShell({
             type="button"
             className="shell-search"
             aria-label="Search transactions"
+            data-tour="search"
             onClick={onOpenPalette}
           >
             <Icon name="search" size={16} />

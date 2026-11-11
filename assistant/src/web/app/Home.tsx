@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './styles/views.css';
 import type { AccountRef, SpendCategory } from '../api.js';
 import { categoryLabel } from './categories.js';
@@ -20,7 +20,7 @@ export interface HomeActions {
   setup: (step?: 0 | 1 | 2) => void;
 }
 
-export function Home({ me, name, data, actions, guide }: { me: AccountRef; name?: string; data: WalletData | null; actions: HomeActions; guide?: ReactNode }) {
+export function Home({ me, name, data, actions }: { me: AccountRef; name?: string; data: WalletData | null; actions: HomeActions }) {
   const feed = useMemo(() => (data ? buildFeed(data.view) : []), [data]);
   if (!data) return <HomeSkeleton />;
 
@@ -38,8 +38,6 @@ export function Home({ me, name, data, actions, guide }: { me: AccountRef; name?
         <h1 className="v-title">Overview</h1>
         <p className="v-sub">{dateLine}</p>
       </header>
-
-      {guide}
 
       {plan.hasBaseline ? <FigureStrip plan={plan} actions={actions} /> : <StartingPoint actions={actions} />}
 
@@ -108,7 +106,7 @@ function FigureStrip({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; ac
   const net = plan.netMinor ?? plan.ledgerMinor;
   const budget = plan.budgetMinor;
   return (
-    <section className="v-figs" aria-label="Money position">
+    <section className="v-figs" aria-label="Money position" data-tour="overview-figures">
       <div className="v-fig">
         <p className="v-fig-label">Net position</p>
         <p className={`v-fig-value num${net < 0 ? ' is-neg' : ''}`}>{money(net)}</p>

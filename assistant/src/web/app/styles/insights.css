@@ -24,17 +24,6 @@
   min-width: 0;
 }
 
-.app .demo-patterns-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s3);
-  padding: var(--s2) var(--s3);
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  background: var(--surface-2);
-}
-
 /* ---------- Layout ---------- */
 
 .app .patterns-top {

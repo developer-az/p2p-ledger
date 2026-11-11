@@ -9,7 +9,6 @@ import { ActivityTab } from './ActivityTab.js';
 import { AskTab } from './AskTab.js';
 import { useWallet } from './data.js';
 import { buildFeed, type FeedItem } from './feed.js';
-import { DemoGuide, type DemoStepId } from './DemoGuide.js';
 import { dayLabel, displayName, money, parseMoney } from './format.js';
 import { Home } from './Home.js';
 import { InsightsTab } from './InsightsTab.js';
@@ -32,42 +31,12 @@ import { applyTheme, nextTheme, readTheme, saveTheme, type ThemePref } from './t
 import { applyDensity, densityLabel, readDensity, saveDensity, type DensityPref } from './density.js';
 import { CommandPalette, type PaletteRow } from './CommandPalette.js';
 import { ShortcutSheet } from './ShortcutSheet.js';
+import { TourRail, type TourRailHandle } from './TourRail.js';
 
 /** Animation features load in their own chunk; `strict` rejects a stray full `motion.*` import. */
 const loadMotion = () => import('./motion-features.js').then((mod) => mod.default);
 
 type Sheetname = null | 'log' | 'setup';
-
-const DEMO_STEPS: DemoStepId[] = ['baseline', 'log', 'income', 'patterns', 'pace'];
-
-function readFlag(key: string): boolean {
-  try {
-    return localStorage.getItem(key) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function writeFlag(key: string, on: boolean): void {
-  try {
-    if (on) localStorage.setItem(key, '1');
-    else localStorage.removeItem(key);
-  } catch {
-    /* private mode: the choice lasts for this visit */
-  }
-}
-
-function loadDemoProgress(key: string): DemoStepId[] {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((step): step is DemoStepId => typeof step === 'string' && (DEMO_STEPS as string[]).includes(step));
-  } catch {
-    return [];
-  }
-}
 
 /** "light" to "Light", for the next-theme hint in the palette. */
 function preferenceName(pref: string): string {
@@ -203,7 +172,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   const me = session.account;
   const demo = session.demo === true;
   const who = session.user?.displayName ?? displayName(me.owner);
-  const demoKey = `settle:demo-progress:${me.id}`;
   const { data, error, refreshing, reload, run: walletRun } = useWallet(me.id);
   const { state: progress, now: progressNow } = useBootProgress();
   const walletArrived = data !== null;
@@ -223,14 +191,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
     bootProgress.dispatch({ type: 'fail', id: running.id, at: Date.now(), reason: error });
   }, [error, walletArrived]);
 
-  const [demoProgress, setDemoProgress] = useState<DemoStepId[]>(() => (demo ? loadDemoProgress(demoKey) : []));
-  const guideHiddenKey = `settle:demo-guide-hidden:${me.id}`;
-  const [showDemoGuide, setShowDemoGuideState] = useState(() => !readFlag(guideHiddenKey));
-  /** Showing or hiding the quest card is remembered per sample wallet. */
-  const setShowDemoGuide = useCallback((show: boolean) => {
-    setShowDemoGuideState(show);
-    writeFlag(guideHiddenKey, !show);
-  }, [guideHiddenKey]);
   const [sheet, setSheet] = useState<Sheetname>(null);
   const [setupMode, setSetupMode] = useState<'onboarding' | 'edit'>('onboarding');
   const [setupStep, setSetupStep] = useState<0 | 1 | 2>(0);
@@ -242,6 +202,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   const [density, setDensity] = useState<DensityPref>(() => readDensity());
   // AppShell owns the rail state and hands its toggle over for the palette.
   const sidebarToggle = useRef<(() => void) | null>(null);
+  const tourRef = useRef<TourRailHandle | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const toast = useToast();
@@ -314,45 +275,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
     navigate({ kind: 'app', section: 'overview' }, { replace: true });
   }, [route]);
 
-  const markDemo = useCallback((step: DemoStepId) => {
-    if (!demo) return;
-    setDemoProgress((prev) => {
-      if (prev.includes(step)) return prev;
-      const next = [...prev, step];
-      try {
-        localStorage.setItem(demoKey, JSON.stringify(next));
-      } catch {
-        /* private mode: progress still works for this session */
-      }
-      return next;
-    });
-  }, [demo, demoKey]);
-
-  useEffect(() => {
-    if (!demo) {
-      setDemoProgress([]);
-      return;
-    }
-    setDemoProgress(loadDemoProgress(demoKey));
-    setShowDemoGuideState(!readFlag(guideHiddenKey));
-  }, [demo, demoKey, guideHiddenKey]);
-
-  // Escape closes the quest card, unless a sheet has the key first.
-  useEffect(() => {
-    if (!demo || !showDemoGuide || sheet) return;
-    const esc = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return;
-      setShowDemoGuide(false);
-    };
-    document.addEventListener('keydown', esc);
-    return () => document.removeEventListener('keydown', esc);
-  }, [demo, showDemoGuide, sheet, setShowDemoGuide]);
-
-  useEffect(() => {
-    if (!demo || !data) return;
-    if (data.view.moneyProfile?.walletCashMinor != null) markDemo('baseline');
-  }, [demo, data, markDemo]);
-
   // First-run setup: open once per wallet, but never block a returning person.
   useEffect(() => {
     if (!data) return;
@@ -376,10 +298,9 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   }, [viewSection, viewSettingsTab]);
 
   const go = useCallback((section: AppSection) => {
-    if (demo && section === 'insights') markDemo('patterns');
     navigate(appRoute(section));
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [demo, markDemo]);
+  }, []);
   const closeSheet = () => setSheet(null);
 
   const openLog = useCallback((preset: { category?: SpendCategory; amountMinor?: number } = {}) => {
@@ -474,43 +395,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
     });
   }, [data, openFeedItem]);
 
-  const handleDemoStep = (step: DemoStepId) => {
-    switch (step) {
-      case 'baseline':
-        setSetupMode('edit');
-        setSetupStep(0);
-        setSheet('setup');
-        break;
-      case 'log':
-        openLog();
-        break;
-      case 'income':
-        openIncome();
-        break;
-      case 'patterns':
-        go('insights');
-        break;
-      case 'pace':
-        setSetupMode('edit');
-        setSetupStep(2);
-        setSheet('setup');
-        break;
-    }
-  };
-
-  const demoGuide = demo && showDemoGuide ? (
-    <DemoGuide
-      progress={demoProgress}
-      onStep={handleDemoStep}
-      onDismiss={() => setShowDemoGuide(false)}
-      onExit={() => {
-        onSignOut();
-        navigate({ kind: 'signup' });
-      }}
-      onPatterns={() => go('insights')}
-    />
-  ) : null;
-
   return (
     <>
       <AppShell
@@ -531,7 +415,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         onSwitch={(account) => onSwitch({ account, household: session.household, demo: session.demo })}
         onEditBalances={() => navigate({ kind: 'app', section: 'settings', tab: 'balances' })}
         onToggleTheme={toggleTheme}
-        onOpenGuide={demo ? () => setShowDemoGuide(true) : undefined}
+        onOpenGuide={demo ? () => tourRef.current?.start() : undefined}
         sidebarToggleRef={sidebarToggle}
       >
         {error && !data ? <ErrorNotice message={error} onRetry={() => void reload()} /> : null}
@@ -559,7 +443,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
                 me={me}
                 name={session.user?.displayName}
                 data={data}
-                guide={demoGuide}
                 actions={{
                   logSpend: openLog,
                   logIncome: openIncome,
@@ -583,8 +466,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
                 onLog={() => openLog()}
                 onSetup={(step) => { setSetupMode('edit'); setSetupStep(step ?? 0); setSheet('setup'); }}
                 onAsk={() => ask('What stands out about my spending this month?')}
-                demo={demo}
-                onDemoHome={demo ? () => { go('overview'); setShowDemoGuide(true); } : undefined}
               />
             ) : null}
             {viewSection === 'ask' ? <AskTab accountId={me.id} boot={boot} seed={askSeed} onSeedUsed={() => setAskSeed(null)} /> : null}
@@ -625,8 +506,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         initialAmount={logPreset.amountMinor}
         onChanged={reload}
         walletRun={walletRun}
-        onSpent={() => markDemo('log')}
-        onIncome={() => markDemo('income')}
       />
       <SetupSheet
         open={sheet === 'setup'}
@@ -636,10 +515,8 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         mode={setupMode}
         initialStep={setupStep}
         suggestedCashMinor={parseMoney(data?.view.balance)}
-        onSaved={async (savedStep) => {
+        onSaved={async () => {
           await reload();
-          if (savedStep === 2) markDemo('pace');
-          else markDemo('baseline');
         }}
       />
       <ActivitySheet item={item} accountId={me.id} onClose={() => setItem(null)} onChanged={reload} />
@@ -650,6 +527,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         transactions={paletteTransactions}
       />
       <ShortcutSheet open={helpOpen} onClose={() => setHelpOpen(false)} />
+      {demo ? <TourRail ref={tourRef} /> : null}
     </>
   );
 }

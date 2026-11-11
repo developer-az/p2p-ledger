@@ -154,7 +154,8 @@ export interface AuthStore {
     lastUsedStep: number | null): Promise<boolean>;
   disableMfa(userId: string): Promise<void>;
   /** Remembers the newest accepted TOTP step so it cannot be replayed. */
-  recordMfaStep(userId: string, step: number): Promise<void>;
+  /** Claims a TOTP step: true only for the first caller to use a step newer than the last one. */
+  recordMfaStep(userId: string, step: number): Promise<boolean>;
   listRecoveryCodes(userId: string): Promise<StoredRecoveryCode[]>;
   /** Single use: returns false when the code was already spent. */
   useRecoveryCode(userId: string, id: string, now: Date): Promise<boolean>;
@@ -492,10 +493,12 @@ export class InMemoryAuthStore implements AuthStore {
     for (const [id, code] of this.recoveryCodes) if (code.userId === userId) this.recoveryCodes.delete(id);
   }
 
-  async recordMfaStep(userId: string, step: number): Promise<void> {
+  async recordMfaStep(userId: string, step: number): Promise<boolean> {
     const entry = this.mfa.get(userId);
-    if (!entry) return;
-    entry.lastUsedStep = Math.max(entry.lastUsedStep ?? 0, step);
+    if (!entry) return false;
+    if (entry.lastUsedStep != null && entry.lastUsedStep >= step) return false;
+    entry.lastUsedStep = step;
+    return true;
   }
 
   async listRecoveryCodes(userId: string): Promise<StoredRecoveryCode[]> {
@@ -1103,11 +1106,13 @@ export class PostgresAuthStore implements AuthStore {
     });
   }
 
-  async recordMfaStep(userId: string, step: number): Promise<void> {
-    await this.run((c) => c.query(
-      `update app_users set mfa_last_step = greatest(coalesce(mfa_last_step, 0), $2) where id = $1`,
+  async recordMfaStep(userId: string, step: number): Promise<boolean> {
+    const res = await this.run((c) => c.query(
+      `update app_users set mfa_last_step = $2
+        where id = $1 and (mfa_last_step is null or mfa_last_step < $2) returning id`,
       [userId, step],
     ));
+    return (res.rowCount ?? 0) === 1;
   }
 
   async listRecoveryCodes(userId: string): Promise<StoredRecoveryCode[]> {

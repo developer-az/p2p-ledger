@@ -1017,7 +1017,8 @@ export function createApp(deps: {
     let accepted = verdict.ok;
     let usedRecoveryCode = false;
     if (accepted) {
-      if (verdict.step != null) await auth.recordMfaStep(user.id, verdict.step);
+      // Only the request that claims this step wins; a concurrent duplicate is a replay.
+      if (verdict.step == null || !await auth.recordMfaStep(user.id, verdict.step)) accepted = false;
     } else {
       usedRecoveryCode = await consumeRecoveryCode(user.id, parsed.data.code, at);
       accepted = usedRecoveryCode;
@@ -1055,7 +1056,8 @@ export function createApp(deps: {
       { lastUsedStep: state.lastUsedStep });
     let accepted = verdict.ok;
     if (accepted) {
-      if (verdict.step != null) await auth.recordMfaStep(user.id, verdict.step);
+      // Only the request that claims this step wins; a concurrent duplicate is a replay.
+      if (verdict.step == null || !await auth.recordMfaStep(user.id, verdict.step)) accepted = false;
     } else {
       accepted = await consumeRecoveryCode(user.id, parsed.data.code, at);
     }
@@ -1131,7 +1133,8 @@ export function createApp(deps: {
           { lastUsedStep: state.lastUsedStep });
         accepted = verdict.ok;
         if (accepted) {
-          if (verdict.step != null) await auth.recordMfaStep(user.id, verdict.step);
+          // Only the request that claims this step wins; a concurrent duplicate is a replay.
+      if (verdict.step == null || !await auth.recordMfaStep(user.id, verdict.step)) accepted = false;
         } else {
           accepted = await consumeRecoveryCode(user.id, parsed.data.code, at);
         }

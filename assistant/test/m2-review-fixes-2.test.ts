@@ -414,3 +414,16 @@ describe.skipIf(!DATABASE_URL)('4. cached data keys notice a shred on another in
     }
   }, 30_000);
 });
+
+describe('TOTP step claims are single-use', () => {
+  it('lets exactly one of two concurrent claims of the same step win', async () => {
+    const store = new InMemoryAuthStore();
+    await store.insert({ id: 'u-claim', email: 'claim@example.com', passwordHash: 'x', displayName: 'C', accountId: 'acc-claim', ownerId: 'o-claim' });
+    await store.saveMfaPendingSecret('u-claim', 'pending-blob');
+    await store.enableMfa('u-claim', 'pending-blob', [], null);
+    const results = await Promise.all([store.recordMfaStep('u-claim', 100), store.recordMfaStep('u-claim', 100)]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(await store.recordMfaStep('u-claim', 99)).toBe(false);
+    expect(await store.recordMfaStep('u-claim', 101)).toBe(true);
+  });
+});

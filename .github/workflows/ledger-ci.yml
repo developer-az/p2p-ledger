@@ -97,7 +97,7 @@ jobs:
           scripts/smoke.sh http://localhost:8080 || { cat app.log; exit 1; }
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

@@ -5,7 +5,7 @@
 - Acceptance tests written by the orchestrator first and frozen by hash: demo-cross-instance, patterns-state, boot-steps, boot-progress, durable-rate-limit. None were modified by the coder.
 - Evidence: tsc exit 0; full vitest 58 files passed / 1 skipped, 434 tests passed / 1 skipped (baseline 407/1); Maven baseline exit 0. Browser (verify-settle, practice mode): Patterns renders charts for the sample household at 390/1024, light and dark, no console errors, no horizontal scroll; loader steps present in the ARIA snapshot. Evidence in .verify/evidence/20261110-185928. A real cold-start loader screenshot still needs a deployed preview.
 - Coder runs (Pi, sandboxed, isoquant/deepseek-v4.1-flash-1017-fast, high): 0.1 22s done; 0.2 38s done; 0.3a 25s done; 0.3b 210s done; 0.4 94s done (it also edited HANDOFF.md outside its allowlist; reverted).
-- Codex review (full, high): VERDICT FAIL with 1 high (per-instance fallback in rate-limit-store) and 1 medium (no onFallback wired). Both verified and dismissed as documented trade-offs (PLAN.md 0.3/0.4, DO-NOT-FLAG). A delta re-review of the dismissals is pending.
+- Codex review (full, high): VERDICT FAIL with 1 high (per-instance fallback in rate-limit-store) and 1 medium (no onFallback wired). Both verified and dismissed as documented trade-offs (PLAN.md 0.3/0.4, DO-NOT-FLAG). Delta re-review (medium effort): VERDICT PASS. It upheld the rate-limit dismissal; the onFallback finding is still valid as medium (bootstrap waits on readiness with no fetch timeout, so the signed-out preloader can stall). Open follow-up on PR #32.
 - Lint: no lint script exists in assistant/; strict tsc used instead.
 
 ## Session: Settle v2 rescope plan (2026-11-10)

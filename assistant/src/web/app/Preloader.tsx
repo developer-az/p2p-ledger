@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Mascot } from './Mascot.js';
+import { useBootProgress } from './boot-progress.js';
+import { LoadingSteps } from './LoadingSteps.js';
 
 export function AppPreloader({ visible }: { visible: boolean }) {
+  const { state, now } = useBootProgress();
   const [mounted, setMounted] = useState(visible);
   const [exiting, setExiting] = useState(false);
 
@@ -20,12 +22,10 @@ export function AppPreloader({ visible }: { visible: boolean }) {
   if (!mounted) return null;
 
   return (
-    <div className={`app-preloader${exiting ? ' is-out' : ''}`} role="status" aria-live="polite" aria-label="Loading Settle">
+    <div className={`app-preloader${exiting ? ' is-out' : ''}`}>
       <div className="app-preloader-inner">
-        <Mascot size={96} track={false} mood="happy" />
-        <p className="app-preloader-copy">settle</p>
-        <p className="app-preloader-sub">Getting your ledger ready…</p>
-        <div className="app-preloader-bar" aria-hidden="true"><i /></div>
+        <p className="app-preloader-copy">Settle</p>
+        <LoadingSteps state={state} now={now} />
       </div>
     </div>
   );

@@ -4,7 +4,7 @@ import { money } from './format.js';
 import { milestones, nextMilestone } from './milestones.js';
 import { moneyPlan, moneyStory, monthsToClear } from './money-plan.js';
 import { CategoryMoversChart, DailyTrendChart, MonthPaceChart } from './pattern-charts.js';
-import { buildActions, habitPeak } from './pattern-insights.js';
+import { buildActions, habitPeak, patternsState } from './pattern-insights.js';
 import { Icon, ProgressRing, Skeleton } from './ui.js';
 import type { WalletData } from './data.js';
 
@@ -35,7 +35,7 @@ export function InsightsTab({
   const stories = moneyStory(plan);
   const badges = milestones(plan, data.view.summary);
   const next = nextMilestone(badges);
-  const hasLogs = (patterns?.categories.length ?? 0) > 0;
+  const state = patternsState(data.view);
   const selected = patterns?.days.find((d) => d.date === selectedDay) ?? null;
   const peak = patterns ? habitPeak(patterns) : null;
   const heatMax = Math.max(0, ...(patterns?.days ?? []).map((d) => d.spendMinor));
@@ -59,13 +59,24 @@ export function InsightsTab({
         </div>
       </header>
 
-      {!hasLogs ? (
+      {state.kind === 'none' ? (
         <section className="card empty-patterns">
           <div className="empty-illustration" aria-hidden="true">
             <span>☕</span><span>🚌</span><span>🛒</span>
           </div>
           <h2>Your first pattern is one log away.</h2>
           <p className="muted">Log a coffee, a bus ride, a grocery run. After a few days, this page starts to look like you.</p>
+          <div className="row-wrap" style={{ justifyContent: 'center', marginTop: 16 }}>
+            <button type="button" className="btn btn-primary" onClick={onLog}>Log a spend</button>
+            <button type="button" className="btn" onClick={() => onSetup(0)}>Set your baseline</button>
+          </div>
+        </section>
+      ) : state.kind === 'stale' ? (
+        <section className="card empty-patterns">
+          <h2>Nothing logged in the last 30 days.</h2>
+          <p className="muted">
+            Your last log was {new Date(state.lastLoggedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. Log a spend to bring this page up to date.
+          </p>
           <div className="row-wrap" style={{ justifyContent: 'center', marginTop: 16 }}>
             <button type="button" className="btn btn-primary" onClick={onLog}>Log a spend</button>
             <button type="button" className="btn" onClick={() => onSetup(0)}>Set your baseline</button>

@@ -442,6 +442,35 @@ export const wakeTiming = {
   sleep: (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms); }),
 };
 
+export interface WakeRetryEvent {
+  path: string;
+  /** 1 for the first retry after the initial request. */
+  attempt: number;
+}
+
+type WakeRetryListener = (event: WakeRetryEvent) => void;
+
+const wakeRetryListeners = new Set<WakeRetryListener>();
+
+/** Listen for each retry of a waking-ledger response. Returns an unsubscribe. */
+export function onWakeRetry(listener: WakeRetryListener): () => void {
+  wakeRetryListeners.add(listener);
+  return () => {
+    wakeRetryListeners.delete(listener);
+  };
+}
+
+/** A UI listener is a bystander: if it throws, the request still goes on. */
+function notifyWakeRetry(path: string, attempt: number): void {
+  for (const listener of [...wakeRetryListeners]) {
+    try {
+      listener({ path, attempt });
+    } catch {
+      /* ignored on purpose */
+    }
+  }
+}
+
 /** Parse "$12.50" or "12.5" into minor units. */
 export function dollarsToMinor(input: string): number | null {
   const cleaned = input.trim().replace(/[$,\s]/g, '');
@@ -479,6 +508,7 @@ export async function call<T>(path: string, init?: RequestInit): Promise<T> {
     const waking = res.status === 503 && /waking up/i.test(body.error ?? '') && retrySafe;
     const delay = delays[attempt];
     if (waking && delay !== undefined && !init?.signal?.aborted) {
+      notifyWakeRetry(path, attempt + 1);
       await wakeTiming.sleep(delay);
       continue;
     }
@@ -501,7 +531,8 @@ export interface StoppedPayment {
 
 export const api = {
   /** Fires the ledger awake. Fire-and-forget: a cold start is not an error. */
-  wake: () => call<{ awake: boolean }>('/api/wake').catch(() => ({ awake: false })),
+  wake: () => call<{ awake: boolean; configured?: boolean }>('/api/wake')
+    .catch((): { awake: boolean; configured?: boolean } => ({ awake: false })),
   /** Pass the caller's signal through so a cancelled readiness probe stops its fetch. */
   bootstrap: (opts?: { signal?: AbortSignal }) =>
     call<BootstrapResponse>('/api/bootstrap', opts?.signal ? { signal: opts.signal } : undefined),

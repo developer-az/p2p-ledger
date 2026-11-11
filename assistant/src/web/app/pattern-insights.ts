@@ -1,4 +1,5 @@
 import type {
+  AccountView,
   PatternCategory,
   PatternDay,
   PatternWeekday,
@@ -7,6 +8,29 @@ import type {
 } from '../api.js';
 import { money } from './format.js';
 import { categoryLabel } from './categories.js';
+
+export type PatternsState =
+  | { kind: 'none' }
+  | { kind: 'stale'; lastLoggedAt: string }
+  | { kind: 'ready' };
+
+/** Whether the patterns page has 30-day data, only older logs, or no logs at all. */
+export function patternsState(view: Pick<AccountView, 'spendEntries' | 'patterns'>): PatternsState {
+  if ((view.patterns?.categories.length ?? 0) > 0) return { kind: 'ready' };
+
+  let latest: string | null = null;
+  let latestTime = Number.NEGATIVE_INFINITY;
+  for (const entry of view.spendEntries ?? []) {
+    const time = Date.parse(entry.occurredAt);
+    const comparable = Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
+    if (latest === null || comparable > latestTime) {
+      latest = entry.occurredAt;
+      latestTime = comparable;
+    }
+  }
+
+  return latest === null ? { kind: 'none' } : { kind: 'stale', lastLoggedAt: latest };
+}
 
 export interface MonthCumulativePoint {
   day: number;

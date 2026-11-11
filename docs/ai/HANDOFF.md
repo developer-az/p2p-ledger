@@ -1,5 +1,18 @@
 # Engineering Handoff (latest)
 
+## Session: M0 stabilize (2026-11-10), branch feat/v2-m0-stabilize
+- 0.1 demo seeds lazily on every read path for the 3 practice ids (fixes "Patterns says log something" on cold Vercel instances). 0.2 `patternsState` none/stale/ready. 0.3 `boot-steps.ts` reducer + `boot-progress.ts` store + `LoadingSteps.tsx`; preloader and signed-in wallet loading show named steps with elapsed time and wake-retry attempts (`onWakeRetry` in api.ts). 0.4 `rate-limit-store.ts`: weighted sliding window over a shared store (Postgres `app_rate_limits`, sha256 bucket keys) with local fallback.
+- Acceptance tests written by the orchestrator first and frozen by hash: demo-cross-instance, patterns-state, boot-steps, boot-progress, durable-rate-limit. None were modified by the coder.
+- Evidence: tsc exit 0; full vitest 58 files passed / 1 skipped, 434 tests passed / 1 skipped (baseline 407/1); Maven baseline exit 0. Browser (verify-settle, practice mode): Patterns renders charts for the sample household at 390/1024, light and dark, no console errors, no horizontal scroll; loader steps present in the ARIA snapshot. Evidence in .verify/evidence/20261110-185928. A real cold-start loader screenshot still needs a deployed preview.
+- Coder runs (Pi, sandboxed, isoquant/deepseek-v4.1-flash-1017-fast, high): 0.1 22s done; 0.2 38s done; 0.3a 25s done; 0.3b 210s done; 0.4 94s done (it also edited HANDOFF.md outside its allowlist; reverted).
+- Codex review (full, high): VERDICT FAIL with 1 high (per-instance fallback in rate-limit-store) and 1 medium (no onFallback wired). Both verified and dismissed as documented trade-offs (PLAN.md 0.3/0.4, DO-NOT-FLAG). Delta re-review (medium effort): VERDICT PASS. It upheld the rate-limit dismissal; the onFallback finding is still valid as medium (bootstrap waits on readiness with no fetch timeout, so the signed-out preloader can stall). Open follow-up on PR #32.
+- Lint: no lint script exists in assistant/; strict tsc used instead.
+
+## Session: Settle v2 rescope plan (2026-11-10)
+- Wrote a new PLAN.md (replaces the theme/Patterns plan; its step 5 proof is carried into M0 as 0.5). Rescope: a self-hosted transaction intelligence platform (statement ingestion pipeline, merchant resolution + private logo proxy, SubscriptionRadar port, anomaly reason codes, Monte Carlo cash-flow forecast, MFA/RLS/envelope encryption/crypto-shredding, Notion-style keyboard-first UI, consumer P2P and play money removed). 10 milestones, one PR each.
+- Root cause of the "Patterns says log something" demo report: `POST /demo/practice` seeds in-memory stores on one Vercel instance; a later GET on a cold instance sees no logs. Fix is step 0.1 (lazy deterministic seeding on read). `rate-limit.ts` has the same per-instance flaw (step 0.4).
+- No code changed and no coder runs. Pending user decisions are listed at the bottom of PLAN.md (worker language, cloud split, bank sync, gamification, operator legal name).
+
 ## Session: theme toggle (step 1) + pattern insight maths (step 2), coder sandboxed (2026-11-09)
 - Step 1 (theme toggle): `theme.ts` + `test/theme.test.ts` (Pi), dark CSS blocks also keyed on `data-theme` (Pi), top-bar `.theme-toggle` button and pre-paint `public/theme-init.js` (Codex, escalated after two Pi hangs). The pre-paint script is a same-origin file because the CSP is `script-src 'self'`.
 - Step 2 (insight maths): `src/web/app/pattern-insights.ts` (`cumulativeMonth`, `rollingAverage`, `categoryMovers`, `peakWeekday`, `buildActions`). Tests were written first by Pi in a separate brief (2a) and frozen by hash. The implementation (2b) passed them without touching them.

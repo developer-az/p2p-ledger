@@ -83,6 +83,8 @@ export interface PersonalFinanceStore {
   startNewPeriod(accountId: string, currency: string, now?: Date): Promise<MoneyProfile>;
   recordIncome(accountId: string, input: RecordIncomeInput, now?: Date): Promise<IncomeLogEntry>;
   listIncome(accountId: string, opts?: { since?: Date; limit?: number }): Promise<IncomeLogEntry[]>;
+  /** Account deletion: removes the profile and every income row for this account. */
+  deleteAll(accountId: string): Promise<void>;
 }
 
 function periodLabelFor(d: Date): string {
@@ -253,6 +255,11 @@ export class InMemoryPersonalFinanceStore implements PersonalFinanceStore {
       .filter((e) => e.accountId === accountId && (since === undefined || Date.parse(e.occurredAt) >= since))
       .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
       .slice(0, limit);
+  }
+
+  async deleteAll(accountId: string): Promise<void> {
+    this.profiles.delete(accountId);
+    this.incomes = this.incomes.filter((entry) => entry.accountId !== accountId);
   }
 }
 
@@ -488,6 +495,19 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
           occurredAt: new Date(String(row.occurred_at)).toISOString(),
           createdAt: new Date(String(row.created_at)).toISOString(),
         }));
+      });
+    } finally {
+      await c.end();
+    }
+  }
+
+  async deleteAll(accountId: string): Promise<void> {
+    const c = await this.client();
+    try {
+      await this.ensureSchema(c);
+      await withUser(c, accountId, async () => {
+        await c.query(`delete from income_logs where account_id = $1`, [accountId]);
+        await c.query(`delete from money_profiles where account_id = $1`, [accountId]);
       });
     } finally {
       await c.end();

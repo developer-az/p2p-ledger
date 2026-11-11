@@ -43,6 +43,12 @@ export interface SpendLogStore {
   list(accountId: string, opts?: { since?: Date; limit?: number }): Promise<SpendLogEntry[]>;
   /** Remove one manual log. Returns false when it was already gone. */
   remove(accountId: string, spendId: string): Promise<boolean>;
+  /**
+   * Account deletion: removes every spend log for this account. Optional because
+   * the live Java ledger owns its own spend logs and keeps the append-only
+   * financial history; only the TS-backed stores can purge here.
+   */
+  deleteAll?(accountId: string): Promise<void>;
 }
 
 export interface CategoryTotal {
@@ -269,6 +275,12 @@ export class InMemorySpendLogStore implements SpendLogStore {
     if (index === -1) return false;
     this.events.splice(index, 1);
     return true;
+  }
+
+  async deleteAll(accountId: string): Promise<void> {
+    for (let index = this.events.length - 1; index >= 0; index--) {
+      if (this.events[index]!.accountId === accountId) this.events.splice(index, 1);
+    }
   }
 }
 

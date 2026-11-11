@@ -136,6 +136,11 @@ export interface AuthStore {
   appendAudit(event: AuditInput): Promise<void>;
   /** Newest first. Defaults to the fifty most recent events. */
   listAudit(userId: string, limit?: number): Promise<AuditEvent[]>;
+  /**
+   * Erases the identity and its security state for account deletion.
+   * Callers append the account_deleted audit event first; this removes it too.
+   */
+  deleteUser(userId: string): Promise<void>;
 }
 
 export const RESET_TOKEN_TTL_SEC = 30 * 60;
@@ -506,6 +511,20 @@ export class InMemoryAuthStore implements AuthStore {
         ...(event.detail ? { detail: { ...event.detail } } : {}),
       }));
   }
+
+  async deleteUser(userId: string): Promise<void> {
+    this.mfa.delete(userId);
+    for (const [id, code] of this.recoveryCodes) if (code.userId === userId) this.recoveryCodes.delete(id);
+    for (const [hash, session] of this.sessions) if (session.userId === userId) this.sessions.delete(hash);
+    for (const [hash, reset] of this.resets) if (reset.userId === userId) this.resets.delete(hash);
+    for (const [subject, id] of this.googleSubjects) if (id === userId) this.googleSubjects.delete(subject);
+    for (let index = this.audit.length - 1; index >= 0; index--) {
+      if (this.audit[index]!.userId === userId) this.audit.splice(index, 1);
+    }
+    const user = this.byId.get(userId);
+    if (user) this.byEmail.delete(user.email);
+    this.byId.delete(userId);
+  }
 }
 
 const AUTH_SCHEMA = `
@@ -568,11 +587,11 @@ alter table app_sessions add column if not exists step_up_until timestamptz;
 `;
 
 /**
- * Security audit log. Writes only: the trigger rejects UPDATE and DELETE with
- * the same wording as the ledger's append-only guard. There is intentionally no
- * foreign key to app_users; step 2.7 account deletion will remove a user's audit
- * rows explicitly as part of its retention policy (a cascade would fight the
- * trigger).
+ * Security audit log. Append-only: the trigger always rejects UPDATE and
+ * rejects DELETE unless the transaction has set settle.allow_audit_purge='on'
+ * (used only by account deletion). There is intentionally no foreign key to
+ * app_users; deletion removes a user's audit rows explicitly as part of its
+ * retention policy (a cascade would fight the trigger).
  */
 export const AUDIT_DDL = `
 create table if not exists app_audit_log (
@@ -590,6 +609,12 @@ create or replace function reject_audit_mutation() returns trigger
     language plpgsql as
 $$
 begin
+    -- UPDATE is always refused. Account deletion may purge one user's rows in
+    -- its own transaction, but only after setting this narrowly scoped flag.
+    if tg_op = 'DELETE'
+       and coalesce(current_setting('settle.allow_audit_purge', true), '') = 'on' then
+        return old;
+    end if;
     raise exception 'app_audit_log is append-only';
 end
 $$;
@@ -1028,6 +1053,26 @@ export class PostgresAuthStore implements AuthStore {
         detail: (typeof row.detail === 'string' ? JSON.parse(row.detail) : row.detail) as Record<string, string | number | boolean>,
       }),
     }));
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    await this.run(async (c) => {
+      await c.query('begin');
+      try {
+        // The audit trigger refuses DELETE unless this transaction-local flag is on.
+        await c.query(`set local settle.allow_audit_purge = 'on'`);
+        await c.query('delete from app_recovery_codes where user_id = $1', [userId]);
+        await c.query('delete from app_sessions where user_id = $1', [userId]);
+        await c.query('delete from app_password_resets where user_id = $1', [userId]);
+        await c.query('delete from app_google_identities where user_id = $1', [userId]);
+        await c.query('delete from app_audit_log where user_id = $1', [userId]);
+        await c.query('delete from app_users where id = $1', [userId]);
+        await c.query('commit');
+      } catch (error) {
+        await c.query('rollback');
+        throw error;
+      }
+    });
   }
 }
 

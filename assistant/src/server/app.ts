@@ -46,6 +46,8 @@ import { MAX_MINOR_UI } from './money.js';
 import { LlmGuard, trimHistory } from './llm-guard.js';
 import { API_HEADERS, securityHeaders } from './security-headers.js';
 import { createMailer, passwordResetEmail, type Mailer } from './mailer.js';
+import { requireStepUp } from './step-up.js';
+import { buildCsvExport } from './data-export.js';
 import { isBreachedPassword } from './breached-password.js';
 import { LoginThrottle } from './login-throttle.js';
 import { retryAfterSeconds } from './rate-limit.js';
@@ -108,6 +110,7 @@ const stepUpBody = z.object({
   code: z.string().trim().min(1).max(64).optional(),
   password: z.string().min(1).max(72).optional(),
 });
+const deleteAccountBody = z.object({ confirm: z.literal('DELETE') });
 
 const depositBody = z.object({ amountMinor: z.number().int().positive().max(MAX_MINOR_UI) });
 const transferBody = z.object({
@@ -645,6 +648,115 @@ export function createApp(deps: {
         device: event.device,
       })),
     });
+  });
+
+  /**
+   * Data-rights export: the stores' own rows for this user, nothing else.
+   * The Java ledger account is intentionally absent — it is append-only
+   * financial history and remains after the identity is deleted.
+   */
+  app.get('/account/export', async (c) => {
+    const user = await sessionUser(c);
+    if (!user) return c.json({ error: 'Sign in first.' }, 401);
+    const denied = await requireStepUp(c, auth, now);
+    if (denied) return denied;
+    const requested = (c.req.query('format') ?? 'json').toLowerCase();
+    if (requested !== 'json' && requested !== 'csv') return c.json({ error: 'unsupported_format' }, 400);
+    const format = requested as 'json' | 'csv';
+
+    const [profile, income, spendLogs, sessions] = await Promise.all([
+      personalFinance.getProfile(user.accountId, 'USD', now()),
+      personalFinance.listIncome(user.accountId, { limit: 1000 }),
+      deps.spendLogs.list(user.accountId, { limit: 1000 }),
+      auth.listSessions(user.id),
+    ]);
+    const at = now();
+    await audit(c, user.id, 'export', { format, income: income.length, spendLogs: spendLogs.length });
+    const filename = `settle-export-${at.toISOString().slice(0, 10)}.${format}`;
+
+    if (format === 'csv') {
+      return new Response(buildCsvExport({ income, spendLogs }), {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+        },
+      });
+    }
+
+    const events = await auth.listAudit(user.id, 500);
+    const body = {
+      exportedAt: at.toISOString(),
+      user: { id: user.id, email: user.email, displayName: user.displayName },
+      profile: {
+        accountId: profile.accountId,
+        currency: profile.currency,
+        periodLabel: profile.periodLabel,
+        periodStart: profile.periodStart,
+        walletCashMinor: profile.walletCashMinor,
+        creditOwedMinor: profile.creditOwedMinor,
+        weeklyBudgetMinor: profile.weeklyBudgetMinor,
+        spendLogsAffectWallet: profile.spendLogsAffectWallet,
+        updatedAt: profile.updatedAt,
+      },
+      income: income.map((entry) => ({
+        id: entry.id,
+        amountMinor: entry.amountMinor,
+        currency: entry.currency,
+        source: entry.source,
+        note: entry.note,
+        occurredAt: entry.occurredAt,
+      })),
+      spendLogs: spendLogs.map((entry) => ({
+        id: entry.id,
+        amountMinor: entry.amountMinor,
+        currency: entry.currency,
+        category: entry.category,
+        source: entry.source,
+        note: entry.note,
+        occurredAt: entry.occurredAt,
+      })),
+      sessions: sessions.map((session) => ({
+        id: session.id,
+        createdAt: session.createdAt.toISOString(),
+        lastSeenAt: session.lastSeenAt.toISOString(),
+        device: session.device,
+        ipPrefix: session.ipPrefix,
+      })),
+      audit: events.map((event) => ({
+        id: event.id,
+        type: event.type,
+        at: event.at.toISOString(),
+        ipPrefix: event.ipPrefix,
+        device: event.device,
+      })),
+    };
+    return new Response(JSON.stringify(body), {
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      },
+    });
+  });
+
+  /**
+   * Account deletion. The ledger account itself survives: it is append-only
+   * financial history. Identity, sessions, MFA, personal-finance rows, spend
+   * logs, and the audit history are removed; account_deleted is written first.
+   */
+  app.delete('/account', async (c) => {
+    const user = await sessionUser(c);
+    if (!user) return c.json({ error: 'Sign in first.' }, 401);
+    const denied = await requireStepUp(c, auth, now);
+    if (denied) return denied;
+    const parsed = deleteAccountBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'confirm_required' }, 400);
+
+    await audit(c, user.id, 'account_deleted');
+    await personalFinance.deleteAll(user.accountId);
+    await deps.spendLogs.deleteAll?.(user.accountId);
+    await auth.deleteUser(user.id);
+    deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true, httpOnly: true, sameSite: 'Lax' });
+    return c.json({ deleted: true });
   });
 
   app.post('/auth/google/disconnect', async c => {

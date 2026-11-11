@@ -1,4 +1,4 @@
-/* Settle — "Sky": soft daylight, white glass surfaces, ink type and one volt accent
+/* Settle — "Sky": a printed star atlas, paper and ink surfaces, one volt accent
    (Settle's lime). /ops keeps its own look. */
 
 .app, .app-preloader {
@@ -37,10 +37,9 @@
   /* Shadows are tinted with the sky, so cards float rather than sit. */
   --shadow: 0 1px 2px rgb(40 70 120 / 5%), 0 10px 26px -14px rgb(40 70 120 / 18%);
   --shadow-lg: 0 34px 64px -22px rgb(30 55 100 / 32%), 0 10px 22px -10px rgb(30 55 100 / 14%);
-  --sky-top: #bcd9fb;
-  --sky-mid: #dcebfc;
-  --sky-low: #eef5fd;
-  --cloud: #ffffff;
+  --sky-top: #f6f5f1;
+  --sky-mid: #f3f2ee;
+  --sky-low: #efeee9;
   /* Evening sky: the one dark material, for the Settle card, toasts, the
      dock and the few panels that should stand out. */
   --dusk: radial-gradient(120% 90% at 100% 0%, rgb(200 245 59 / 13%), transparent 52%), radial-gradient(90% 70% at 0% 100%, rgb(120 160 255 / 22%), transparent 60%), linear-gradient(160deg, #22406f 0%, #172d55 50%, #0f1f40 100%);
@@ -63,10 +62,9 @@
     --surface: #131b2e;
     --surface-2: #19223a;
     --surface-3: #232d47;
-    --sky-top: #16224a;
-    --sky-mid: #101a36;
-    --sky-low: #0b1020;
-    --cloud: rgb(255 255 255 / 7%);
+    --sky-top: #0b1020;
+    --sky-mid: #080c18;
+    --sky-low: #05070d;
     --ink: #f2f1ec;
     --ink-2: #dedcd5;
     --muted: #a3a29b;
@@ -100,10 +98,9 @@
   --surface: #131b2e;
   --surface-2: #19223a;
   --surface-3: #232d47;
-  --sky-top: #16224a;
-  --sky-mid: #101a36;
-  --sky-low: #0b1020;
-  --cloud: rgb(255 255 255 / 7%);
+  --sky-top: #0b1020;
+  --sky-mid: #080c18;
+  --sky-low: #05070d;
   --ink: #f2f1ec;
   --ink-2: #dedcd5;
   --muted: #a3a29b;
@@ -173,8 +170,8 @@ html[data-theme="dark"]:has(.app), html[data-theme="dark"]:has(.app-preloader) {
 }
 .app {
   min-height: 100vh;
-  /* Daylight everywhere: SkyBackdrop draws a fixed sky with drifting
-     clouds behind every screen; this is the same sky as a fallback. */
+  /* Star atlas everywhere: SkyBackdrop draws a fixed night sky behind every
+     screen; this is the same sky as a fallback. */
   isolation: isolate;
   background: linear-gradient(180deg, var(--sky-top), var(--sky-mid) 45%, var(--sky-low)) fixed, var(--sky-low);
   color: var(--ink);
@@ -871,9 +868,9 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
   font-family: var(--font); font-size: 0.95rem;
   letter-spacing: normal; text-transform: none;
 }
-/* The white cloud floor stops at the top of the band, which read as a hard
-   cut. A 48px veil sits above the band and fades the floor into the ink, so it
-   adds no gap, no width and covers no footer content. */
+/* The sky stops at the top of the band, which read as a hard cut. A 48px veil
+   sits above the band and fades the sky into the ink, so it adds no gap, no
+   width and covers no footer content. */
 .app .site-footer-full::before {
   content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 48px;
   pointer-events: none;
@@ -1493,26 +1490,17 @@ button.item:hover .item-title { text-decoration: underline; text-underline-offse
    and the header's ink-on-light colours stay legible in a dark session too. */
 .app .welcome {
   --w-header-h: 76px;
-  background: linear-gradient(180deg, #bcd9fb 0 var(--w-header-h), transparent var(--w-header-h));
+  background: linear-gradient(180deg, #f6f5f1 0 var(--w-header-h), transparent var(--w-header-h));
 }
 .app .w-hero {
   position: relative; overflow: hidden; isolation: isolate;
   min-height: min(calc(100svh - var(--w-header-h)), 940px); display: flex; flex-direction: column;
-  /* Daytime: clear blue at the top, hazy toward the horizon, fading into the
-     page so the "how it works" section sits on the same light. The first
-     stop matches the sky the header rests on, so there is no seam at the top. */
-  background: linear-gradient(180deg, #bcd9fb 0%, #a9cef8 14%, #c2ddfa 48%, #dcebfc 100%);
+  /* Printed atlas paper: warm off-white with no blue cast, fading into the page
+     so the "how it works" section sits on the same paper. The first stop
+     matches the strip the header rests on, so there is no seam at the top. */
+  background: linear-gradient(180deg, #f6f5f1 0%, #f3f2ee 54%, #efeee9 100%);
   color: #111726;
 }
-.app .w-hero::after {
-  content: ""; position: absolute; z-index: -1; width: 640px; height: 640px; right: 2%; top: 4%;
-  border-radius: 50%; background: radial-gradient(circle, rgb(255 252 240 / 95%) 0 12%, rgb(255 244 220 / 45%) 35%, transparent 64%);
-}
-.app .w-clouds { z-index: -1; }
-.app .w-clouds .h1 { width: 220px; left: 4%; top: 18%; --t: 120s; --d: 80px; opacity: 0.8; }
-.app .w-clouds .h2 { width: 340px; left: 32%; top: 62%; --t: 90s; --d: 120px; }
-.app .w-clouds .h3 { width: 180px; right: 32%; top: 9%; --t: 150s; --d: 100px; opacity: 0.75; }
-.app .w-clouds .h4 { width: 420px; right: -6%; top: 58%; --t: 80s; --d: 70px; }
 /* The header rests as bare sky and becomes glass on scroll. Its colours are
    literal: it always sits on the light top of the page, never on night. */
 .app .w-header {
@@ -2018,75 +2006,24 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
 }
 
 
-/* ---------- Above the clouds: sign in and create account ---------- */
+/* ---------- Printed star atlas: sign in and create account ---------- */
 
 .app .sky {
   position: relative; isolation: isolate; overflow: hidden;
   min-height: max(100svh, 760px); display: grid; place-items: center;
   padding: clamp(80px, 12vh, 140px) 20px clamp(120px, 18vh, 200px);
-  /* A morning sky: deep blue overhead, pale at the horizon, warmed by a
-     blush of peach where the sun is. */
-  background:
-    radial-gradient(60% 46% at 72% 34%, rgb(255 236 210 / 70%), transparent 70%),
-    linear-gradient(180deg, rgb(220 235 252 / 0) 0%, #b9d8fb 22%, #cfe4fc 48%, #f6e9f1 76%, #fdf8f4 92%, #ffffff 100%);
+  /* The same tokens as the backdrop, so the sign-in scene is one sheet of
+     paper (or one night) with the rest of the page. */
+  background: linear-gradient(180deg, var(--sky-top), var(--sky-mid) 55%, var(--sky-low));
   color: #111726;
 }
-.app .sky-sun {
-  position: absolute; z-index: -3; left: 68%; top: 24%; width: 340px; height: 340px; border-radius: 50%;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(circle, #fffdf6 0 18%, rgb(255 246 222 / 85%) 30%, rgb(255 230 200 / 30%) 55%, transparent 70%);
-  animation: sky-sun 9s ease-in-out infinite alternate;
-}
-@keyframes sky-sun { to { transform: translate(-50%, -50%) scale(1.08); opacity: 0.9; } }
-
-/* Clouds: three depths. Far ones are small, pale and slow; near ones are
-   large, bright, fast, and form the floor the card floats above. Each cloud
-   drifts on its own clock, so the sky never repeats in step. */
-.app .sky-layer { position: absolute; inset: 0; pointer-events: none; }
-.app .sky-far { z-index: -2; opacity: 0.7; }
-.app .sky-mid { z-index: -1; opacity: 0.9; }
-.app .sky-near { z-index: 2; }
-.app .sky-cloud { position: absolute; display: block; height: auto; overflow: visible; will-change: transform; animation: sky-drift var(--t, 80s) linear infinite alternate; }
-.app .sky-cloud-a { fill: #ffffff; filter: drop-shadow(0 18px 22px rgb(120 150 200 / 22%)); }
-.app .sky-cloud-b { fill: #f4f8ff; }
-.app .sky-cloud-light { fill: none; stroke: rgb(255 255 255 / 90%); stroke-width: 3; stroke-linecap: round; }
-@keyframes sky-drift { from { transform: translateX(calc(var(--d, 60px) * -1)); } to { transform: translateX(var(--d, 60px)); } }
-.app .sky-far .c1 { width: 180px; left: 6%; top: 14%; --t: 140s; --d: 90px; }
-.app .sky-far .c2 { width: 140px; left: 44%; top: 8%; --t: 170s; --d: 120px; }
-.app .sky-far .c3 { width: 210px; right: 4%; top: 46%; --t: 150s; --d: 80px; }
-.app .sky-mid .c4 { width: 300px; left: -4%; top: 52%; --t: 90s; --d: 110px; }
-.app .sky-mid .c5 { width: 240px; right: 14%; top: 10%; --t: 110s; --d: 90px; }
-.app .sky-mid .c6 { width: 260px; left: 30%; bottom: 20%; --t: 100s; --d: 140px; }
-.app .sky-near .c7 { width: 520px; left: -8%; bottom: -70px; --t: 60s; --d: 70px; }
-.app .sky-near .c8 { width: 460px; left: 26%; bottom: -96px; --t: 70s; --d: 90px; }
-.app .sky-near .c9 { width: 560px; right: -10%; bottom: -80px; --t: 66s; --d: 60px; }
-.app .sky-near .c10 { width: 300px; right: 30%; bottom: -40px; --t: 54s; --d: 50px; }
-
-/* A few points of light, twinkling out of step. */
-.app .sky-twinkles { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
-.app .sky-twinkles i {
-  position: absolute; width: 4px; height: 4px; border-radius: 50%; background: #fff;
-  box-shadow: 0 0 10px 2px rgb(255 255 255 / 80%);
-  animation: sky-twinkle calc(2.6s + var(--i) * 0.37s) ease-in-out calc(var(--i) * -0.7s) infinite;
-}
-.app .sky-twinkles i:nth-child(1) { left: 9%; top: 22%; }
-.app .sky-twinkles i:nth-child(2) { left: 21%; top: 9%; }
-.app .sky-twinkles i:nth-child(3) { left: 34%; top: 30%; }
-.app .sky-twinkles i:nth-child(4) { left: 52%; top: 14%; }
-.app .sky-twinkles i:nth-child(5) { left: 63%; top: 41%; }
-.app .sky-twinkles i:nth-child(6) { left: 78%; top: 11%; }
-.app .sky-twinkles i:nth-child(7) { left: 88%; top: 33%; }
-.app .sky-twinkles i:nth-child(8) { left: 15%; top: 48%; }
-.app .sky-twinkles i:nth-child(9) { left: 93%; top: 58%; }
-@keyframes sky-twinkle { 0%, 100% { opacity: 0; transform: scale(0.4); } 50% { opacity: 0.95; transform: scale(1); } }
-
 .app .sky-stage { position: relative; z-index: 1; display: grid; grid-template-columns: auto minmax(0, 440px); align-items: center; gap: clamp(8px, 3vw, 40px); width: min(100%, 720px); }
 
-/* Settle rides its own little cloud, bobbing on a slow swell. */
+/* Settle bobs on a slow swell beside the card. The cloud it used to sit on is
+   gone; the mascot element stays for a later milestone. */
 .app .sky-mascot { align-self: end; margin-bottom: 40px; }
 .app .sky-mascot-float { position: relative; display: grid; justify-items: center; animation: sky-bob 5.5s ease-in-out infinite; }
-.app .sky-mascot-float .mascot { position: relative; z-index: 1; margin-bottom: -46px; }
-.app .sky-mascot-float .sky-mascot-cloud { position: relative; width: 190px; animation: none; }
+.app .sky-mascot-float .mascot { position: relative; z-index: 1; }
 @keyframes sky-bob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-14px) rotate(1.5deg); } }
 
 /* The card: thick frosted glass. backdrop-filter is fine here: this screen
@@ -2150,47 +2087,76 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
   .app .sky-stage { grid-template-columns: 1fr; justify-items: center; }
   .app .sky-mascot { margin: 0 0 -30px; }
   .app .sky-mascot .mascot { width: 92px; height: 92px; }
-  .app .sky-mascot-float .sky-mascot-cloud { width: 150px; }
   .app .sky-card { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .app .sky-cloud, .app .sky-mascot-float, .app .sky-sun, .app .sky-twinkles i, .app .sky-card { animation: none !important; }
+  .app .sky-mascot-float, .app .sky-card { animation: none !important; }
 }
 
 /* ---------- Shared sky behind every screen ---------- */
 .app .sky-backdrop {
   position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden;
-  background:
-    radial-gradient(40% 32% at 78% 8%, rgb(255 250 236 / 70%), transparent 70%),
-    linear-gradient(180deg, var(--sky-top), var(--sky-mid) 45%, var(--sky-low));
-}
-.app .sky-bd-far { opacity: 0.65; }
-.app .sky-bd-near { opacity: 0.9; }
-.app .sky-backdrop .sky-cloud-a, .app .sky-backdrop .sky-cloud-b { fill: var(--cloud); }
-.app .sky-bd-far .b1 { width: 200px; left: 4%; top: 12%; --t: 160s; --d: 120px; }
-.app .sky-bd-far .b2 { width: 160px; left: 48%; top: 6%; --t: 190s; --d: 140px; }
-.app .sky-bd-far .b3 { width: 220px; right: 6%; top: 34%; --t: 170s; --d: 100px; }
-.app .sky-bd-near .b4 { width: 360px; left: -6%; top: 58%; --t: 120s; --d: 140px; }
-.app .sky-bd-near .b5 { width: 300px; right: -4%; top: 72%; --t: 110s; --d: 110px; }
-.app .sky-bd-near .b6 { width: 280px; left: 38%; top: 86%; --t: 130s; --d: 160px; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .app .sky-backdrop {
-    background:
-      radial-gradient(1px 1px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 46% 9%, #fff, transparent),
-      radial-gradient(1.4px 1.4px at 80% 22%, #fff, transparent), radial-gradient(1px 1px at 66% 40%, #fff, transparent),
-      linear-gradient(180deg, var(--sky-top), var(--sky-mid) 45%, var(--sky-low));
-  }
-}
-:root[data-theme="dark"] .app .sky-backdrop {
-  background:
-    radial-gradient(1px 1px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 46% 9%, #fff, transparent),
-    radial-gradient(1.4px 1.4px at 80% 22%, #fff, transparent), radial-gradient(1px 1px at 66% 40%, #fff, transparent),
-    linear-gradient(180deg, var(--sky-top), var(--sky-mid) 45%, var(--sky-low));
+  background: linear-gradient(180deg, var(--sky-top), var(--sky-mid) 45%, var(--sky-low));
 }
 
-/* Cards are white cloud-glass over the sky: nearly opaque, with a lit top
-   edge. No backdrop-filter: the clouds behind them move, and a blurred card
-   would be redrawn on every frame. */
+/* ---------- Star atlas: one SVG for the backdrop and the auth scene ---------- */
+
+/* Paper ink in light, starlight in dark. The star field, constellation lines
+   and coordinate arcs all read from these, so one markup path serves both. */
+.app .star-sky {
+  position: absolute; inset: 0; z-index: 0; display: block; width: 100%; height: 100%;
+  pointer-events: none;
+  color: var(--star-ink);
+  --star-ink: #2f3648;
+  --star-line: #3d4557;
+  --star-grid: #4b5468;
+  --star-haze-a: #99a0af;
+  --star-haze-b: #8d96ab;
+  --star-haze-c: #a3a8b2;
+}
+.app .star-sky .star-haze-a { stop-color: var(--star-haze-a); }
+.app .star-sky .star-haze-b { stop-color: var(--star-haze-b); }
+.app .star-sky .star-haze-c { stop-color: var(--star-haze-c); }
+.app .star-graticule { fill: none; stroke: var(--star-grid); stroke-width: 0.06; opacity: 0.07; }
+.app .star-constellation {
+  opacity: 0.12; stroke: var(--star-line); stroke-width: 0.06;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.app .star-constellation path { fill: none; }
+.app .star-constellation circle { fill: var(--star-line); stroke: none; }
+.app .star-twinkle {
+  opacity: var(--star-base, 1);
+  animation: star-twinkle var(--star-dur, 5.5s) ease-in-out var(--star-delay, 0s) infinite;
+}
+@keyframes star-twinkle {
+  0%, 100% { opacity: var(--star-base, 1); }
+  50% { opacity: calc(var(--star-base, 1) * 0.35); }
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .app .star-sky {
+    --star-ink: #eef1f8;
+    --star-line: #b9c4dd;
+    --star-grid: #8e9dc0;
+    --star-haze-a: #3d4a72;
+    --star-haze-b: #33406b;
+    --star-haze-c: #45507a;
+  }
+}
+:root[data-theme="dark"] .app .star-sky {
+  --star-ink: #eef1f8;
+  --star-line: #b9c4dd;
+  --star-grid: #8e9dc0;
+  --star-haze-a: #3d4a72;
+  --star-haze-b: #33406b;
+  --star-haze-c: #45507a;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app .star-twinkle { animation: none; opacity: var(--star-base, 1); }
+}
+
+/* Cards are paper glass over the sky: nearly opaque, with a lit top edge. No
+   backdrop-filter: the star field is fine detail, and a blurred card would be
+   redrawn on every frame. */
 .app .card { background: linear-gradient(180deg, rgb(255 255 255 / 96%), rgb(255 255 255 / 90%)); border-color: rgb(255 255 255 / 90%); box-shadow: inset 0 1px 0 #fff, var(--shadow); }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .app .card { background: linear-gradient(180deg, rgb(27 38 64 / 94%), rgb(19 27 46 / 92%)); border-color: rgb(255 255 255 / 6%); box-shadow: var(--shadow); }
@@ -2199,7 +2165,6 @@ html.settle-smooth-scroll { scroll-behavior: smooth; }
 
 /* The #account anchor above the sign-in sky scrolls clear of the sticky header. */
 .app .sky-anchor { display: block; height: 0; scroll-margin-top: 88px; }
-@media (prefers-reduced-motion: reduce) { .app .sky-backdrop .sky-cloud { animation: none; } }
 
 /* Loading steps */
 

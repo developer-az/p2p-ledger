@@ -1,5 +1,12 @@
 # Engineering Handoff (latest)
 
+## Session: star-atlas sky replaces the clouds (2026-11-10), branch feat/v2-m0-stabilize
+- New `src/web/app/starfield.ts`: pure seeded geometry (mulberry32). `starField(seed, count)` returns stars in a 0-100 viewBox on 3 depth layers (far = small/dim, most common), up to ~12% marked to twinkle; `constellations(seed)` returns 2-3 point/edge sketches. New `StarSky.tsx` renders one decorative SVG (nebula haze gradients, faint graticule rings, constellations, stars) in `scene` or `backdrop` variants.
+- `AuthSky.tsx`: removed `Cloud`, sun, cloud layers and twinkles; the auth scene and `SkyBackdrop` now render `StarSky`. `Welcome.tsx` drops the hero cloud layer and the `Cloud` import. `app.css`: cloud rules removed, `.star-sky` tokens (light ink-on-paper, dark white-on-navy via both `prefers-color-scheme` and `data-theme="dark"`), twinkle keyframes, and a `prefers-reduced-motion` stop.
+- Tests: `test/starfield.test.ts` (5: determinism, bounds, layer ordering, restrained radii/twinkle share, constellation index validity).
+- Evidence: tsc exit 0; full vitest 59 files passed / 1 skipped, 439 tests passed / 1 skipped (previous 434/1); vite build OK. No browser check yet for this change.
+- Stray `nul` file at repo root (a League live-client polling report from 2026-11-09, made by a Windows `> nul` redirect in a Unix shell). It is unrelated to the project; delete it. Not committed.
+
 ## Session: M0 stabilize (2026-11-10), branch feat/v2-m0-stabilize
 - 0.1 demo seeds lazily on every read path for the 3 practice ids (fixes "Patterns says log something" on cold Vercel instances). 0.2 `patternsState` none/stale/ready. 0.3 `boot-steps.ts` reducer + `boot-progress.ts` store + `LoadingSteps.tsx`; preloader and signed-in wallet loading show named steps with elapsed time and wake-retry attempts (`onWakeRetry` in api.ts). 0.4 `rate-limit-store.ts`: weighted sliding window over a shared store (Postgres `app_rate_limits`, sha256 bucket keys) with local fallback.
 - Acceptance tests written by the orchestrator first and frozen by hash: demo-cross-instance, patterns-state, boot-steps, boot-progress, durable-rate-limit. None were modified by the coder.

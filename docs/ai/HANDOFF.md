@@ -1,5 +1,17 @@
 # Engineering Handoff (latest)
 
+## Session: M2 completion (2026-11-11), branch feat/v2-m2-security (PR #39)
+
+- CodeQL: recovery codes now use crypto.randomInt; HIBP SHA-1 alerts 1 and 2 dismissed as false positives (protocol requirement), with the user's approval.
+- Tab-switch lag fixed: router.navigate awaited two rAFs inside the view-transition update callback, where rendering is paused, so every switch hit the browser's DOM-update timeout. Now flushSync commits the route inside the callback; measured 85-150 ms to next paint, no TimeoutErrors.
+- Follow-ups done: atomic MFA enable; streamed export in 500-row pages with per-export cursors (Java spends route gained before/beforeId keyset params, SpendingServiceTest 10/10); login throttle and MFA challenges shared in Postgres (security-state.ts).
+- 2.5 envelope encryption (envelope.ts): per-user AES-256-GCM data keys in app_data_keys, wrapped by a local KEK (DATA_KEK/DATA_KEK_ID) or AWS KMS via hand-written SigV4 (only when KMS_KEY_ARN is set; no KMS key created, so no cost); blind index; `npm run keys:rotate`; crypto-shred on account delete; notes encrypted with plaintext read-through.
+- 2.2b passkeys (webauthn.ts, hand-written CBOR, attestation none, ES256/RS256): sign-in, second factor (UV), step-up; purpose-bound single-use challenges.
+- Reviews: Codex medium FAIL (2 high, 2 medium) -> fixed; delta FAIL (1 high: concurrent TOTP reuse) -> conditional step claim; delta PASS. Accepted medium: a cached data key can decrypt for up to 5 s after a shred on another instance.
+- Evidence: vitest 686 passed with SETTLE_TEST_DATABASE_URL (local postgres:17-alpine); tsc clean; bundle 242.5/536 kB.
+- Vercel env set: MFA_ENCRYPTION_KEY and DATABASE_CA_CERT (Supabase Root 2021 CA, chain verified with openssl, valid to 2031), Production + Preview. NOT set (blocked by the permission check): DATA_KEK and DATA_KEK_ID; production refuses to encrypt notes without them.
+- Still open: 2.8 BYO keys (plan puts it in M4), 2.10 legal pages (needs the operator's legal name), passkey flow not driven in a real browser (covered by tests with real P-256/RSA keys).
+
 ## Session: glass pass 2, M1 docs, M2 security core (2026-11-11), branches feat/v2-glass-2 (PR #37), feat/v2-m1-docs (PR #38), feat/v2-m2-security (stacked on #38)
 
 - Glass 2: tinted glass on every coloured element, contrast >= 4.5:1, p95 frame 16.8 ms. M1: PRODUCT.md, ADRs 0001-0004, THREAT-MODEL.md (the user approved by saying "continue").

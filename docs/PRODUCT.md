@@ -1,119 +1,137 @@
-# Product direction — Settle (consumer app) on a ledger-first core
+# Product — Settle
 
-**Settle** is the user-facing app (`/`): a calm money snapshot, two-tap spend logging, income, weekly pace, and patterns from your own history. The original terminal is the engineering console at `/ops`; P2P endpoints remain in the API for clients that need them.
+**Settle is open-source transaction intelligence you run yourself.** It runs the back
+office that banks, card issuers and expense tools already run — ingest messy
+statements, reconcile them, resolve merchants, classify, detect recurring charges and
+anomalies, forecast cash — for one household, on the owner's own keys, posting every
+transaction into a double-entry ledger that is the system of record.
 
-## The Settle experience (current)
+The point is not a prettier dashboard over an API. It is a data platform problem
+(messy inputs, idempotent pipelines, lineage, data quality) and a risk problem
+(reason codes, forecast bands), on data that is personal financial records, so
+encryption, tenancy isolation, audit and deletion are part of the product rather
+than a later hardening pass.
 
-| Surface | Job | Rules |
-|---------|-----|-------|
-| **Today** | Net position (cash − cards), what is left of the weekly pace, a habits-focused recent list, patterns peek | One glance; one next action |
-| **Activity** | Unified timeline of logged spends, income and ledger entries | Day totals; receipt on every ledger row; undo on a logged spend |
-| **Patterns** | Eight-week heatmap, 30-day categories, weekday rhythm, month projection, card-payoff planner, milestones | Only from what the person logged; never mixed with ledger totals |
-| **Ask** | Read-only questions about the wallet and habits | No money movement; tools scoped to one wallet |
-| **Wallet** | Edit cash/cards/weekly pace, logging stats, ledger balance, statement, trust lab | The ledger wallet and the personal snapshot stay separate |
+Anchor documents: [PLAN.md](../PLAN.md) for milestones, [ARCHITECTURE.md](ARCHITECTURE.md)
+for the ledger, [SECURITY.md](SECURITY.md) and [THREAT-MODEL.md](THREAT-MODEL.md) for
+controls, [DESIGN.md](DESIGN.md) for the interface, [adr/](adr/) for the decisions.
 
-**Onboarding** asks three numbers once — cash, card balance, a weekly pace — in a 30-second sheet. It is editable, skippable, and never a bank login. **Logging** is amount + category with recent-repeat chips and an undo toast. A daily streak, weekly ring, and small milestones give the habit a game-like rhythm without turning money into a slot machine.
+## Personas
 
-## Guided demo vs. personal wallet
+### The owner (operator)
 
-| | Guided demo | Personal wallet |
+One person who deploys Settle and puts their real statements into it.
+
+- Import a bank export without cleaning it up first, and know that a row was posted
+  once and only once.
+- Trust the numbers: a ledger that balances, statements that reconcile, no silent
+  drops.
+- Find recurring charges before they renew, and see cash risk to the next payday.
+- Keep the records on keys they control, and delete them for good when they choose.
+
+### The invited household member
+
+A partner or family member given access to the same household, not to an API.
+
+- Sign in and see the shared accounts without handing over a bank password.
+- Record and read transactions in plain language, on a phone.
+- Fix a merchant or category once and have the correction apply to later imports.
+- Understand a charge without asking the owner what it was.
+
+Invite codes and shared-household membership are not built yet; today a second
+person signs up for a separate account. Membership is planned with session work
+(M2) and enrichment (M4).
+
+### The recruiter evaluating the demo
+
+Someone reading the repository and clicking the demo to judge the engineering.
+
+- See the whole system in one pass: pipeline stages, ledger invariants, security
+  model, and which parts are real today.
+- Open the sample household from the landing page with no account and no card.
+- Check the claims against the code, the tests and the plan, and find measured
+  numbers rather than adjectives.
+
+## Surfaces
+
+| Surface | Route | What it is |
 |---|---|---|
-| Entry | **Preview a sample household** | **Create account** (email and password) |
-| Data | Seeded household + personal history for Anthony, Sam, Jordan | New ledger account, no spend logs, no demo household |
-| First money | Existing demo balances/transfers | **None — the account starts empty**; setup collects the owner's real cash, cards, and pace |
-| Guidance | Five-step card: baseline → log spend → log income → Patterns → weekly pace; **Demo** pill reopens it | Normal first-run setup; cash prefilled from the funded Settle wallet |
-| Isolation | `spend_logs`, `money_profiles` and progress keyed by demo account ids | Keyed by the new account id; demo data never enters it |
-| Persistence | Practice: memory; live: Postgres | Live: Postgres; practice: memory until restart |
+| Landing | `/` | Five numbered sections: statement, pipeline diagram, sample-household figures, security model, self-host. Every pipeline stage is tagged `Live`, `Partial · M#` or `Planned · M#`. |
+| Sign-in | `/signin`, `/signup` | Email and password, Google when enabled, password reset, `?authError` handling. The aside lists only true data-handling lines plus the planned ones, tagged. |
+| App shell | `/app/<section>` | Sidebar (Workspace, Money, Data, Settings), breadcrumbs, `⌘K` palette, `?` shortcut sheet, density and theme preferences. Every section is a URL. |
+| Overview | `/app/overview` | Balance snapshot, this month against the previous 30 days, top categories, recent transactions, one add-sheet. |
+| Transactions | `/app/transactions` | Dense list with date, merchant, category, amount, and filters. |
+| Insights | `/app/insights` | Charts computed from the account's own history: category mix, weekday rhythm, month projection. |
+| Ask | `/app/ask` | Read-only questions answered from the ledger and logs, with a deterministic answer when the model is unavailable or over budget. |
+| Settings | `/app/settings/<tab>` | Profile, Security, Data & privacy, Integrations, Categories & rules, Appearance, Balances & budget. Unbuilt rows carry their milestone tag. |
+| Engine console | `/ops` | Not a consumer surface: ledger explorer, integrity and tamper checks, idempotency replay, race tests. Kept because the ledger work is the product. |
 
-The demo is deliberately instructive: it has a believable history, a real declined payment, ledger entries, and a progress card that points at the feature each step proves. The personal wallet is deliberately clean: empty, no first peer, no demo story — the owner sets the starting point from their own numbers.
+Planned sections (`Imports`, `Subscriptions`, `Forecast`, `Alerts`, `Rules`,
+`Reports`) are routed and rendered by one shared empty state that names the
+milestone: `Planned · M3`, `M4`, `M5`, `M6`.
 
-What actually runs, with no pretence:
+## What works today
 
-- Payments, deposits, declines and balances are real double-entry ledger operations (Postgres, append-only, idempotent).
-- A payment request is a row in `payment_requests`. Paying it is one ledger transfer with key `request-<id>-<declinedAttempts>`, so a double click moves money once and a retry after a decline uses a fresh key.
-- Splitting a bill creates one request per friend; shares always sum to the total.
-- The consumer app no longer exposes send/split; those ledger capabilities remain available to `/ops` and API clients, while Settle stays focused on spending habits.
-- Dollars are still simulated. Sign-in is real: email, a scrypt password hash, and an httpOnly session cookie bound to one wallet. The sample household is not an account.
+- Email and password accounts, salted scrypt hashes, an httpOnly session cookie,
+  Google sign-in when configured.
+- Double-entry ledger in Java with an append-only entry table, a zero-sum
+  constraint, idempotency keys, fraud rules and an outbox. The tests assert that a
+  balance equals the sum of its entries under concurrent load.
+- Spend and income logging, weekly pace, patterns from logs, CSV spend import for
+  a connected account, statement download.
+- Practice mode: the sample household, in memory, no Java service required.
+- Security headers (HSTS, CSP, `frame-ancestors 'none'`), per-IP rate limits on
+  writes and LLM routes with a shared store, daily LLM budget and answer cache.
+- The staged cold-start loader, which reports which step is waiting on the free
+  tier.
 
-# Product direction — habits + ledger-first P2P
+## What is planned, by milestone
 
-## What we are building
+| Label used in the app | What it covers |
+|---|---|
+| `Planned · M2` | Two-factor sign-in, active sessions, audit log, profile edit, export all, delete account, retention settings. |
+| `Planned · M3` | Statement import (PDF/OFX/CSV with mapping), S3 → SQS → worker pipeline, dedupe, reconciliation, import progress, bank statement import, BYO API keys, bank connector. |
+| `Planned · M4` | Merchant resolution with confidence scores, category rules previewed before apply, server-side logos. |
+| `Planned · M5` | Subscriptions: cadence, next charge, price history, annual cost. |
+| `Planned · M6` | Forecast with P10–P90 band, anomaly alerts with reason codes, reports. |
+| `Planned · M8` | One-command self-host with your own keys, Terraform, SLOs, restore drill. |
 
-A **spending-habits** product on top of the existing ledger stack:
+"Partial" tags mean part of the stage is real: `Partial · M3` is the CSV log import
+that exists today, `Partial · M5` is the pattern detection that exists without
+subscription streams.
 
-| Layer | Role |
-|--------|------|
-| **User logs (`spend_logs`)** | What the user chooses to track — no bank link, no automatic feed |
-| **ledger-service** | Exact money: P2P transfers, deposits, fraud, double-entry |
-| **assistant `/api` + terminal** | BFF, habits UI in WATCH, CMD `log 15 groceries`, read-only LLM tools |
+## Non-goals
 
-Habit totals never mix with ledger transfers in one number — the copilot uses **`summarize_spending`** for logs and **`summarize_activity` / `peer_ledger`** for settle-ups.
+- Moving real money. The ledger moves simulated balances; no rail, no custody.
+- Investment advice, portfolio tracking, or a trading bot.
+- Public, open registration. Anyone who finds the deployment can create an account
+  today; invite-only access is planned with the session work (M2).
+- Storing full card or account numbers. Last four digits at most.
+- Client-side end-to-end encryption of live data, because dedupe, subscriptions and
+  forecasts must run on the server (see [ADR 0004](adr/0004-encryption-model.md)).
 
-## Architecture (production path)
+## Data-handling stance
 
-| Layer | Responsibility |
-|--------|----------------|
-| **ledger-service** | System of record: accounts, transfers, deposits, **ledger_entries**, fraud rules, idempotency, outbox |
-| **assistant `/api`** | Public BFF + terminal UI; **spend_logs** table when `LEDGER_DATABASE_URL` / `DATABASE_URL` is set |
-| **assistant UI** | Terminal: **HABITS** in WATCH, BLOTTER for ledger, AUDIT/MSG, CMD |
+Settle holds personal financial records, and the product is written on that basis.
 
-Practice mode mirrors ledger stories in-memory; **live mode** is PostgreSQL on Render. Habit logs persist in Postgres when the assistant has the same DB URL as the ledger (auto-migrated `spend_logs`).
-
-**P2P vs blockchain:** Counterparty payments are P2P; custody is centralized in Java/Postgres. See **[P2P-SOLIDITY-AND-SCALE.md](P2P-SOLIDITY-AND-SCALE.md)**.
-
-## Habits API (BFF)
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| `GET` | `/api/accounts?id=` | Account view includes `habits`, `patterns`, `finance` and `moneyProfile` |
-| `GET` | `/api/accounts/:id/habits` | Habits only |
-| `POST` | `/api/accounts/:id/spends` | Log spend `{ amountMinor, category, note? }` |
-| `DELETE` | `/api/accounts/:id/spends/:spendId` | Undo a manual spend log |
-| `PATCH` | `/api/accounts/:id/finance` | Cash, card balance, weekly pace, or whether new logs reduce cash |
-| `POST` | `/api/accounts/:id/incomes` | Log income `{ amountMinor, source, note? }` |
-
-`patterns` is derived server-side from the person's own logs: 56 daily buckets, 30-day vs previous-30-day categories, weekday averages, current/longest streak, calendar-week pace, month projection and biggest day. The client never has to reconstruct the story from a paginated feed.
-
-Categories: `dining`, `groceries`, `transport`, `entertainment`, `housing`, `shopping`, `health`, `other`.
-
-SQL migration: [`assistant/sql/V1__spend_logs.sql`](../assistant/sql/V1__spend_logs.sql) (also applied automatically by the BFF when using Postgres).
-
-## Welcome (pre-sign-in)
-
-- A single editorial hero with a product mock. Primary actions are **Create account** and **Sign in**. The sample household is a text link, not the front door.
-- Nav is How it works, Sign in, and Create account.
-- The mock is illustrative only; real numbers come from the account view after sign-in.
-
-## Live demo (today)
-
-1. **Seed live household** on sign-in → anthony-/sam-/jordan-* wallets with history and personal demo logs.
-2. **Create account** → email, password, and name. Opens a ledger wallet that **starts empty** (no opening deposit, no corridor), and keeps sample data out. Setup collects the owner's own cash, cards, and pace. Sign in returns the same wallet.
-3. **Practice mode** → full ledger without Java; created wallets live in memory until restart.
-4. **Log habits** → the two-tap sheet on Today, or `log 12 dining coffee` in the ops console.
-
-## Roadmap (showcase → production)
-
-1. **Contacts / owner search** — prefix query on `owner_id` in Java (today: exact match).
-2. **Transfer detail** — `GET /api/transfers/:id` in BFF + deep links from activity.
-3. **Statement pagination** — `before` cursor on entries (API already supports it).
-4. **Multi-currency** — funding accounts per currency in schema; UI currency picker.
-5. **OAuth** — email and password sessions are in place; a provider login is still later. Rate limits already apply per IP on writes.
-6. **Observability** — surface actuator health/metrics in an ops pane; outbox lag.
-7. **Habit spaces** — shared trips/roommates with optional ledger settle-up button.
-
-Run **`npm run smoke:api -- https://your-app.vercel.app`** after every deploy.
-
-## Gemini / Ask tab
-
-- Set **`GEMINI_API_KEY`** on Vercel (and locally in `.env.local`) for full LLM answers.
-- Bootstrap reports `chat.configured` — when false, Ask still works via **read-only tools** (habits + ledger).
-- **OpenRouter** — `LLM_PROVIDER=openrouter` with `OPENROUTER_API_KEY` (see [DEVELOPMENT.md](DEVELOPMENT.md)); Anthropic via `LLM_PROVIDER=anthropic`.
-
-## Why live “didn’t save”
-
-| Symptom | Cause |
-|---------|--------|
-| Refresh loses wallet | Practice mode or ledger was **offline** when you clicked create — account lived only in that server instance. |
-| Data gone after deploy | Practice is ephemeral; **live** wallets are UUIDs in PostgreSQL — use **saved wallets** or `?id=` in the URL. |
-| Habit logs missing on Vercel | Set **`LEDGER_DATABASE_URL`** (or `DATABASE_URL`) on the assistant so `spend_logs` uses Postgres; otherwise logs are in-memory per instance. |
-| Send failed | Live wallet paying a **practice** UUID (fixed) — use live seed or owner-id resolve. |
+- **Collected:** email, password hash, display name, the spend and income rows a
+  person logs or imports by CSV today, and statement rows once import ships (M3):
+  descriptors, amounts, dates, the user's own categories and notes.
+- **Never collected:** bank passwords, full card numbers, bank logins. The app asks
+  for a statement export, not a credential.
+- **Encryption in transit:** TLS with HSTS on every surface.
+- **Encryption at rest:** provider-managed today; application-level envelope
+  encryption with per-user keys, and crypto-shredding on delete, planned for M3
+  when the first sensitive imports exist ([ADR 0004](adr/0004-encryption-model.md)).
+- **Tenancy:** one account per user; Postgres row-level security is planned for M2.
+- **Third parties:** the LLM provider receives a cleaned merchant name and an
+  amount bucket, never raw descriptors or account data (M4). Merchant logos are
+  fetched server-side and cached same-origin, so the browser never tells a third
+  party which merchant it is looking at (M4). The subprocessor list ships with the
+  privacy page in M2.
+- **User rights:** statement download works today; full JSON and CSV export,
+  account deletion with step-up, retention settings and the 7-day grace period are
+  planned for M2, with crypto-shred following the envelope-encryption work.
+- **Claims:** everything the interface says about a control is either true in the
+  running build or tagged with the milestone that ships it. No planned control is
+  described as live.

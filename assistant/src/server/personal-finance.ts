@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { pgSsl } from './db-tls.js';
+import { pgConfig } from './db-tls.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
 import { formatMoney } from './money.js';
 import { RLS_DDL, withUser } from './rls.js';
@@ -296,7 +296,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
 
   private async client() {
     const { default: pg } = await import('pg');
-    const client = new pg.Client({ connectionString: this.connectionString, ssl: pgSsl(this.connectionString) });
+    const client = new pg.Client(pgConfig(this.connectionString));
     await client.connect();
     return client;
   }
@@ -468,7 +468,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
   }
 
   async listIncome(accountId: string, opts?: { since?: Date; limit?: number }): Promise<IncomeLogEntry[]> {
-    const limit = Math.min(opts?.limit ?? 100, 500);
+    const limit = opts?.limit ?? 100;
     const c = await this.client();
     try {
       await this.ensureSchema(c);

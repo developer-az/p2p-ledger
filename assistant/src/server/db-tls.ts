@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import type { ConnectionOptions } from 'node:tls';
+import type { ClientConfig } from 'pg';
 
 /** pg accepts `false` to disable TLS, or a tls.ConnectionOptions object to enable it. */
 export type PgSsl = false | ConnectionOptions;
@@ -11,14 +12,46 @@ const TLS_MODES = new Set(['require', 'verify-ca', 'verify-full']);
 
 let warnedInsecure = false;
 
+/** Decoded query parameter name from one `key=value` pair. */
+function queryKey(pair: string): string {
+  const raw = pair.split('=')[0] ?? '';
+  try {
+    return decodeURIComponent(raw.replace(/\+/g, ' ')).trim();
+  } catch {
+    return raw.trim();
+  }
+}
+
+/**
+ * Query parameters that pg itself consumes. `pg-connection-string` turns these
+ * into an `ssl` value that overrides the object we pass to `new pg.Client(...)`,
+ * so they are removed from the URL and handled by `pgSsl` instead.
+ */
+function isTlsParam(pair: string): boolean {
+  const key = queryKey(pair).toLowerCase();
+  return key.startsWith('ssl') || key === 'uselibpqcompat';
+}
+
+/** Removes the ssl* / uselibpqcompat query parameters, keeping every other byte intact. */
+export function stripTlsParams(connectionString: string): string {
+  const start = connectionString.indexOf('?');
+  if (start === -1) return connectionString;
+  const hashAt = connectionString.indexOf('#', start);
+  const query = connectionString.slice(start + 1, hashAt === -1 ? undefined : hashAt);
+  const hash = hashAt === -1 ? '' : connectionString.slice(hashAt);
+  const kept = query.split('&').filter((pair) => pair.length > 0 && !isTlsParam(pair));
+  const base = connectionString.slice(0, start);
+  return kept.length > 0 ? `${base}?${kept.join('&')}${hash}` : `${base}${hash}`;
+}
+
 /** Reads `sslmode` from the connection string query, ignoring look-alikes such as `application_name=ssl`. */
 function sslMode(connectionString: string): string | undefined {
   const start = connectionString.indexOf('?');
   if (start === -1) return undefined;
   const query = connectionString.slice(start + 1).split('#')[0] ?? '';
   for (const pair of query.split('&')) {
-    const [rawKey, rawValue = ''] = pair.split('=');
-    if (rawKey && rawKey.toLowerCase() === 'sslmode') {
+    if (queryKey(pair).toLowerCase() === 'sslmode') {
+      const rawValue = pair.slice(pair.indexOf('=') + 1);
       return decodeURIComponent(rawValue).trim().toLowerCase();
     }
   }
@@ -65,4 +98,17 @@ export function pgSsl(connectionString: string, env: Env = process.env): PgSsl {
   const options: ConnectionOptions = { rejectUnauthorized: !insecure };
   if (ca !== undefined) options.ca = ca;
   return options;
+}
+
+/**
+ * Client/pool options that keep TLS under this module's control.
+ *
+ * pg parses `sslmode`, `sslrootcert` and `uselibpqcompat` out of the connection
+ * string after our `ssl` object is merged, so those parameters silently replace
+ * the verification settings (for example `uselibpqcompat=true&sslmode=require`
+ * sets `rejectUnauthorized: false`). They are stripped from the URL; the TLS
+ * options come from `pgSsl`, which reads the original URL and the environment.
+ */
+export function pgConfig(connectionString: string, env: Env = process.env): ClientConfig {
+  return { connectionString: stripTlsParams(connectionString), ssl: pgSsl(connectionString, env) };
 }

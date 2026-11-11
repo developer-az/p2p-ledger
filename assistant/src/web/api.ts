@@ -384,8 +384,10 @@ export interface MfaChallenge {
 
 export type LoginResult = AuthResult | MfaChallenge;
 
-export function isMfaChallenge(result: LoginResult): result is MfaChallenge {
-  return 'mfaRequired' in result && result.mfaRequired === true;
+export function isMfaChallenge(result: unknown): result is MfaChallenge {
+  return typeof result === 'object' && result !== null
+    && (result as { mfaRequired?: unknown }).mfaRequired === true
+    && typeof (result as { challenge?: unknown }).challenge === 'string';
 }
 
 export interface AuthSessionRow {
@@ -634,7 +636,7 @@ export const api = {
   requestPasswordReset: (email: string) =>
     call<{ ok: boolean; message: string }>('/api/auth/password-reset/request', { method: 'POST', body: JSON.stringify({ email }) }),
   confirmPasswordReset: (token: string, password: string) =>
-    call<{ ok: boolean }>('/api/auth/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token, password }) }),
+    call<{ ok: true } | MfaChallenge>('/api/auth/password-reset/confirm', { method: 'POST', body: JSON.stringify({ token, password }) }),
   logout: () => call<{ ok: boolean }>('/api/auth/logout', { method: 'POST', body: '{}' }),
   mfaVerify: (challenge: string, code: string) =>
     call<{ ok: boolean }>('/api/auth/mfa/verify', { method: 'POST', body: JSON.stringify({ challenge, code }) }),

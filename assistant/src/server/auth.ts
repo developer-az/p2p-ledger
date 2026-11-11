@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { isIP } from 'node:net';
 import { promisify } from 'node:util';
-import { pgSsl } from './db-tls.js';
+import { pgConfig } from './db-tls.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
 
 const scrypt = promisify(scryptCb);
@@ -656,7 +656,7 @@ export class PostgresAuthStore implements AuthStore {
 
   private async client() {
     const { default: pg } = await import('pg');
-    const client = new pg.Client({ connectionString: this.connectionString, ssl: pgSsl(this.connectionString) });
+    const client = new pg.Client(pgConfig(this.connectionString));
     await client.connect();
     return client;
   }

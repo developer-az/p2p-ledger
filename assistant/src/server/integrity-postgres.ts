@@ -1,4 +1,4 @@
-import { pgSsl } from './db-tls.js';
+import { pgConfig } from './db-tls.js';
 import type { Integrity } from './ledger.js';
 
 /** Same DB as ledger-service (Supabase / Render JDBC). Optional on Vercel when Java audit route is old. */
@@ -13,7 +13,7 @@ type Row = Record<string, string | number | null>;
 export async function integrityFromPostgres(connectionString: string): Promise<Integrity | null> {
   try {
     const { default: pg } = await import('pg');
-    const client = new pg.Client({ connectionString, ssl: pgSsl(connectionString) });
+    const client = new pg.Client(pgConfig(connectionString));
     await client.connect();
     try {
       const entry = await one(client, `

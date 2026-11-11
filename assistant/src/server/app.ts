@@ -186,6 +186,13 @@ const MFA_CHALLENGE_TTL_MS = 5 * 60_000;
 const STEP_UP_MS = 10 * 60_000;
 
 /**
+ * Export row limit: effectively uncapped. The list stores return newest-first
+ * and only expose a lower-bound `since`, so older rows cannot be paged
+ * through that cursor; the export asks for every row in one call instead.
+ */
+const EXPORT_ROW_LIMIT = Number.MAX_SAFE_INTEGER;
+
+/**
  * Rate limiters are built once per app instance (see rate-limit-store.ts). The
  * chat limiter guards the paid LLM quota; the rest guard writes. All of them
  * are per client IP and backed by the shared store when one is supplied, so the
@@ -297,6 +304,13 @@ export function createApp(deps: {
   const threatNow = () => now().getTime();
   const accountThrottle = new LoginThrottle({ now: threatNow });
   const ipThrottle = new LoginThrottle({ now: threatNow, blockAfter: 20 });
+  /** Second-factor attempts are account-scoped: five failures cover verify, disable, and step-up. */
+  const mfaThrottle = new LoginThrottle({ now: threatNow });
+  /** 429 response shared by the second-factor routes. */
+  const tooManyMfaAttempts = (c: Context, retryAfterSec: number) => {
+    c.header('Retry-After', String(retryAfterSec));
+    return c.json({ error: 'too_many_attempts' }, 429);
+  };
   const breachedPassword = deps.breachedPassword
     ?? (process.env.VITEST ? async () => false : isBreachedPassword);
   const sessionUser = async (c: Context) => {
@@ -666,8 +680,8 @@ export function createApp(deps: {
 
     const [profile, income, spendLogs, sessions] = await Promise.all([
       personalFinance.getProfile(user.accountId, 'USD', now()),
-      personalFinance.listIncome(user.accountId, { limit: 1000 }),
-      deps.spendLogs.list(user.accountId, { limit: 1000 }),
+      personalFinance.listIncome(user.accountId, { limit: EXPORT_ROW_LIMIT }),
+      deps.spendLogs.list(user.accountId, { limit: EXPORT_ROW_LIMIT }),
       auth.listSessions(user.id),
     ]);
     const at = now();
@@ -794,6 +808,10 @@ export function createApp(deps: {
     const user = await sessionUser(c);
     if (!user) return c.json({ error: 'Sign in first.' }, 401);
     if (!mfaKey) return c.json({ error: 'mfa_unavailable' }, 503);
+    // Replacing an authenticator must go through disable, which proves possession
+    // of the current one; setup alone must never overwrite a live secret.
+    const state = await auth.getMfaState(user.id);
+    if (state.secret) return c.json({ error: 'mfa_already_enabled' }, 409);
     const secret = randomBytes(20);
     await auth.saveMfaPendingSecret(user.id, encryptSecret(secret, mfaKey));
     return c.json({ secret: base32Encode(secret), otpauthUri: otpauthUri(secret, user.email) });
@@ -803,9 +821,10 @@ export function createApp(deps: {
     const user = await sessionUser(c);
     if (!user) return c.json({ error: 'Sign in first.' }, 401);
     if (!mfaKey) return c.json({ error: 'mfa_unavailable' }, 503);
+    const state = await auth.getMfaState(user.id);
+    if (state.secret) return c.json({ error: 'mfa_already_enabled' }, 409);
     const parsed = mfaCodeBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'invalid_code' }, 400);
-    const state = await auth.getMfaState(user.id);
     if (!state.pendingSecret) return c.json({ error: 'invalid_code' }, 400);
     const secret = decryptSecret(state.pendingSecret, mfaKey);
     const verdict = verifyTotp(secret, parsed.data.code, now().getTime());
@@ -835,6 +854,9 @@ export function createApp(deps: {
       mfaChallenges.delete(parsed.data.challenge);
       return c.json({ error: 'invalid_code' }, 400);
     }
+    const throttleKey = 'mfa:' + user.id;
+    const throttle = mfaThrottle.check(throttleKey);
+    if (!throttle.allowed) return tooManyMfaAttempts(c, throttle.retryAfterSec);
     const secret = decryptSecret(state.secret, mfaKey);
     const verdict = verifyTotp(secret, parsed.data.code, at.getTime(),
       { lastUsedStep: state.lastUsedStep });
@@ -847,6 +869,7 @@ export function createApp(deps: {
       accepted = usedRecoveryCode;
     }
     if (accepted) {
+      mfaThrottle.succeed(throttleKey);
       mfaChallenges.delete(parsed.data.challenge);
       await issueSession(c, user.id);
       await audit(c, user.id, 'login');
@@ -854,7 +877,12 @@ export function createApp(deps: {
       return c.json({ ok: true });
     }
     pending.attempts += 1;
-    if (pending.attempts >= 5) mfaChallenges.delete(parsed.data.challenge);
+    if (pending.attempts >= 5) {
+      // One account-level failure per used-up challenge: a password holder gets
+      // five guesses per sign-in, and repeated sign-ins back off up to 15 minutes.
+      mfaThrottle.fail(throttleKey);
+      mfaChallenges.delete(parsed.data.challenge);
+    }
     return c.json({ error: 'invalid_code' }, 400);
   });
 
@@ -862,6 +890,9 @@ export function createApp(deps: {
     const user = await sessionUser(c);
     if (!user) return c.json({ error: 'Sign in first.' }, 401);
     if (!mfaKey) return c.json({ error: 'mfa_unavailable' }, 503);
+    const throttleKey = 'mfa:' + user.id;
+    const throttle = mfaThrottle.check(throttleKey);
+    if (!throttle.allowed) return tooManyMfaAttempts(c, throttle.retryAfterSec);
     const parsed = mfaCodeBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'invalid_code' }, 400);
     const state = await auth.getMfaState(user.id);
@@ -875,7 +906,11 @@ export function createApp(deps: {
     } else {
       accepted = await consumeRecoveryCode(user.id, parsed.data.code, at);
     }
-    if (!accepted) return c.json({ error: 'invalid_code' }, 400);
+    if (!accepted) {
+      mfaThrottle.fail(throttleKey);
+      return c.json({ error: 'invalid_code' }, 400);
+    }
+    mfaThrottle.succeed(throttleKey);
     await auth.disableMfa(user.id);
     await rotateSession(c, user.id);
     await audit(c, user.id, 'mfa_disabled');
@@ -888,6 +923,9 @@ export function createApp(deps: {
     if (!user) return c.json({ error: 'Sign in first.' }, 401);
     const parsed = stepUpBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'invalid_credentials' }, 400);
+    const throttleKey = 'mfa:' + user.id;
+    const throttle = mfaThrottle.check(throttleKey);
+    if (!throttle.allowed) return tooManyMfaAttempts(c, throttle.retryAfterSec);
     const at = now();
     const state = await auth.getMfaState(user.id);
     let accepted = false;
@@ -906,7 +944,11 @@ export function createApp(deps: {
     } else if (parsed.data.password) {
       accepted = await verifyPassword(parsed.data.password, user.passwordHash);
     }
-    if (!accepted) return c.json({ error: 'invalid_credentials' }, 400);
+    if (!accepted) {
+      mfaThrottle.fail(throttleKey);
+      return c.json({ error: 'invalid_credentials' }, 400);
+    }
+    mfaThrottle.succeed(throttleKey);
     const token = getCookie(c, SESSION_COOKIE);
     if (!token) return c.json({ error: 'Sign in first.' }, 401);
     const until = new Date(at.getTime() + STEP_UP_MS);
@@ -964,8 +1006,17 @@ export function createApp(deps: {
       return c.json({ error: 'breached_password' }, 400);
     const userId = await auth.completeReset(hashSessionToken(parsed.data.token), now(), await hashPassword(parsed.data.password));
     if (!userId) return c.json({ error: 'This reset link is invalid or has expired. Ask for a new one.' }, 400);
-    await issueSession(c, userId);
     await audit(c, userId, 'password_changed');
+    // A reset only proves the email inbox. When a second factor is enrolled, the
+    // reply matches a password sign-in so the TOTP (or recovery code) is still
+    // required before any session is issued.
+    const mfa = await auth.getMfaState(userId);
+    if (mfa.secret) {
+      const challenge = newMfaChallenge(userId);
+      await audit(c, userId, 'mfa_challenge');
+      return c.json({ mfaRequired: true, challenge });
+    }
+    await issueSession(c, userId);
     return c.json({ ok: true });
   });
 

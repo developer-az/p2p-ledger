@@ -280,12 +280,40 @@ const importPreviewBody = z.object({
   content: z.string().min(1).max(5_000_000),
 });
 
-/** Reject oversized bodies before Hono reads or parses them. */
-function importBodyTooLarge(c: Context): boolean {
-  const raw = c.req.header('content-length');
-  if (!raw) return false;
-  const bytes = Number(raw);
-  return Number.isFinite(bytes) && bytes > IMPORT_MAX_CHARS;
+/**
+ * Reject oversized bodies before parsing. Content-Length is only a hint: a
+ * chunked upload has none, so the body is counted while it is read and the
+ * request is abandoned as soon as it passes the limit.
+ */
+async function readImportBody(c: Context): Promise<{ tooLarge: true } | { tooLarge: false; value: unknown }> {
+  const declared = Number(c.req.header('content-length'));
+  if (Number.isFinite(declared) && declared > IMPORT_MAX_CHARS) return { tooLarge: true };
+  const body = c.req.raw.body;
+  if (!body) return { tooLarge: false, value: null };
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > IMPORT_MAX_CHARS) {
+        await reader.cancel().catch(() => undefined);
+        return { tooLarge: true };
+      }
+      chunks.push(value);
+    }
+  } catch {
+    await reader.cancel().catch(() => undefined);
+    return { tooLarge: false, value: null };
+  }
+  try {
+    const text = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString('utf8');
+    return { tooLarge: false, value: JSON.parse(text) as unknown };
+  } catch {
+    return { tooLarge: false, value: null };
+  }
 }
 
 /** Import detail lists every row for one import, paging by import id in the store. */
@@ -2002,8 +2030,9 @@ export function createApp(deps: {
    * validate, stage, dedupe and post all happen before the response.
    */
   app.post('/accounts/:id/imports/preview', async (c) => {
-    if (importBodyTooLarge(c)) return c.json({ error: 'file_too_large' }, 413);
-    const parsed = importPreviewBody.safeParse(await c.req.json().catch(() => null));
+    const body = await readImportBody(c);
+    if (body.tooLarge) return c.json({ error: 'file_too_large' }, 413);
+    const parsed = importPreviewBody.safeParse(body.value);
     if (!parsed.success) return c.json({ error: 'file_too_large' }, 400);
     const filename = parsed.data.filename.toLowerCase();
     if (!/\.(csv|ofx|qfx)$/.test(filename)) return c.json({ error: 'unsupported_type' }, 400);
@@ -2064,8 +2093,9 @@ export function createApp(deps: {
 
   app.post('/accounts/:id/imports', async (c) => {
     if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
-    if (importBodyTooLarge(c)) return c.json({ error: 'file_too_large' }, 413);
-    const parsed = importUploadBody.safeParse(await c.req.json().catch(() => null));
+    const body = await readImportBody(c);
+    if (body.tooLarge) return c.json({ error: 'file_too_large' }, 413);
+    const parsed = importUploadBody.safeParse(body.value);
     if (!parsed.success) return c.json({ error: 'invalid_import' }, 400);
     const filename = parsed.data.filename.toLowerCase();
     if (!/\.(csv|ofx|qfx)$/.test(filename)) return c.json({ error: 'unsupported_type' }, 400);

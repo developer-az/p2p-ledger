@@ -328,7 +328,7 @@ export async function runImport(
     ...[...probes.values()].map((probe) => dedupeKeyFor(input.accountId, probe.row, probe.next)),
   ];
   const existingKeys = await store.existingDedupeKeys(input.accountId, lookupKeys);
-  const deduped = splitNewRows(validated, existingKeys);
+  const deduped = splitNewRows(validated, existingKeys, fileHash);
   stages.dedupe = stamp({
     status: 'passed',
     label: STAGE_LABELS.dedupe,

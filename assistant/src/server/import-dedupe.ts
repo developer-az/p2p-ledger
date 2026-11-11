@@ -58,9 +58,9 @@ function keyForGroup(groupKey: string, occurrenceIndex: number): string {
     .digest('hex');
 }
 
-function ambiguousKey(groupKey: string, lineNumber: number): string {
+function ambiguousKey(groupKey: string, fileHash: string, lineNumber: number): string {
   return createHash('sha256')
-    .update(`${groupKey}\u0000ambiguous\u0000${lineNumber}`, 'utf8')
+    .update(`${groupKey}\u0000ambiguous\u0000${fileHash}\u0000${lineNumber}`, 'utf8')
     .digest('hex');
 }
 
@@ -105,6 +105,8 @@ function rowLineNumber(row: { lineNumber?: number; row?: { lineNumber?: number }
 export function splitNewRows<T extends { dedupeKey: string; groupKey?: string; external?: boolean; row?: { lineNumber: number }; lineNumber?: number }>(
   rows: readonly T[],
   existing: ReadonlySet<string>,
+  /** Hash of the file being imported. Ambiguous rows stay file-local. */
+  fileHash = '',
 ): { fresh: T[]; duplicates: T[] } {
   const groups = new Map<string, T[]>();
   for (const row of rows) {
@@ -129,7 +131,7 @@ export function splitNewRows<T extends { dedupeKey: string; groupKey?: string; e
   const seen = new Set<string>();
   for (const row of rows) {
     const dedupeKey = row.groupKey && ambiguous.has(row.groupKey)
-      ? ambiguousKey(row.groupKey, rowLineNumber(row))
+      ? ambiguousKey(row.groupKey, fileHash, rowLineNumber(row))
       : row.dedupeKey;
     const resolved = dedupeKey === row.dedupeKey ? row : ({ ...row, dedupeKey } as T);
     if (existing.has(dedupeKey) || seen.has(dedupeKey)) {

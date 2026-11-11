@@ -58,6 +58,21 @@ export function timeLabel(iso: string): string {
   return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
+/** "just now", "12 minutes ago", "3 days ago" for session and audit rows. */
+export function relativeTime(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const seconds = Math.max(0, Math.round((now.getTime() - d.getTime()) / 1000));
+  if (seconds < 60) return 'just now';
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} ${plural(minutes, 'minute')} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} ${plural(hours, 'hour')} ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days} ${plural(days, 'day')} ago`;
+  return dayLabel(iso, now);
+}
+
 export function dateTimeLabel(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;

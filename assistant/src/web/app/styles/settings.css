@@ -226,6 +226,162 @@
   white-space: nowrap;
 }
 
+/* ---------- Working security and privacy rows ---------- */
+
+/* A row whose controls open underneath it, instead of sitting inline. */
+.app .set-row-block {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s2);
+  align-items: start;
+}
+
+.app .set-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s1) var(--s3);
+}
+
+.app .set-row-value {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  white-space: nowrap;
+}
+
+.app .set-step {
+  display: grid;
+  gap: var(--s2);
+}
+
+.app .set-step p {
+  margin: 0;
+}
+
+.app .set-inline-form {
+  display: grid;
+  gap: var(--s1);
+  max-width: 320px;
+}
+
+.app .set-step label,
+.app .set-feature label,
+.app .set-stepup label {
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+
+.app .set-secret {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--surface-2);
+}
+
+.app .set-secret code {
+  letter-spacing: 0.06em;
+  overflow-wrap: anywhere;
+}
+
+.app .set-codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--s1) var(--s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app .set-codes li {
+  padding: var(--s1) 0;
+}
+
+.app .set-badge {
+  display: inline-block;
+  margin-left: var(--s2);
+  padding: 0 var(--s1);
+  border-radius: var(--r1);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 500;
+}
+
+.app .set-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app .set-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s1) var(--s3);
+  padding: var(--s2) 0;
+  border-top: 1px solid var(--line);
+}
+
+.app .set-list > li:first-child {
+  border-top: 0;
+}
+
+.app .set-session-main {
+  display: grid;
+  flex: 1 1 220px;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app .set-session-device {
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+
+.app .set-session-meta {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  overflow-wrap: anywhere;
+}
+
+.app .set-features {
+  display: grid;
+}
+
+.app .set-feature {
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s3) 0;
+  border-top: 1px solid var(--line);
+}
+
+.app .set-feature:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.app .set-stepup {
+  display: grid;
+  gap: var(--s2);
+  max-width: 360px;
+  padding: var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--surface-2);
+}
+
+.app .set-stepup p {
+  margin: 0;
+}
+
 /* ---------- Radio groups ---------- */
 
 .app .set-fieldset {

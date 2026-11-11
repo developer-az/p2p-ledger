@@ -143,7 +143,7 @@ export function ConsumerApp() {
   }, []);
 
   useEffect(() => {
-    if (!session) document.title = 'Settle · know your money, keep the habit';
+    if (!session) document.title = 'Settle · transaction intelligence you run yourself';
   }, [session]);
 
   const start = useCallback((next: Session) => {

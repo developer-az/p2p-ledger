@@ -1,5 +1,13 @@
 # Engineering Handoff (latest)
 
+## Session: merges, outage fix, M3-M6 (2026-11-11 evening)
+
+- Merged #32-#39, #40 polish, #51 pool fix, #52 mobile nav, #53 M5 Subscriptions, #54 M6 Forecast/Alerts/Reports, #55 M3 Imports, #56 M4 Rules, #57 review follow-ups, and Dependabot #41-#50. Production checked at 390 px: every sidebar page loads and the drawer stays open.
+- Outage after the M2 merge: Supabase EMAXCONNSESSION. Fixed with a shared pg pool (pg-pool.ts, PG_POOL_MAX=3), Supavisor transaction mode on 6543 for *.pooler.supabase.com, and once-per-version schema DDL (schema-gate.ts, advisory lock).
+- CI: workflows cancel superseded PR runs and every job has timeout-minutes. Orchestrator caps CI waits at ~9 min (memory feedback-ci-wait).
+- Pi ran M3-M6 in parallel git worktrees (2-8 min each). Docker Desktop crashed twice under two parallel runs; run them one at a time on this machine.
+- Open: PR #58 (read-only production smoke + landing copy says Live). The sample household in production shows ~$269k net because earlier smoke runs wrote deposits to it. Codex rejected two server-side reseed designs (cross-instance races), so #58 ships only the smoke and copy fixes. Cleaning the existing demo data needs a decision: one-time SQL reset vs a redesigned demo seed.
+
 ## Session: M2 completion (2026-11-11), branch feat/v2-m2-security (PR #39)
 
 - CodeQL: recovery codes now use crypto.randomInt; HIBP SHA-1 alerts 1 and 2 dismissed as false positives (protocol requirement), with the user's approval.

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { pgSsl } from './db-tls.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
 import { formatMoney } from './money.js';
 import type { SpendLogEntry } from './spend-log.js';
@@ -287,8 +288,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
 
   private async client() {
     const { default: pg } = await import('pg');
-    const ssl = /supabase|sslmode=require/i.test(this.connectionString) ? { rejectUnauthorized: false } : undefined;
-    const client = new pg.Client({ connectionString: this.connectionString, ssl });
+    const client = new pg.Client({ connectionString: this.connectionString, ssl: pgSsl(this.connectionString) });
     await client.connect();
     return client;
   }

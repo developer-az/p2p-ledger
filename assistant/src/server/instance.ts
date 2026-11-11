@@ -5,6 +5,7 @@ import { createSpendLogStore } from './spend-log.js';
 import { createPersonalFinanceStore } from './personal-finance.js';
 import { createPaymentRequestStore } from './payment-requests.js';
 import { createAuthStore } from './auth.js';
+import { createRateLimitStore } from './rate-limit-store.js';
 import { JavaWorkflows, RoutedSpendLogStore } from './java-workflows.js';
 
 let spendLogs = createSpendLogStore();
@@ -33,5 +34,6 @@ export function createAssistantApi() {
     paymentRequests,
     javaWorkflows,
     auth: createAuthStore(),
+    rateLimitStore: createRateLimitStore(),
   });
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LazyMotion } from 'motion/react';
 import './app.css';
-import { api, type BootstrapResponse, type SpendCategory } from '../api.js';
+import { api, onWakeRetry, type BootstrapResponse, type SpendCategory } from '../api.js';
 import { ActivitySheet } from './ActivitySheet.js';
 import { ActivityTab } from './ActivityTab.js';
 import { AskTab } from './AskTab.js';
@@ -20,6 +20,8 @@ import { WalletTab } from './WalletTab.js';
 import { Avatar, Confetti, ErrorNotice, Icon, ToastProvider, type IconName } from './ui.js';
 import { FloatingDock, useSwipeNav } from './dock.js';
 import { AppPreloader } from './Preloader.js';
+import { bootProgress, useBootProgress } from './boot-progress.js';
+import { LoadingSteps } from './LoadingSteps.js';
 import { Welcome } from './Welcome.js';
 import { SkyBackdrop } from './AuthSky.js';
 import { Mascot } from './Mascot.js';
@@ -103,15 +105,35 @@ export function ConsumerApp() {
 
   useEffect(() => {
     document.documentElement.classList.add('settle-smooth-scroll');
+    bootProgress.reset(Date.now());
+    // A wake retry is the ledger still starting up: show it as another attempt
+    // on that step instead of a silent wait.
+    const offWakeRetry = onWakeRetry(({ attempt }) => {
+      bootProgress.dispatch({ type: 'retry', id: 'ledger', at: Date.now(), attempt });
+    });
     // Start the sleeping Render ledger booting while the landing page renders.
     // Not awaited: a wake takes 30-60s and nothing here may block the preloader.
-    void api.wake();
+    void api.wake().then((wake) => {
+      // No configured ledger means there is nothing to wake: never wait on it.
+      if (wake.awake || wake.configured === false) {
+        bootProgress.dispatch({ type: 'done', id: 'ledger', at: Date.now() });
+      }
+    });
     const minSplash = new Promise<void>((resolve) => { window.setTimeout(resolve, 720); });
     void Promise.all([
-      api.bootstrap().then(setBoot).catch((e: Error) => setBootError(e.message)),
+      api.bootstrap().then((next) => {
+        setBoot(next);
+        bootProgress.dispatch({ type: 'done', id: 'server', at: Date.now() });
+      }).catch((e: Error) => {
+        setBootError(e.message);
+        bootProgress.dispatch({ type: 'fail', id: 'server', at: Date.now(), reason: e.message });
+      }),
       minSplash,
     ]).finally(() => setBootReady(true));
-    return () => document.documentElement.classList.remove('settle-smooth-scroll');
+    return () => {
+      offWakeRetry();
+      document.documentElement.classList.remove('settle-smooth-scroll');
+    };
   }, []);
 
   useEffect(() => {
@@ -191,6 +213,24 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   const who = session.user?.displayName ?? displayName(me.owner);
   const demoKey = `settle:demo-progress:${me.id}`;
   const { data, error, refreshing, reload, run: walletRun } = useWallet(me.id);
+  const { state: progress, now: progressNow } = useBootProgress();
+  const walletArrived = data !== null;
+
+  // The first wallet view means accounts and insights are both on hand.
+  useEffect(() => {
+    if (!walletArrived) return;
+    bootProgress.dispatch({ type: 'done', id: 'accounts', at: Date.now() });
+    bootProgress.dispatch({ type: 'done', id: 'insights', at: Date.now() });
+  }, [walletArrived]);
+
+  // A wallet load that never produced data is a failed step, not a stuck one.
+  useEffect(() => {
+    if (!error || walletArrived) return;
+    const running = bootProgress.getState().steps.find((step) => step.status === 'running');
+    if (running === undefined) return;
+    bootProgress.dispatch({ type: 'fail', id: running.id, at: Date.now(), reason: error });
+  }, [error, walletArrived]);
+
   const [tab, setTab] = useState<Tab>('today');
   const [demoProgress, setDemoProgress] = useState<DemoStepId[]>(() => (demo ? loadDemoProgress(demoKey) : []));
   const guideHiddenKey = `settle:demo-guide-hidden:${me.id}`;
@@ -422,60 +462,73 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
             <button type="button" className="link-btn" onClick={() => void reload()}>Retry</button>
           </div>
         ) : null}
-        <div className="view" key={tab}>
-          {tab === 'today' ? (
-            <Home
-              me={me}
-              name={session.user?.displayName}
-              data={data}
-              guide={demoGuide}
-              cheer={burst}
-              actions={{
-                addMoney: () => setSheet('add'),
-                logSpend: openLog,
-                logIncome: openIncome,
-                settleUp: () => openSettle('ask'),
-                ask,
-                openItem: openFeedItem,
-                seeAll: () => go('activity'),
-                seeInsights: () => go('patterns'),
-                seeWallet: () => go('wallet'),
-                setup: (step) => {
-                  setSetupMode(data?.view.moneyProfile?.walletCashMinor == null ? 'onboarding' : 'edit');
-                  setSetupStep(step ?? 0);
-                  setSheet('setup');
-                },
+        {!data && !error ? (
+          <div className="boot-card">
+            <LoadingSteps
+              state={progress}
+              now={progressNow}
+              onRetry={() => {
+                bootProgress.reset(Date.now());
+                void reload();
               }}
             />
-          ) : null}
-          {tab === 'activity' ? <ActivityTab data={data} onOpen={openFeedItem} /> : null}
-          {tab === 'patterns' ? (
-            <InsightsTab
-              data={data}
-              onLog={() => openLog()}
-              onSetup={(step) => { setSetupMode('edit'); setSetupStep(step ?? 0); setSheet('setup'); }}
-              onAsk={() => ask('What stands out about my spending this month?')}
-              demo={demo}
-              onDemoHome={demo ? () => { go('today'); setShowDemoGuide(true); } : undefined}
-            />
-          ) : null}
-          {tab === 'ask' ? <AskTab accountId={me.id} boot={boot} seed={askSeed} onSeedUsed={() => setAskSeed(null)} /> : null}
-          {tab === 'wallet' ? (
-            <WalletTab
-              me={me}
-              data={data}
-              viewer={{ email: session.user?.email, demo }}
-              actions={{
-                setup: () => { setSetupMode(data?.view.moneyProfile?.walletCashMinor == null ? 'onboarding' : 'edit'); setSetupStep(0); setSheet('setup'); },
-                logIncome: openIncome,
-                addMoney: () => setSheet('add'),
-                ask: () => ask(),
-                signOut: onSignOut,
-                reload,
-              }}
-            />
-          ) : null}
-        </div>
+          </div>
+        ) : (
+          <div className="view" key={tab}>
+            {tab === 'today' ? (
+              <Home
+                me={me}
+                name={session.user?.displayName}
+                data={data}
+                guide={demoGuide}
+                cheer={burst}
+                actions={{
+                  addMoney: () => setSheet('add'),
+                  logSpend: openLog,
+                  logIncome: openIncome,
+                  settleUp: () => openSettle('ask'),
+                  ask,
+                  openItem: openFeedItem,
+                  seeAll: () => go('activity'),
+                  seeInsights: () => go('patterns'),
+                  seeWallet: () => go('wallet'),
+                  setup: (step) => {
+                    setSetupMode(data?.view.moneyProfile?.walletCashMinor == null ? 'onboarding' : 'edit');
+                    setSetupStep(step ?? 0);
+                    setSheet('setup');
+                  },
+                }}
+              />
+            ) : null}
+            {tab === 'activity' ? <ActivityTab data={data} onOpen={openFeedItem} /> : null}
+            {tab === 'patterns' ? (
+              <InsightsTab
+                data={data}
+                onLog={() => openLog()}
+                onSetup={(step) => { setSetupMode('edit'); setSetupStep(step ?? 0); setSheet('setup'); }}
+                onAsk={() => ask('What stands out about my spending this month?')}
+                demo={demo}
+                onDemoHome={demo ? () => { go('today'); setShowDemoGuide(true); } : undefined}
+              />
+            ) : null}
+            {tab === 'ask' ? <AskTab accountId={me.id} boot={boot} seed={askSeed} onSeedUsed={() => setAskSeed(null)} /> : null}
+            {tab === 'wallet' ? (
+              <WalletTab
+                me={me}
+                data={data}
+                viewer={{ email: session.user?.email, demo }}
+                actions={{
+                  setup: () => { setSetupMode(data?.view.moneyProfile?.walletCashMinor == null ? 'onboarding' : 'edit'); setSetupStep(0); setSheet('setup'); },
+                  logIncome: openIncome,
+                  addMoney: () => setSheet('add'),
+                  ask: () => ask(),
+                  signOut: onSignOut,
+                  reload,
+                }}
+              />
+            ) : null}
+          </div>
+        )}
       </main>
 
       <FloatingDock tabs={TABS} active={tab} onSelect={go} syncing={refreshing} onAdd={() => openLog()} addOpen={sheet === 'log'} />

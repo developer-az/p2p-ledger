@@ -46,7 +46,8 @@ import { MAX_MINOR_UI } from './money.js';
 import { LlmGuard, trimHistory } from './llm-guard.js';
 import { API_HEADERS, securityHeaders } from './security-headers.js';
 import { createMailer, passwordResetEmail, type Mailer } from './mailer.js';
-import { rateLimiter, retryAfterSeconds } from './rate-limit.js';
+import { retryAfterSeconds } from './rate-limit.js';
+import { InMemoryRateLimitStore, durableLimiter, type RateLimitStore } from './rate-limit-store.js';
 import { SETTLE_RAILS, type SettleRail } from './payment-requests.js';
 import {
   EmailTakenError,
@@ -151,10 +152,11 @@ const recordIncomeBody = z.object({
 const WAKE_PROBE_TIMEOUT_MS = 9_000;
 
 /**
- * Rate limiters are built once per app instance (see rate-limit.ts). The chat
- * limiter guards the paid LLM quota; the rest guard writes. All of them are
- * sliding-window and per client IP, so a burst cannot be doubled by straddling
- * a fixed-window boundary.
+ * Rate limiters are built once per app instance (see rate-limit-store.ts). The
+ * chat limiter guards the paid LLM quota; the rest guard writes. All of them
+ * are per client IP and backed by the shared store when one is supplied, so the
+ * limit is the same across serverless instances and a burst cannot be doubled
+ * by straddling a fixed-window boundary.
  */
 export function createApp(deps: {
   ledger: CompositeLedger;
@@ -177,11 +179,40 @@ export function createApp(deps: {
   provider?: () => LlmProvider;
   /** Tests inject a guard with a frozen clock; production builds one per app instance. */
   llmGuard?: LlmGuard;
+  /** Shared hit counters. Production passes Postgres so limits span instances; tests default to memory. */
+  rateLimitStore?: RateLimitStore;
   now?: () => Date;
 }) {
   const now = deps.now ?? (() => new Date());
   const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
   const paymentRequests = deps.paymentRequests ?? new InMemoryPaymentRequestStore();
+  /**
+   * Practice demo history lives in memory, so a cold serverless instance that
+   * never saw POST /demo/practice would render an empty demo. Every read path
+   * for a PRACTICE_* wallet seeds lazily instead. seedDemoHabits is idempotent;
+   * the map below collapses concurrent calls for the same wallet within one
+   * instance so a burst of reads cannot double-seed.
+   */
+  const PRACTICE_DEMO_PERSONAS: Record<string, DemoPersona> = {
+    [PRACTICE_ANTHONY]: 'anthony',
+    [PRACTICE_SAM]: 'sam',
+    [PRACTICE_JORDAN]: 'jordan',
+  };
+  const practiceSeedInFlight = new Map<string, Promise<void>>();
+  const ensurePracticeDemoSeeded = (accountId: string): Promise<void> => {
+    const persona = PRACTICE_DEMO_PERSONAS[accountId];
+    if (!persona) return Promise.resolve();
+    const inFlight = practiceSeedInFlight.get(accountId);
+    if (inFlight) return inFlight;
+    const seeding = seedDemoHabits(deps.spendLogs, personalFinance, accountId, persona, now())
+      .then(() => undefined)
+      .catch((e: unknown) => {
+        practiceSeedInFlight.delete(accountId);
+        throw e;
+      });
+    practiceSeedInFlight.set(accountId, seeding);
+    return seeding;
+  };
   const llmGuard = deps.llmGuard ?? new LlmGuard();
   const auth = deps.auth ?? new InMemoryAuthStore();
   const mailer = deps.mailer ?? createMailer();
@@ -199,10 +230,11 @@ export function createApp(deps: {
     }
     await next();
   });
-  const allowChat = rateLimiter(20, 60_000);
-  const allowSeed = rateLimiter(3, 60_000);
-  const allowWrite = rateLimiter(40, 60_000);
-  const allowProof = rateLimiter(12, 60_000);
+  const rateLimitStore = deps.rateLimitStore ?? new InMemoryRateLimitStore();
+  const allowChat = durableLimiter(rateLimitStore, 'chat', 20, 60_000);
+  const allowSeed = durableLimiter(rateLimitStore, 'seed', 3, 60_000);
+  const allowWrite = durableLimiter(rateLimitStore, 'write', 40, 60_000);
+  const allowProof = durableLimiter(rateLimitStore, 'proof', 12, 60_000);
   const clientIp = (c: { req: { header(name: string): string | undefined } }) =>
     c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
   const sessionUser = async (c: Context) => {
@@ -373,7 +405,7 @@ export function createApp(deps: {
   });
 
   app.post('/auth/register', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
     const parsed = registerBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
@@ -416,7 +448,7 @@ export function createApp(deps: {
   });
 
   app.post('/auth/login', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
     const parsed = loginBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Enter the email and password for your account.' }, 400);
     const email = parsed.data.email.toLowerCase();
@@ -465,7 +497,7 @@ export function createApp(deps: {
   // Password reset. The request step answers the same way whether or not the email has an account,
   // and takes at least RESET_MIN_MS so timing does not tell either. Tokens are random, stored hashed,
   // expire after RESET_TOKEN_TTL_SEC, work once, and a successful reset signs out every other session.
-  const allowReset = rateLimiter(5, 60_000);
+  const allowReset = durableLimiter(rateLimitStore, 'reset', 5, 60_000);
   const RESET_MIN_MS = 600;
   const resetRequestBody = z.object({ email: z.string().trim().email().max(254) });
   const resetConfirmBody = z.object({
@@ -477,7 +509,7 @@ export function createApp(deps: {
   app.post('/auth/password-reset/request', async (c) => {
     if (!mailer.delivers || (process.env.NODE_ENV === 'production' && !auth.persistent))
       return c.json({ error: 'Password reset email is not connected on this deployment. No email was sent.' }, 503);
-    if (!allowReset(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
+    if (!await allowReset(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
     const started = Date.now();
     const parsed = resetRequestBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Enter a valid email.' }, 400);
@@ -500,7 +532,7 @@ export function createApp(deps: {
   });
 
   app.post('/auth/password-reset/confirm', async (c) => {
-    if (!allowReset(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
+    if (!await allowReset(clientIp(c))) return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
     const parsed = resetConfirmBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
       const field = parsed.error.issues[0]?.path[0];
@@ -519,6 +551,7 @@ export function createApp(deps: {
     if (id) {
       const denied = await walletAccessError(c, id);
       if (denied) return denied;
+      await ensurePracticeDemoSeeded(id);
       return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, id, Math.min(limit, 100), now, tzOffsetFrom(c)));
     }
     const owner = c.req.query('owner');
@@ -530,7 +563,7 @@ export function createApp(deps: {
   });
 
   app.post('/accounts', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     if (process.env.NODE_ENV === 'production' || (deps.isLiveLedgerUp && await deps.isLiveLedgerUp())) {
       return c.json({ error: 'Create a wallet through account registration.' }, 403);
     }
@@ -565,7 +598,7 @@ export function createApp(deps: {
   });
 
   app.post('/accounts/:id/deposits', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = depositBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
     const id = c.req.param('id');
@@ -579,7 +612,7 @@ export function createApp(deps: {
   });
 
   app.post('/transfers', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = transferBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
     const denied = await walletAccessError(c, parsed.data.sourceAccountId);
@@ -609,7 +642,7 @@ export function createApp(deps: {
   }
 
   app.post('/requests', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = requestBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400);
     const { requesterAccountId, payers, memo } = parsed.data;
@@ -707,7 +740,7 @@ export function createApp(deps: {
   }
 
   app.post('/requests/:id/pay', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = requestActorBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
     /* Another instance may own the write: seed the fixed demo rows here first so the id resolves. */
@@ -761,7 +794,7 @@ export function createApp(deps: {
     ['cancel', 'CANCELLED', 'requesterAccountId'],
   ] as const) {
     app.post(`/requests/:id/${action}`, async (c) => {
-      if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+      if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
       const parsed = requestActorBody.safeParse(await c.req.json().catch(() => null));
       if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
       if (isSeedPracticeRequest(c.req.param('id')) || deps.ledger.isPracticeAccount(parsed.data.accountId)) {
@@ -794,7 +827,7 @@ export function createApp(deps: {
    * and the book keeps the rail on the receipt. No bank integration required.
    */
   app.post('/requests/:id/settle', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = requestSettleBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
     if (isSeedPracticeRequest(c.req.param('id')) || deps.ledger.isPracticeAccount(parsed.data.accountId)) {
@@ -839,10 +872,14 @@ export function createApp(deps: {
   });
 
   // Direct links. The UI uses ?id= so a host that 404s a second path segment still reaches this app.
-  app.get('/accounts/:id', async (c) => respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, c.req.param('id'), 30, now, tzOffsetFrom(c))));
+  app.get('/accounts/:id', async (c) => {
+    const id = c.req.param('id');
+    await ensurePracticeDemoSeeded(id);
+    return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, id, 30, now, tzOffsetFrom(c)));
+  });
 
   app.post('/accounts/:id/spends/import', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = z.object({ csv: z.string().min(1).max(1_000_000), timeZone: z.string().min(1).max(64).optional() }).safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Provide an expense CSV up to 1 MB' }, 400);
     const id = c.req.param('id');
@@ -852,7 +889,7 @@ export function createApp(deps: {
   });
 
   app.post('/accounts/:id/spends', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const accountId = c.req.param('id');
     if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
     const account = await deps.ledger.getAccount(accountId);
@@ -874,7 +911,7 @@ export function createApp(deps: {
   });
 
   app.delete('/accounts/:id/spends/:spendId', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const accountId = c.req.param('id');
     const spendId = c.req.param('spendId');
     if (!z.string().uuid().safeParse(accountId).success || !z.string().uuid().safeParse(spendId).success) {
@@ -892,12 +929,13 @@ export function createApp(deps: {
     if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
     const account = await deps.ledger.getAccount(accountId);
     if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    await ensurePracticeDemoSeeded(accountId);
     const profile = await personalFinance.getProfile(accountId, account.currency, now());
     return c.json(await buildHabitsHome(deps.spendLogs, accountId, now(), account.currency, profile.periodStart));
   });
 
   app.patch('/accounts/:id/finance', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const accountId = c.req.param('id');
     if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
     const account = await deps.ledger.getAccount(accountId);
@@ -915,7 +953,7 @@ export function createApp(deps: {
   });
 
   app.post('/accounts/:id/finance/rollover', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const accountId = c.req.param('id');
     if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
     const account = await deps.ledger.getAccount(accountId);
@@ -928,7 +966,7 @@ export function createApp(deps: {
   });
 
   app.post('/accounts/:id/incomes', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const accountId = c.req.param('id');
     if (!z.string().uuid().safeParse(accountId).success) return c.json({ error: 'Invalid account id' }, 400);
     const account = await deps.ledger.getAccount(accountId);
@@ -984,7 +1022,7 @@ export function createApp(deps: {
    * POST /demo/practice instead (see Welcome.tsx).
    */
   app.post('/demo', async (c) => {
-    if (!allowSeed(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowSeed(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const live = deps.isLiveLedgerUp ? await deps.isLiveLedgerUp() : false;
     if (!live || !deps.liveLedger) {
       return c.json({
@@ -1008,12 +1046,12 @@ export function createApp(deps: {
 
   /** Guided demo in practice mode: the fixed household plus a personal history to explore. */
   app.post('/demo/practice', async (c) => {
-    if (!allowSeed(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowSeed(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const boot = deps.practice.bootstrap();
     await Promise.all([
-      seedDemoHabits(deps.spendLogs, personalFinance, PRACTICE_ANTHONY, 'anthony', now()),
-      seedDemoHabits(deps.spendLogs, personalFinance, PRACTICE_SAM, 'sam', now()),
-      seedDemoHabits(deps.spendLogs, personalFinance, PRACTICE_JORDAN, 'jordan', now()),
+      ensurePracticeDemoSeeded(PRACTICE_ANTHONY),
+      ensurePracticeDemoSeeded(PRACTICE_SAM),
+      ensurePracticeDemoSeeded(PRACTICE_JORDAN),
     ]);
     return c.json({
       accounts: boot.accounts.map(({ id, owner }) => ({ id, owner })),
@@ -1027,7 +1065,7 @@ export function createApp(deps: {
   const bankBody = z.object({ accountId: z.string().uuid() });
 
   app.post('/bank/welcome', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = bankBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
     const denied = await walletAccessError(c, parsed.data.accountId);
@@ -1042,7 +1080,7 @@ export function createApp(deps: {
   });
 
   app.post('/bank/inbound', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = bankBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
     const denied = await walletAccessError(c, parsed.data.accountId);
@@ -1057,7 +1095,7 @@ export function createApp(deps: {
   });
 
   app.post('/bank/outbound', async (c) => {
-    if (!allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = bankBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
     const denied = await walletAccessError(c, parsed.data.accountId);
@@ -1092,7 +1130,7 @@ export function createApp(deps: {
   });
 
   app.post('/replay', async (c) => {
-    if (!allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = paymentBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
     const denied = await walletAccessError(c, parsed.data.accountId);
@@ -1102,7 +1140,7 @@ export function createApp(deps: {
   });
 
   app.post('/race', async (c) => {
-    if (!allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = raceBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
     const denied = await walletAccessError(c, parsed.data.fromAccountId);
@@ -1113,7 +1151,7 @@ export function createApp(deps: {
   });
 
   app.post('/tamper', async (c) => {
-    if (!allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    if (!await allowProof(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
     const parsed = paymentBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
     const denied = await walletAccessError(c, parsed.data.accountId);
@@ -1134,12 +1172,12 @@ export function createApp(deps: {
    * of retrying in a hot loop.
    */
   app.post('/chat', async (c) => {
-    const verdict = allowChat.check(clientIp(c));
+    const verdict = await allowChat.check(clientIp(c));
     if (!verdict.allowed) {
       return c.json(
         { error: 'Too many requests, slow down a little.', retryAfterMs: verdict.retryAfterMs },
         429,
-        { 'Retry-After': retryAfterSeconds(verdict) },
+        { 'Retry-After': retryAfterSeconds({ ...verdict, remaining: 0 }) },
       );
     }
     const parsed = chatBody.safeParse(await c.req.json().catch(() => null));

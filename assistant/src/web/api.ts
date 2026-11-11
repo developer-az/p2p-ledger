@@ -1,3 +1,15 @@
+import type { SubscriptionReport } from '../server/subscriptions.js';
+
+export type {
+  DuplicateSubscription,
+  SubscriptionCandidate,
+  SubscriptionCadence,
+  SubscriptionCharge,
+  SubscriptionPriceChange,
+  SubscriptionReport,
+  SubscriptionStream,
+} from '../server/subscriptions.js';
+
 export interface AccountRef { id: string; owner: string }
 
 export interface ChainReceipt {
@@ -184,6 +196,7 @@ export interface AccountView {
   summary: AccountSummary;
   habits?: HabitsHome;
   patterns?: SpendingPatterns;
+  subscriptions?: SubscriptionReport;
   moneyProfile?: MoneyProfile;
   finance?: FinanceSnapshot;
   activityFeed?: ActivityFeedRow[];
@@ -774,6 +787,11 @@ export const api = {
     call<CorridorResult>('/api/bank/outbound', { method: 'POST', body: JSON.stringify({ accountId }) }),
   account: (id: string, limit = 50, tzOffsetMinutes = 0) =>
     call<AccountView>(`/api/accounts?id=${encodeURIComponent(id)}&limit=${limit}&tzOffset=${encodeURIComponent(String(tzOffsetMinutes))}`),
+  markSubscription: (accountId: string, streamId: string, markedToCancel: boolean) =>
+    call<{ subscriptions: SubscriptionReport }>(`/api/accounts/${encodeURIComponent(accountId)}/subscriptions/${encodeURIComponent(streamId)}/mark`, {
+      method: 'POST',
+      body: JSON.stringify({ markedToCancel }),
+    }),
   habits: (accountId: string) =>
     call<HabitsHome>(`/api/accounts/${encodeURIComponent(accountId)}/habits`),
   recordSpend: (accountId: string, body: { amountMinor: number; category: SpendCategory; note?: string }, key: string = idempotencyKey()) =>

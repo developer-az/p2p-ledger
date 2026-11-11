@@ -17,6 +17,7 @@ import { clearSession, loadSession, saveSession, type Session } from './session.
 import { SetupSheet } from './SetupSheet.js';
 import { AddSheet } from './AddSheet.js';
 import { SettingsView } from './SettingsView.js';
+import { SubscriptionsTab } from './SubscriptionsTab.js';
 import { ErrorNotice, ToastProvider, useToast } from './ui.js';
 import { AppShell, appRoute, sectionLabel, settingsTabLabel, isPlannedSection } from './AppShell.js';
 import { PlannedView } from './PlannedView.js';
@@ -470,6 +471,14 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
               />
             ) : null}
             {viewSection === 'ask' ? <AskTab accountId={me.id} boot={boot} seed={askSeed} onSeedUsed={() => setAskSeed(null)} /> : null}
+            {viewSection === 'subscriptions' ? (
+              <SubscriptionsTab
+                data={data}
+                onChanged={reload}
+                onAsk={ask}
+                onLog={() => openLog()}
+              />
+            ) : null}
             {viewSection === 'settings' ? (
               <SettingsView
                 tab={viewSettingsTab ?? 'profile'}

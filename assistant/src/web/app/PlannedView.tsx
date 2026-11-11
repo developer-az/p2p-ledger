@@ -11,11 +11,6 @@ import './styles/shell.css';
 const REPO = 'https://github.com/developer-az/p2p-ledger';
 
 const PLANNED: Record<PlannedSection, { milestone: string; copy: string; icon: IconName }> = {
-  subscriptions: {
-    milestone: 'M5',
-    icon: 'calendar',
-    copy: 'Recurring charges found in your statements, with the next charge date and the yearly cost.',
-  },
   forecast: {
     milestone: 'M6',
     icon: 'chart',

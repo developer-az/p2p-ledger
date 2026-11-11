@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, type AccountRef, type BootstrapResponse, type PatternDay } from '../api.js';
 import { PRACTICE_ANTHONY_ID } from '../practice-fixture.js';
 import { BrandMark } from './BrandMark.js';
@@ -11,6 +11,50 @@ import './styles/landing.css';
 
 const REPO = 'https://github.com/developer-az/p2p-ledger';
 const DASH = '—';
+const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
+const TICKER_MS = 600;
+/** Degrees either side of zero the minute track turns as the hero crosses the viewport. */
+const DIAL_SWING = 30;
+
+/** True when the visitor asked for less motion. Safe without a window. */
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia(REDUCED_MOTION).matches;
+}
+
+/**
+ * Counts every [data-count-to] element in `root` from zero once, easeOutCubic
+ * over 600ms, writing textContent directly so React never re-renders per frame.
+ * The last frame writes the server-rendered string, so the final value is exact.
+ */
+function countUp(root: HTMLElement): () => void {
+  const targets = Array.from(root.querySelectorAll<HTMLElement>('[data-count-to]'));
+  if (targets.length === 0) return () => {};
+  const rows = targets.map((el) => ({
+    el,
+    to: Number(el.dataset.countTo),
+    final: el.dataset.countFinal ?? el.textContent ?? '',
+    isMoney: el.dataset.countKind === 'money',
+  }));
+  const start = performance.now();
+  let pending = 0;
+  const frame = (now: number) => {
+    const t = Math.min(1, (now - start) / TICKER_MS);
+    const eased = 1 - (1 - t) ** 3;
+    for (const row of rows) {
+      if (t === 1) {
+        row.el.textContent = row.final;
+        continue;
+      }
+      const value = Math.round(row.to * eased);
+      row.el.textContent = row.isMoney ? money(value) : String(value);
+    }
+    if (t < 1) pending = requestAnimationFrame(frame);
+  };
+  pending = requestAnimationFrame(frame);
+  return () => cancelAnimationFrame(pending);
+}
 
 /** The five pipeline stages, in the order the diagram draws them. */
 const STAGES = [
@@ -72,6 +116,9 @@ export function Welcome({
   bootError: string | null;
   onStart: (session: Session) => void;
 }) {
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const dialRef = useRef<HTMLDivElement | null>(null);
+  const figsRef = useRef<HTMLDivElement | null>(null);
   const [busy, setBusy] = useState<'demo' | null>(null);
   const [demoError, setDemoError] = useState<string | null>(null);
   const [figures, setFigures] = useState<LandingFigures | null>(null);
@@ -95,6 +142,103 @@ export function Welcome({
     if (!new URLSearchParams(search).get('authError')) return;
     navigate({ kind: 'signin' }, { replace: true, search });
   }, []);
+
+  // Scroll reveals: one observer sets data-in on each section once and the fade
+  // lives in landing.css. Sections already on screen are marked before the
+  // hiding class lands, so nothing that is visible ever blinks out.
+  useEffect(() => {
+    const root = pageRef.current;
+    if (!root || typeof IntersectionObserver === 'undefined') return;
+    const sections = Array.from(root.querySelectorAll<HTMLElement>('.lp-section'));
+    if (sections.length === 0) return;
+    const fold = window.innerHeight;
+    for (const section of sections) {
+      if (section.getBoundingClientRect().top < fold) section.dataset.in = 'true';
+    }
+    document.documentElement.classList.add('js-reveal');
+
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        (entry.target as HTMLElement).dataset.in = 'true';
+        observer.unobserve(entry.target);
+      }
+    }, { threshold: 0, rootMargin: '0px 0px -8% 0px' });
+    for (const section of sections) {
+      if (section.dataset.in !== 'true') observer.observe(section);
+    }
+
+    return () => {
+      observer.disconnect();
+      document.documentElement.classList.remove('js-reveal');
+    };
+  }, []);
+
+  // The hero dial is the set piece: the rosette turns on its own in CSS, the
+  // minute track counter-rotates with scroll. One rAF-throttled passive
+  // listener exists only while the dial is on screen, and it writes a single
+  // custom property on the dial itself (never on html or body).
+  useEffect(() => {
+    const dial = dialRef.current;
+    if (!dial || typeof IntersectionObserver === 'undefined' || prefersReducedMotion()) return;
+
+    let frame = 0;
+    const write = () => {
+      frame = 0;
+      const rect = dial.getBoundingClientRect();
+      const span = window.innerHeight + rect.height;
+      const progress = span > 0 ? Math.min(1, Math.max(0, (window.innerHeight - rect.top) / span)) : 0.5;
+      dial.style.setProperty('--dial-turn', ((progress - 0.5) * 2 * DIAL_SWING).toFixed(2));
+    };
+    const onScroll = () => {
+      if (frame !== 0) return;
+      frame = requestAnimationFrame(write);
+    };
+    const stop = () => {
+      window.removeEventListener('scroll', onScroll);
+      if (frame !== 0) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+      }
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      const onScreen = entries.some((entry) => entry.isIntersecting);
+      dial.classList.toggle('is-paused', !onScreen);
+      if (!onScreen) {
+        stop();
+        return;
+      }
+      write();
+      window.addEventListener('scroll', onScroll, { passive: true });
+    }, { threshold: 0 });
+    observer.observe(dial);
+
+    return () => {
+      observer.disconnect();
+      stop();
+    };
+  }, []);
+
+  // The figure strip counts up once, when it first comes into view. No React
+  // state changes here: countUp writes textContent directly.
+  useEffect(() => {
+    const strip = figsRef.current;
+    if (!figures || !strip) return;
+    if (typeof IntersectionObserver === 'undefined' || prefersReducedMotion()) return;
+    let cancels: Array<() => void> = [];
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      cancels.push(countUp(strip));
+    }, { threshold: 0.35 });
+    observer.observe(strip);
+    return () => {
+      observer.disconnect();
+      for (const cancel of cancels) cancel();
+      cancels = [];
+    };
+  }, [figures]);
 
   // The figures come from the sample household, which the server seeds on read.
   // Reading it here keeps the page static in markup and avoids a layout shift:
@@ -163,15 +307,35 @@ export function Welcome({
   const exploreDisabled = !boot || busy !== null;
 
   const cells = [
-    { label: 'Rows', value: figures ? String(figures.rows) : DASH },
-    { label: 'Distinct descriptions', value: figures ? String(figures.payees) : DASH },
-    { label: 'Categories', value: figures ? String(figures.categories) : DASH },
-    { label: 'Days of history', value: figures ? String(figures.daysOfHistory) : DASH },
-    { label: 'Spent, last 30 days', value: figures ? money(figures.spend30dMinor) : DASH },
+    {
+      label: 'Rows',
+      value: figures ? String(figures.rows) : DASH,
+      count: figures ? { to: figures.rows, kind: 'int' as const } : undefined,
+    },
+    {
+      label: 'Distinct descriptions',
+      value: figures ? String(figures.payees) : DASH,
+      count: figures ? { to: figures.payees, kind: 'int' as const } : undefined,
+    },
+    {
+      label: 'Categories',
+      value: figures ? String(figures.categories) : DASH,
+      count: figures ? { to: figures.categories, kind: 'int' as const } : undefined,
+    },
+    {
+      label: 'Days of history',
+      value: figures ? String(figures.daysOfHistory) : DASH,
+      count: figures ? { to: figures.daysOfHistory, kind: 'int' as const } : undefined,
+    },
+    {
+      label: 'Spent, last 30 days',
+      value: figures ? money(figures.spend30dMinor) : DASH,
+      count: figures ? { to: figures.spend30dMinor, kind: 'money' as const } : undefined,
+    },
   ];
 
   return (
-    <div className="lp">
+    <div className="lp" ref={pageRef}>
       <header className="lp-header">
         <a className="lp-brand" href="/" aria-label="Settle home">
           <BrandMark size={20} />
@@ -186,34 +350,36 @@ export function Welcome({
         </nav>
       </header>
 
-      <section className="lp-section" id="overview" aria-labelledby="lp-title">
+      <section className="lp-section lp-hero" id="overview" aria-labelledby="lp-title">
         <div className="lp-label">
           <span className="lp-num num">01</span>
           <p className="lp-label-text">Overview</p>
         </div>
         <div className="lp-content">
-          <BrandMark size={72} className="lp-emblem" />
-          <h1 className="lp-h1" id="lp-title">Transaction intelligence you run yourself.</h1>
-          <p className="lp-lede">
-            Settle is a spending ledger being rebuilt into transaction intelligence you can run
-            yourself: statement import, merchant matching, recurring-charge and anomaly detection,
-            and a cash-flow forecast. Today it logs spending to a double-entry ledger and shows
-            patterns from it; this page marks what works now and what is planned.
-          </p>
-          <div className="lp-actions">
-            <button
-              type="button"
-              className="lp-btn lp-btn-primary"
-              onClick={() => void tryDemo()}
-              disabled={exploreDisabled}
-            >
-              {exploreLabel}
-            </button>
-            <a className="lp-btn lp-btn-secondary" href={signinHref} onClick={openSignin}>Sign in</a>
-            <a className="lp-link" href={REPO} target="_blank" rel="noopener noreferrer">View the source</a>
+          <div className="lp-hero-dial is-paused" ref={dialRef} aria-hidden="true">
+            <BrandMark size={280} variant="hero" />
           </div>
-          {demoError ? <p className="lp-error" role="alert">{demoError}</p> : null}
-          {bootError ? <p className="lp-error" role="alert">{bootError}</p> : null}
+          <div className="lp-hero-copy">
+            <h1 className="lp-h1" id="lp-title">Transaction intelligence you run yourself.</h1>
+            <p className="lp-lede">
+              Settle logs spending to a double-entry ledger, shows patterns from it, and marks each
+              pipeline stage as working today or planned.
+            </p>
+            <div className="lp-actions">
+              <button
+                type="button"
+                className="lp-btn lp-btn-primary"
+                onClick={() => void tryDemo()}
+                disabled={exploreDisabled}
+              >
+                {exploreLabel}
+              </button>
+              <a className="lp-btn lp-btn-secondary" href={signinHref} onClick={openSignin}>Sign in</a>
+              <a className="lp-link" href={REPO} target="_blank" rel="noopener noreferrer">View the source</a>
+            </div>
+            {demoError ? <p className="lp-error" role="alert">{demoError}</p> : null}
+            {bootError ? <p className="lp-error" role="alert">{bootError}</p> : null}
+          </div>
         </div>
       </section>
 
@@ -224,7 +390,7 @@ export function Welcome({
         </div>
         <div className="lp-content">
           <svg
-            className="lp-flow"
+            className="lp-flow glass"
             viewBox="0 0 1000 140"
             width="100%"
             role="img"
@@ -286,14 +452,21 @@ export function Welcome({
         </div>
         <div className="lp-content">
           <p className="lp-kicker">Sample data · a synthetic household, regenerated on every visit</p>
-          <div className="lp-figs" aria-busy={figures ? undefined : 'true'}>
+          <div className="lp-figs" ref={figsRef} aria-busy={figures ? undefined : 'true'}>
             {cells.map((cell) => (
-              <div className="lp-fig" key={cell.label}>
+              <div className="lp-fig glass" key={cell.label}>
                 <p className="lp-fig-label">{cell.label}</p>
-                <p className="lp-fig-value num">{cell.value}</p>
+                <p
+                  className="lp-fig-value num"
+                  data-count-to={cell.count?.to}
+                  data-count-kind={cell.count?.kind}
+                  data-count-final={cell.count ? cell.value : undefined}
+                >
+                  {cell.value}
+                </p>
               </div>
             ))}
-            <div className="lp-fig">
+            <div className="lp-fig glass">
               <p className="lp-fig-label">Largest category</p>
               <p className="lp-fig-value lp-fig-category">
                 <span className="lp-fig-name">
@@ -304,7 +477,7 @@ export function Welcome({
                 ) : null}
               </p>
             </div>
-            <div className="lp-fig lp-fig-wide">
+            <div className="lp-fig lp-fig-wide glass">
               <p className="lp-fig-label">Daily spend</p>
               <svg
                 className="lp-chart"
@@ -396,9 +569,6 @@ export function Welcome({
             <span className="lp-tag is-planned">Planned · M8</span>
           </p>
           <div className="lp-actions">
-            <a className="lp-btn lp-btn-secondary" href={REPO} target="_blank" rel="noopener noreferrer">
-              View the source
-            </a>
             <button
               type="button"
               className="lp-btn lp-btn-primary"
@@ -407,6 +577,9 @@ export function Welcome({
             >
               {exploreLabel}
             </button>
+            <a className="lp-link" href={REPO} target="_blank" rel="noopener noreferrer">
+              View the source
+            </a>
           </div>
         </div>
       </section>

@@ -97,9 +97,8 @@ export function SignIn({
       onStart({ account: result.account, household: [], demo: false, user: result.user });
       toast(
         mode === 'create'
-          ? 'Your account is ready. Set your starting point with your own numbers.'
-          : `Welcome back, ${result.user.displayName}.`,
-        { tone: 'good' },
+          ? `Account created. Signed in as ${result.user.displayName}.`
+          : `Signed in as ${result.user.displayName}.`,
       );
     } catch (e) {
       setError((e as Error).message);
@@ -122,8 +121,8 @@ export function SignIn({
           <h1>{mode === 'create' ? 'Create your account' : 'Sign in to Settle'}</h1>
           <p className="signin-lede">
             {mode === 'create'
-              ? 'One email, one wallet. You start empty, and the sample household never mixes with yours.'
-              : 'Sign in and pick up right where you left off.'}
+              ? 'One email, one wallet, kept apart from the sample household.'
+              : 'Sign in to see your wallet and your logged entries.'}
           </p>
 
           <form className="signin-form" aria-busy={busy} onSubmit={(e) => { e.preventDefault(); void submitAccount(); }}>
@@ -262,7 +261,7 @@ export function SignIn({
           </p>
         </div>
 
-        <aside className="signin-aside" aria-labelledby="signin-aside-title">
+        <aside className="signin-aside glass" aria-labelledby="signin-aside-title">
           <BrandMark size={40} className="signin-aside-mark" />
           <p className="signin-aside-label" id="signin-aside-title">How your data is handled</p>
           <ul className="signin-aside-list">

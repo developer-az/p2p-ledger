@@ -11,14 +11,16 @@ else; screens read tokens, never hex values.
 - **Keyboard first.** Every action has a key path and a visible focus state.
   Nothing depends on a pointer hover to be discoverable.
 - **Data over decoration.** Numbers, dates and labels carry the screen. No hero
-  imagery, no gradients, no illustration behind content.
+  imagery, no illustration behind content. The only painted background in the
+  product is the single fixed wash layer described under Glass.
 - **One accent.** Indigo (`--accent`) marks the primary action and the current
   selection. It does not tint headings, icons or decoration.
 - **Colour for state only.** Green, red and amber mean positive, negative and
   warning, never emphasis or branding.
-- **Motion under 150ms, state changes only.** `--dur` is 120ms, applied to
-  hover, focus, pressed and disclosure. Nothing animates on load or scrolls by
-  itself.
+- **Motion under 150ms for state changes.** `--dur` is 120ms, applied to
+  hover, focus, pressed and disclosure. The landing page owns the one long
+  motion in the product: the guilloché dial and the section reveals, both
+  specified under Motion and both static under `prefers-reduced-motion`.
 - **No mascot, streaks, confetti or celebratory copy.** A transaction is
   recorded; that is the whole reward.
 
@@ -48,6 +50,7 @@ else; screens read tokens, never hex values.
 | `--neg-soft` | `#fbecea` | `#2c1715` | Negative chip background, error banner |
 | `--warn` | `#a15c07` | `#f0b84a` | Needs attention, stale data |
 | `--warn-soft` | `#fbf1e0` | `#2a2110` | Warning banner background |
+| `--cat-dining` … `--cat-other` | see `tokens.css` | see `tokens.css` | Spend categories, charts and dots only; each category owns one name |
 | `--shadow` | `0 1px 2px rgb(0 0 0 / 4%), 0 1px 1px rgb(0 0 0 / 3%)` | `0 0 0 1px var(--line)` | Resting elevation |
 | `--shadow-lg` | `0 12px 32px -12px rgb(0 0 0 / 18%), 0 2px 6px rgb(0 0 0 / 6%)` | `0 16px 40px -16px rgb(0 0 0 / 70%), 0 0 0 1px var(--line)` | Menus, dialogs, popovers |
 
@@ -79,11 +82,23 @@ A 4px grid. There are no intermediate values.
 | `--t-base` | 14px | Body and UI default |
 | `--t-md` | 16px | Lead sentences, input values |
 | `--t-lg` | 20px | Section headings |
-| `--t-xl` | 28px | Page titles |
-| `--t-2xl` | 40px | Landing statement only |
+| `--t-xl` | 28px | Large sans text; page titles sit at 32px display |
+| `--t-2xl` | 40px | Headline figures (This month, landing statement) |
 
-Fonts: `--font` is Inter; `--mono` is the system monospace stack. Weights in use
-are 400, 500 and 600.
+Fonts are self-hosted: Instrument Serif (display), IBM Plex Sans (text) and IBM
+Plex Mono (mono), as woff2 latin subsets in `assistant/public/fonts`, declared
+with `@font-face` in `styles/fonts.css` and preloaded from `index.html`. Nothing
+is fetched from a font CDN at build or run time. Each webfont has a
+metric-matched fallback face over local Georgia (serif) and Arial (sans), so a
+swap does not move a line.
+
+| Token | Face | Weights | Use |
+|-------|------|---------|-----|
+| `--font-display` | Instrument Serif | 400, 400 italic | Landing H1, landing section numerals `01`–`05`, landing figure-strip numbers, page titles (`.v-title`), headline Overview / This month figures |
+| `--font` | IBM Plex Sans | 400, 500, 600 | Body, labels, buttons, everything else |
+| `--mono` | IBM Plex Mono | 400, 500 | Code, keycaps, aligned figures |
+
+Weights in use are 400, 500 and 600.
 
 ### Density
 
@@ -101,17 +116,134 @@ read `--row-h` and `--pad`, so they follow the preference without extra rules.
 |-------|-------|
 | `--dur` | 120ms |
 | `--ease` | `cubic-bezier(0.2, 0, 0, 1)` |
+| Route cross-fade | 160ms |
+| Section reveal | 400ms, `translateY(12px)` to 0 |
+| Figure ticker | 600ms, easeOutCubic |
+| Dial rosette | one turn / 120s, linear |
+| Dial track swing | ±30° across the hero |
 
-Transitions apply to hover, focus, pressed and open/closed states. Long
-animations, parallax, auto-scrolling and celebratory effects are out.
+Transitions apply to hover, focus, pressed and open/closed states.
+
+- Only `transform`, `opacity` and `filter` are animated. Nothing animates
+  layout: collapsing the sidebar swaps the grid column and width at once and
+  only fades and slides the labels.
+- Interface feedback stays under 300ms. The landing set piece is the one long
+  motion: the dial's rosette turns once every two minutes and its minute track
+  counter-rotates at most ±30° as the hero crosses the viewport. The rosette
+  pauses off screen, and the single passive, rAF-throttled scroll listener that
+  writes `--dial-turn` on the dial element exists only while the dial is on
+  screen. Nothing is written to `<html>` or `<body>` during scroll.
+- Route changes inside the app shell cross-fade through the native View
+  Transitions API, feature-detected in `router.ts`; the 160ms fade lives in
+  `styles/shell.css`.
+- Scroll reveals use one IntersectionObserver that sets `data-in` on each
+  landing section once, with the fade in CSS. Sections are only hidden once
+  `<html>` carries `js-reveal`, which the observer setup adds, so the page is
+  readable without JavaScript.
+- The figure strip counts up once on entry, writes `textContent` directly (no
+  re-render per frame) and ends on the server-rendered string, so the final
+  value is exact.
+- `prefers-reduced-motion: reduce` removes the rosette rotation, the track
+  rotation and its listener, the reveals, the route cross-fade and the ticker:
+  the page is the static layout.
+
+## Glass
+
+One material, on static surfaces only: smoked watch crystal. It reads as a
+pane over the page, not as a coloured pane of its own — neutral fill, neutral
+border, one diagonal highlight, a soft drop. Never neon, never rainbow, never
+a tint borrowed from the accent.
+
+### Tokens (`styles/tokens.css`, light and both dark blocks)
+
+| Token | Light | Dark | Use |
+|-------|-------|------|-----|
+| `--glass-bg` | `color-mix(in srgb, var(--surface) 62%, transparent)` | `color-mix(in srgb, var(--surface) 55%, transparent)` | Panel fill over the page |
+| `--glass-bg-dense` | `color-mix(in srgb, var(--surface) 88%, transparent)` | `color-mix(in srgb, var(--surface) 78%, transparent)` | The same fill for panels that sit on a dialog scrim |
+| `--glass-border` | `color-mix(in srgb, var(--ink) 10%, transparent)` | `color-mix(in srgb, #fff 9%, transparent)` | Hairline edge |
+| `--glass-blur` | `14px` | `14px` | Frost radius |
+| `--glass-sheen` | `linear-gradient(135deg, white 18%, transparent 38%, transparent 70%, white 6%)` | same shape, white 9% and 3% | The one highlight |
+| `--glass-shadow` | `inset 0 1px 0` white 35%, plus `0 8px 24px -12px` ink 18% | `inset 0 1px 0` white 8%, plus `0 8px 24px -12px` black 50% | Edge light and drop |
+
+`--glass-bg-dense` covers the one place where the same fill would fail: a
+dialog panel frosts its own scrim (ink at 30% for the palette, 40% for a
+sheet), so the under-glass is much darker than the page and the fill goes up to
+88% (light) and 78% (dark) to hold 12px `--muted` and `--faint` text at 4.5:1.
+
+`.glass` in `styles/base.css` is the material: `background: var(--glass-bg)`,
+`backdrop-filter: blur(var(--glass-blur)) saturate(140%)` (with the `-webkit-`
+form), `1px solid var(--glass-border)`, `box-shadow: var(--glass-shadow)`, and
+the sheen as an `::after` overlay at `border-radius: inherit` with
+`pointer-events: none`. The sheen paints above the fill and below the content
+(`isolation: isolate` on the panel, `z-index: -1` on the overlay), so it never
+lightens a label and the token contrast holds.
+
+### The backdrop
+
+Glass needs something to frost. `.app` carries one fixed, non-animated layer
+(`::before`, `position: fixed`, `inset: 0`, `z-index: -1`, `pointer-events:
+none`): two very faint washes on `--bg` — `--brand-gold` at 13% top-right,
+`--accent` at 8% bottom-left. Nothing moves, nothing loops. `.lp` paints the
+same layer only when it is not already inside `.app`, so the washes never
+stack. The shell's own `--bg` fill was removed so the layer shows through.
+
+### Where it goes
+
+The sidebar (`≥768px`), the sticky top bar, `.card`, `.v-panel`, the `.v-fig`
+figure cells, `.ins-panel`, settings panels, the command palette and shortcut
+sheet panels, dialog and sheet panels, the tour rail, the sign-in aside, the
+landing figure cells and the pipeline diagram. `glass` is a class, added where
+the surface is marked up, so the material is a decision per surface.
+
+It never goes on the dial, chart internals, buttons, inputs, list rows, toasts,
+or anything that moves or scrolls inside its own container. A surface that is
+transformed is not glass: the mobile sidebar drawer is opaque `--surface` while
+it slides, and takes the material at 768px where it sits still. A glass surface
+nested inside another one keeps the fill but drops the blur and the sheen
+(`.trust-embedded .card`), so a stack never frosts twice.
+
+An SVG shape cannot hold a backdrop filter, so the landing pipeline panel
+frosts and its boxes take `--glass-bg` as a plain translucent fill on top.
+
+### Fallbacks
+
+- `@supports not (backdrop-filter: blur(1px))` (either prefix): the fill drops
+to solid `--surface` and the sheen goes.
+- `prefers-reduced-transparency: reduce`: the same solid `--surface`, no sheen,
+no blur.
+- Text contrast does not change on glass: fill and border are mixed from
+`--surface` and `--ink`, so the ratio between text and panel stays between the
+`--surface` and `--bg` values already tested at 4.5:1. The one case that needed
+more is a panel over a scrim, which takes `--glass-bg-dense`. If a surface ever
+looks too translucent behind text, raise its fill's surface share; do not touch
+the text colour.
+
+### Performance rule
+
+Never put `backdrop-filter` on an element that animates, and never on `<html>`
+or `<body>`. A blurred element is re-blurred whenever its backdrop paints, so
+it stays on panels that do not move: no transition, no transform, no scroll
+container of its own above it. The panels that fade in (palette, shortcut
+sheet) run their fade on the dialog, which carries no filter. The route
+cross-fade snapshots the painted page, so it does not cost a blur per frame.
 
 ## Typography
 
-- Inter 400 for body, 500 for labels and emphasis, 600 for headings and buttons.
-- Headings use tight tracking: page titles `-0.02em`, section headings
-  `-0.01em`. No condensed or stretched cuts.
+- **Display** (`--font-display`) is Instrument Serif 400 and only ever sets the
+  landing H1 (`clamp(36px, 5vw, 56px)`, `letter-spacing: -0.01em`), the landing
+  section numerals `01`–`05` and figure-strip numbers, page titles (`.v-title`,
+  32px) and the headline Overview / This month figures. It never sets body copy,
+  navigation, buttons or labels.
+- **Text** (`--font`) is IBM Plex Sans: 400 body, 500 labels and emphasis, 600
+  headings and buttons.
+- **Mono** (`--mono`) is IBM Plex Mono 400/500, for code, keycaps and figures
+  that must align character by character.
+- Headings use tight tracking: display `-0.01em`, section headings `-0.01em`. No
+  condensed or stretched cuts.
 - Every amount uses `.num`, which sets `font-variant-numeric: tabular-nums`, so
-  columns line up as values change.
+  columns line up as values change. IBM Plex Sans has that feature; Instrument
+  Serif ships proportional lining figures only, which is why display never sets
+  a value that has to line up in a column.
 - Small labels are uppercase, 12px, weight 500, `letter-spacing: 0.08em`, in
   `--muted`. They label a section or a column; they never carry a sentence.
 - Sentence case everywhere else. No title case in body copy.
@@ -142,7 +274,8 @@ animations, parallax, auto-scrolling and celebratory effects are out.
   state uses `--neg` for the border and `--neg-soft` behind the message.
 - **Cards.** `--surface` background, 1px `--line` border, radius `--r3`. Use
   `--shadow` only where a card must separate from a same-tone panel. No heavy
-  drop shadows, no glass blur.
+  drop shadows. Cards that sit directly on the page take the glass material
+  (see Glass) instead of a flat fill.
 - **Tables and rows.** Row height `--row-h`, horizontal padding `--pad`,
   dividers in `--line`. Amounts right-aligned with `.num`. Header labels use the
   small all-caps style.

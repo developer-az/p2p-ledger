@@ -179,7 +179,7 @@ export function CommandPalette({ open, onClose, commands, transactions }: Comman
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="palette-panel">
+      <div className="palette-panel glass">
         <input
           ref={inputRef}
           type="text"

@@ -200,7 +200,7 @@ export function Sheet({
       <div className="app-sheet-wrap">
         <div
           ref={panelRef}
-          className={`app-sheet-panel${size === 'wide' ? ' app-sheet-panel-wide' : ''}`}
+          className={`app-sheet-panel glass${size === 'wide' ? ' app-sheet-panel-wide' : ''}`}
         >
           <div className="app-sheet-head">
             <div>

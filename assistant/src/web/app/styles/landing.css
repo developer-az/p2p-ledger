@@ -92,9 +92,82 @@
 }
 .app .lp-label { grid-column: span 3; display: grid; gap: var(--s2); align-content: start; }
 .app .lp-content { grid-column: span 9; display: grid; gap: var(--s6); align-content: start; min-width: 0; }
-/* Landing emblem: the grid gap is --s6, so pull it back to --s5 below the seal. */
-.app .lp-emblem { margin-bottom: calc(var(--s5) - var(--s6)); }
-.app .lp-num { font-size: var(--t-sm); font-variant-numeric: tabular-nums; color: var(--accent); }
+
+/* ---------- Reveals (see the observer in Welcome.tsx) ----------
+   Content is visible by default; the observer adds `js-reveal` on <html> once
+   at setup, and only then do sections wait for data-in. Nothing toggles during
+   scroll except data-in on the section itself. */
+
+html.js-reveal .app .lp-section {
+  opacity: 0;
+  transform: translateY(12px);
+}
+html.js-reveal .app .lp-section[data-in="true"] {
+  opacity: 1;
+  transform: none;
+  transition: opacity 400ms var(--ease), transform 400ms var(--ease);
+}
+
+/* ---------- 01 Signature: the guilloché dial ----------
+   The hero dial sits beside the headline on wide screens and above it below
+   1024px. The rosette turns once every 120s in CSS; the minute track follows
+   the scroll through the --dial-turn custom property that Welcome.tsx writes
+   on the dial element only. Off screen the animation is paused and no scroll
+   listener exists. */
+
+.app .lp-hero-copy { display: grid; gap: var(--s6); align-content: start; min-width: 0; }
+.app .lp-hero-dial {
+  --dial-turn: 0;
+  justify-self: start;
+  width: 120px;
+  height: 120px;
+}
+.app .lp-hero-dial > .brand-mark { display: block; width: 100%; height: auto; }
+
+@keyframes lp-dial-turn {
+  to { transform: rotate(360deg); }
+}
+
+.app .lp-hero-dial .dial-rosette,
+.app .lp-hero-dial .dial-track {
+  transform-box: view-box;
+  transform-origin: 32px 32px;
+}
+.app .lp-hero-dial .dial-rosette {
+  animation: lp-dial-turn 120s linear infinite;
+}
+.app .lp-hero-dial.is-paused .dial-rosette { animation-play-state: paused; }
+.app .lp-hero-dial .dial-track {
+  transform: rotate(calc(var(--dial-turn) * 1deg));
+}
+
+@media (min-width: 1024px) {
+  .app .lp-hero .lp-content {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    column-gap: var(--s8);
+    align-items: center;
+  }
+  .app .lp-hero-copy { grid-column: 1; grid-row: 1; }
+  .app .lp-hero-dial {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    width: 280px;
+    height: 280px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.js-reveal .app .lp-section,
+  html.js-reveal .app .lp-section[data-in="true"] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .app .lp-hero-dial .dial-rosette { animation: none; }
+  .app .lp-hero-dial .dial-track { transform: none; }
+}
+.app .lp-num { font-family: var(--font-display); font-size: var(--t-base); line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--ink-2); }
 .app .lp-label-text {
   margin: 0;
   font-family: var(--font);
@@ -109,11 +182,11 @@
 .app .lp h1,
 .app .lp-h1 {
   margin: 0;
-  font-family: var(--font);
-  font-size: clamp(28px, 4vw, 40px);
-  font-weight: 600;
-  line-height: 1.12;
-  letter-spacing: -0.02em;
+  font-family: var(--font-display);
+  font-size: clamp(36px, 5vw, 56px);
+  font-weight: 400;
+  line-height: 1.04;
+  letter-spacing: -0.01em;
   max-width: 22ch;
 }
 .app .lp-lede {
@@ -132,11 +205,15 @@
 /* ---------- 02 Pipeline ---------- */
 
 .app .lp-flow { display: block; width: 100%; height: auto; color: var(--ink); overflow-wrap: anywhere; }
+/* The diagram carries the glass material: an SVG shape cannot hold a backdrop
+   filter, so the panel behind it frosts and the boxes take the translucent
+   fill on top of it. */
+.app .lp-flow.glass { padding: var(--s5); border-radius: var(--r3); }
 /* Under 640px the diagram is too dense to read; the numbered list stands alone. */
 @media (max-width: 639px) {
   .app .lp-flow { display: none; }
 }
-.app .lp-flow-box { fill: none; stroke: currentColor; stroke-width: 1; }
+.app .lp-flow-box { fill: var(--glass-bg); stroke: currentColor; stroke-width: 1; }
 .app .lp-flow-link { fill: none; stroke: currentColor; stroke-width: 1; }
 .app .lp-flow text { fill: currentColor; font-family: var(--font); }
 .app .lp-flow-step { font-size: 13px; fill: var(--muted); }
@@ -159,9 +236,9 @@
   align-items: center;
   min-height: 22px;
   padding: 0 var(--s2);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--line-strong);
   border-radius: var(--r1);
-  color: var(--accent);
+  color: var(--ink-2);
   font-size: var(--t-xs);
   font-weight: 500;
   line-height: 1.4;
@@ -199,9 +276,10 @@
 .app .lp-fig-value {
   margin: 0;
   min-height: 34px;
-  font-size: clamp(20px, 6vw, var(--t-xl));
-  font-weight: 500;
-  line-height: 1.2;
+  font-family: var(--font-display);
+  font-size: clamp(22px, 6vw, 34px);
+  font-weight: 400;
+  line-height: 1.15;
   color: var(--ink);
   white-space: nowrap;
 }
@@ -225,7 +303,7 @@
 
 .app .lp-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s4); max-width: 60ch; }
 .app .lp-line { display: grid; grid-template-columns: var(--s6) minmax(0, 1fr); gap: var(--s3); align-items: baseline; }
-.app .lp-line-num { font-size: var(--t-sm); color: var(--accent); }
+.app .lp-line-num { font-family: var(--font-display); font-size: var(--t-base); line-height: 1.2; color: var(--ink-2); }
 .app .lp-line-body { margin: 0; font-size: var(--t-md); line-height: 1.5; color: var(--ink-2); }
 
 /* ---------- 05 Run it ---------- */

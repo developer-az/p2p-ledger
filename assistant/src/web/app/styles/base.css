@@ -34,6 +34,124 @@
   letter-spacing: -0.01em;
 }
 
+/* ---------- Glass ----------
+   Smoked-crystal material for static surfaces only: the shell, panels, dialogs,
+   the tour rail, the sign-in aside and the landing figure cells. Never on an
+   element that animates, never on a row, a button or a chart internals, never
+   on <html> or <body>. See the Glass section of docs/DESIGN.md. */
+
+.glass {
+  position: relative;
+  /* Keeps the sheen's negative z-index inside this element. */
+  isolation: isolate;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+}
+
+/* The sheen paints above the fill and below the content, so it never lightens
+   text and the contrast the tokens promise survives. */
+.glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--glass-sheen);
+  mix-blend-mode: normal;
+  pointer-events: none;
+}
+
+/* These surfaces set their own background, border and shadow in the sheets that
+   load after this one, so the material is restated for them at a specificity
+   that does not depend on stylesheet order. */
+.app .card.glass,
+.app .v-panel.glass,
+.app .v-fig.glass,
+.app .ins-panel.glass,
+.app .shell-sidebar.glass,
+.app .shell-top.glass,
+.app .palette-panel.glass,
+.app .shortcut-panel.glass,
+.app .app-sheet-panel.glass,
+.app .tour-rail.glass,
+.app .signin-aside.glass,
+.app .lp-fig.glass,
+.app .lp-flow.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* In a figure strip the grid line is already the divider, so the cells keep the
+   fill and the sheen but not a second border. */
+.app .v-figs > .v-fig.glass,
+.app .lp-figs > .lp-fig.glass {
+  border: 0;
+}
+
+/* The dialog panels sit on a scrim, which is far darker under the glass than
+   the page is, so they take the denser fill to keep 12px text at 4.5:1. */
+.app .palette-panel.glass,
+.app .shortcut-panel.glass,
+.app .app-sheet-panel.glass {
+  background: var(--glass-bg-dense);
+}
+
+/* Fallbacks: the fill drops back to the opaque surface and the sheen goes. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    --glass-bg: var(--surface);
+    --glass-bg-dense: var(--surface);
+    --glass-sheen: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    --glass-bg: var(--surface);
+    --glass-bg-dense: var(--surface);
+    --glass-sheen: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* The glass needs something under it to frost: one fixed layer per page root,
+   two very faint washes on the page ground. No animation, no pointer events.
+   `.lp` only paints it when it is not already inside `.app`, so the washes
+   never stack. */
+.app::before,
+.lp:not(.app .lp)::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      58% 46% at 100% 0,
+      color-mix(in srgb, var(--brand-gold) 13%, transparent) 0%,
+      transparent 70%
+    ),
+    radial-gradient(
+      52% 42% at 0 100%,
+      color-mix(in srgb, var(--accent) 8%, transparent) 0%,
+      transparent 70%
+    ),
+    var(--bg);
+}
+
+/* The palette and shortcut dialogs carry `.app` for the tokens but are not page
+   roots, so they paint no wash of their own. */
+.app:is(.palette-dialog, .shortcut-dialog)::before {
+  content: none;
+}
+
 /* ---------- Labels and copy ---------- */
 
 .app .eyebrow,

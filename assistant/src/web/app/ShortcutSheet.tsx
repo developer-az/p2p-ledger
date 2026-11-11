@@ -60,7 +60,7 @@ export function ShortcutSheet({ open, onClose }: ShortcutSheetProps) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="shortcut-panel">
+      <div className="shortcut-panel glass">
         <div className="shortcut-head">
           <h2 id={titleId} className="shortcut-title">Keyboard shortcuts</h2>
           <button

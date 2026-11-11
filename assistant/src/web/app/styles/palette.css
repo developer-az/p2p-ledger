@@ -26,6 +26,9 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
+  /* The panels are glass: the fade runs on the dialog, which carries no
+     backdrop filter, so nothing that animates is also blurred. */
+  animation: palette-fade var(--dur) var(--ease);
 }
 
 .app .palette-dialog::backdrop,
@@ -41,7 +44,6 @@
   border-radius: var(--r3);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
-  animation: palette-fade var(--dur) var(--ease);
 }
 
 .app .palette-panel {
@@ -241,8 +243,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app .palette-panel,
-  .app .shortcut-panel {
+  .app .palette-dialog[open],
+  .app .shortcut-dialog[open] {
     animation: none;
   }
 }

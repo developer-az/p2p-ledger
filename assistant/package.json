@@ -25,25 +25,25 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",
     "@google/genai": "^3.0.0",
-    "@hono/node-server": "^2.1.4",
-    "hono": "^4.13.13",
-    "jose": "^6.2.15",
-    "motion": "^14.6.0",
+    "@hono/node-server": "^2.1.6",
+    "hono": "^4.13.17",
+    "jose": "^6.2.16",
+    "motion": "^14.10.1",
     "pg": "^8.23.1",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.2",
-    "concurrently": "^10.0.5",
+    "@vitejs/plugin-react": "^6.2.1",
+    "concurrently": "^10.0.7",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vite": "^8.3.3",
-    "vitest": "^5.0.3"
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
   }
 }

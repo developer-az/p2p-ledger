@@ -118,7 +118,7 @@ export function AskTab({
         <span className="pill pill-good"><Icon name="lock" size={14} /> Read-only</span>
       </header>
 
-      <section className="card ask-panel" aria-label="Conversation">
+      <section className="card glass ask-panel" aria-label="Conversation">
         {!modelOn ? (
           <p className="notice notice-warn" style={{ fontSize: '0.92rem' }}>
             The language model is not connected on this server, so answers come straight from your records.

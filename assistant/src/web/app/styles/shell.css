@@ -5,7 +5,9 @@
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
   min-height: 100vh;
-  background: var(--bg);
+  /* The page ground comes from the fixed backdrop layer on `.app` (base.css),
+     so the glass surfaces above it have something to frost. */
+  background: transparent;
   color: var(--ink);
   font-family: var(--font);
   font-size: var(--t-base);
@@ -600,6 +602,18 @@
     transition: transform var(--dur) var(--ease);
     z-index: 60;
     padding: var(--s3);
+  }
+
+  /* The drawer slides on transform, so it carries no backdrop filter there:
+     it is an opaque surface while it moves. The material returns at 768px. */
+  .app .shell-sidebar.glass {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--surface);
+  }
+
+  .app .shell-sidebar.glass::after {
+    content: none;
   }
 
   .app .shell-sidebar.is-open {

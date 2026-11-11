@@ -390,7 +390,7 @@ export function Welcome({
         </div>
         <div className="lp-content">
           <svg
-            className="lp-flow"
+            className="lp-flow glass"
             viewBox="0 0 1000 140"
             width="100%"
             role="img"
@@ -454,7 +454,7 @@ export function Welcome({
           <p className="lp-kicker">Sample data · a synthetic household, regenerated on every visit</p>
           <div className="lp-figs" ref={figsRef} aria-busy={figures ? undefined : 'true'}>
             {cells.map((cell) => (
-              <div className="lp-fig" key={cell.label}>
+              <div className="lp-fig glass" key={cell.label}>
                 <p className="lp-fig-label">{cell.label}</p>
                 <p
                   className="lp-fig-value num"
@@ -466,7 +466,7 @@ export function Welcome({
                 </p>
               </div>
             ))}
-            <div className="lp-fig">
+            <div className="lp-fig glass">
               <p className="lp-fig-label">Largest category</p>
               <p className="lp-fig-value lp-fig-category">
                 <span className="lp-fig-name">
@@ -477,7 +477,7 @@ export function Welcome({
                 ) : null}
               </p>
             </div>
-            <div className="lp-fig lp-fig-wide">
+            <div className="lp-fig lp-fig-wide glass">
               <p className="lp-fig-label">Daily spend</p>
               <svg
                 className="lp-chart"

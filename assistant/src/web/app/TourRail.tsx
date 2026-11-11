@@ -134,7 +134,7 @@ export const TourRail = forwardRef<TourRailHandle>(function TourRail(_props, ref
   const last = state.index === TOUR_STEPS.length - 1;
 
   return (
-    <aside className="tour-rail" role="dialog" aria-modal="false" aria-labelledby={titleId}>
+    <aside className="tour-rail glass" role="dialog" aria-modal="false" aria-labelledby={titleId}>
       <button
         type="button"
         className="tour-close"

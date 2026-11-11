@@ -25,7 +25,7 @@ function Demo<T>({ title, plain, button, run, onRun, children }: {
   children: (value: T) => React.ReactNode;
 }) {
   return (
-    <section className="card stack-sm">
+    <section className="card glass stack-sm">
       <h2>{title}</h2>
       <p className="muted">{plain}</p>
       <div><button type="button" className="btn btn-sm" onClick={onRun} disabled={run.state === 'running'}>{run.state === 'running' ? 'Running…' : button}</button></div>
@@ -61,7 +61,7 @@ export function TrustTab({ me, data, embedded = false }: { me: AccountRef; data:
         </div>
       ) : null}
 
-      <section className="card" aria-labelledby="health">
+      <section className="card glass" aria-labelledby="health">
         <h2 id="health">Ledger health</h2>
         {integrityError ? <p className="muted" style={{ marginTop: 8 }}>{integrityError}</p> : !integrity ? <Skeleton height={60} /> : (
           <div className={`notice ${integrity.balanced ? 'notice-good' : 'notice-bad'}`} style={{ marginTop: 10 }}>
@@ -91,12 +91,12 @@ export function TrustTab({ me, data, embedded = false }: { me: AccountRef; data:
         </Demo>
       </div>
 
-      <section className="card stack-sm">
+      <section className="card glass stack-sm">
         <h2>What the assistant can see</h2>
         <p className="muted">The Ask tab answers questions using read-only tools scoped to the wallet you are viewing. It can look things up and explain them. It cannot send money, change a balance or read another wallet.</p>
       </section>
 
-      <section className="card stack-sm">
+      <section className="card glass stack-sm">
         <h2>What Settle is not</h2>
         <ul style={{ margin: 0, paddingLeft: 18 }} className="muted">
           <li>Not a bank. No real money moves and nothing here is regulated.</li>

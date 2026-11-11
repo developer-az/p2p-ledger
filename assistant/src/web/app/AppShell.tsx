@@ -409,7 +409,7 @@ export function AppShell({
       <aside
         id="app-sidebar"
         ref={sidebarRef}
-        className={`shell-sidebar${drawerOpen ? ' is-open' : ''}`}
+        className={`shell-sidebar glass${drawerOpen ? ' is-open' : ''}`}
         inert={isMobile && !drawerOpen ? true : undefined}
         onKeyDown={onDrawerKeyDown}
       >
@@ -548,7 +548,7 @@ export function AppShell({
       ) : null}
 
       <div className="shell-col">
-        <header className="shell-top">
+        <header className="shell-top glass">
           <button
             ref={menuButtonRef}
             type="button"

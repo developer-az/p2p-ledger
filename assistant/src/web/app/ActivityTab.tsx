@@ -34,21 +34,21 @@ export function ActivityTab({ data, onOpen }: { data: WalletData | null; onOpen:
       </header>
 
       <section className="v-figs v-figs-3" aria-label="This month">
-        <div className="v-fig">
+        <div className="v-fig glass">
           <p className="v-fig-label">Out this month</p>
           <p className="v-fig-value num">{money(out)}</p>
         </div>
-        <div className="v-fig">
+        <div className="v-fig glass">
           <p className="v-fig-label">In this month</p>
           <p className="v-fig-value num">{money(inn)}</p>
         </div>
-        <div className="v-fig">
+        <div className="v-fig glass">
           <p className="v-fig-label">Active days in the last 30</p>
           <p className="v-fig-value num">{patterns?.totals.activeDays30d ?? 0}</p>
         </div>
       </section>
 
-      <section className="v-panel" data-tour="transactions-list">
+      <section className="v-panel glass" data-tour="transactions-list">
         <div className="v-toolbar">
           <div className="v-seg" role="group" aria-label="Filter activity">
             {FILTERS.map((f) => (

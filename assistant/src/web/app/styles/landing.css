@@ -205,11 +205,15 @@ html.js-reveal .app .lp-section[data-in="true"] {
 /* ---------- 02 Pipeline ---------- */
 
 .app .lp-flow { display: block; width: 100%; height: auto; color: var(--ink); overflow-wrap: anywhere; }
+/* The diagram carries the glass material: an SVG shape cannot hold a backdrop
+   filter, so the panel behind it frosts and the boxes take the translucent
+   fill on top of it. */
+.app .lp-flow.glass { padding: var(--s5); border-radius: var(--r3); }
 /* Under 640px the diagram is too dense to read; the numbered list stands alone. */
 @media (max-width: 639px) {
   .app .lp-flow { display: none; }
 }
-.app .lp-flow-box { fill: none; stroke: currentColor; stroke-width: 1; }
+.app .lp-flow-box { fill: var(--glass-bg); stroke: currentColor; stroke-width: 1; }
 .app .lp-flow-link { fill: none; stroke: currentColor; stroke-width: 1; }
 .app .lp-flow text { fill: currentColor; font-family: var(--font); }
 .app .lp-flow-step { font-size: 13px; fill: var(--muted); }

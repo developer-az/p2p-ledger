@@ -261,7 +261,7 @@ export function SignIn({
           </p>
         </div>
 
-        <aside className="signin-aside" aria-labelledby="signin-aside-title">
+        <aside className="signin-aside glass" aria-labelledby="signin-aside-title">
           <BrandMark size={40} className="signin-aside-mark" />
           <p className="signin-aside-label" id="signin-aside-title">How your data is handled</p>
           <ul className="signin-aside-list">

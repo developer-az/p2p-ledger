@@ -912,6 +912,17 @@ body:has(.app), body:has(.app-preloader) {
   box-shadow: none;
 }
 
+/* Nested inside a glass panel these stay flat: one frost per stack, no sheen
+   on top of a sheen. */
+.app .trust-embedded .card.glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.app .trust-embedded .card.glass::after {
+  content: none;
+}
+
 .app .trust-embedded .page-title {
   display: none;
 }

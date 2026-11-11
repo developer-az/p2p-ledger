@@ -85,7 +85,7 @@ export function SettingsView({
         <div className="set-content">
           {tab === 'profile' ? (
             <>
-              <section className="v-panel set-panel" aria-labelledby="set-profile">
+              <section className="v-panel set-panel glass" aria-labelledby="set-profile">
                 <h2 id="set-profile">Profile</h2>
                 <dl className="set-facts">
                   <div><dt>Name</dt><dd>{name}</dd></div>
@@ -97,7 +97,7 @@ export function SettingsView({
                 </dl>
               </section>
 
-              <section className="v-panel set-panel" aria-labelledby="set-profile-edit">
+              <section className="v-panel set-panel glass" aria-labelledby="set-profile-edit">
                 <h2 id="set-profile-edit">Your details</h2>
                 <ul className="set-rows">
                   <PlannedRow label="Edit profile" description="Change the name and email on this account." milestone="M2" />
@@ -108,7 +108,7 @@ export function SettingsView({
 
           {tab === 'security' ? (
             <>
-              <section className="v-panel set-panel" aria-labelledby="set-session">
+              <section className="v-panel set-panel glass" aria-labelledby="set-session">
                 <h2 id="set-session">Current session</h2>
                 <p className="set-copy">
                   {demo ? 'Exploring the sample household.' : email ? `Signed in as ${email}` : 'Signed in on this browser.'}
@@ -120,7 +120,7 @@ export function SettingsView({
                 </div>
               </section>
 
-              <section className="v-panel set-panel" aria-labelledby="set-signin">
+              <section className="v-panel set-panel glass" aria-labelledby="set-signin">
                 <h2 id="set-signin">Sign-in protection</h2>
                 <ul className="set-rows">
                   <PlannedRow label="Two-factor sign-in" description="A second step when signing in from a new device." milestone="M2" />
@@ -140,7 +140,7 @@ export function SettingsView({
 
           {tab === 'privacy' ? (
             <>
-              <section className="v-panel set-panel" aria-labelledby="set-data">
+              <section className="v-panel set-panel glass" aria-labelledby="set-data">
                 <h2 id="set-data">Your data</h2>
                 <p className="set-copy">Every ledger entry on this account, in a text file you can keep.</p>
                 <div className="row-wrap">
@@ -148,7 +148,7 @@ export function SettingsView({
                 </div>
               </section>
 
-              <section className="v-panel set-panel" aria-labelledby="set-integrity">
+              <section className="v-panel set-panel glass" aria-labelledby="set-integrity">
                 <h2 id="set-integrity">Ledger integrity</h2>
                 <p className="set-copy">
                   Run the checks against a real payment in your history, or open the console to read the ledger yourself.
@@ -159,7 +159,7 @@ export function SettingsView({
                 </div>
               </section>
 
-              <section className="v-panel set-panel" aria-labelledby="set-retention">
+              <section className="v-panel set-panel glass" aria-labelledby="set-retention">
                 <h2 id="set-retention">Control and removal</h2>
                 <ul className="set-rows">
                   <PlannedRow label="Export all data" description="Take every entry, profile field and log in one file." milestone="M2" />
@@ -175,7 +175,7 @@ export function SettingsView({
 
           {tab === 'integrations' ? (
             <>
-              <section className="v-panel set-panel" aria-labelledby="set-import">
+              <section className="v-panel set-panel glass" aria-labelledby="set-import">
                 <h2 id="set-import">Import spend logs from CSV</h2>
                 {demo ? (
                   <p className="set-copy muted">
@@ -187,7 +187,7 @@ export function SettingsView({
                 )}
               </section>
 
-              <section className="v-panel set-panel" aria-labelledby="set-integrations">
+              <section className="v-panel set-panel glass" aria-labelledby="set-integrations">
                 <h2 id="set-integrations">Connections</h2>
                 <ul className="set-rows">
                   <PlannedRow label="Bank statement import" description="Read a statement export without editing it first." milestone="M3" />
@@ -199,7 +199,7 @@ export function SettingsView({
           ) : null}
 
           {tab === 'categories' ? (
-            <section className="v-panel set-panel" aria-labelledby="set-categories">
+            <section className="v-panel set-panel glass" aria-labelledby="set-categories">
               <h2 id="set-categories">Categories &amp; rules</h2>
               <p className="set-copy">
                 Category rules by merchant and amount, previewed before they apply.
@@ -212,7 +212,7 @@ export function SettingsView({
           ) : null}
 
           {tab === 'appearance' ? (
-            <section className="v-panel set-panel" aria-labelledby="set-appearance" data-tour="settings-appearance">
+            <section className="v-panel set-panel glass" aria-labelledby="set-appearance" data-tour="settings-appearance">
               <h2 id="set-appearance">Appearance</h2>
               <fieldset className="set-fieldset">
                 <legend className="set-legend">Theme</legend>
@@ -253,7 +253,7 @@ export function SettingsView({
           ) : null}
 
           {tab === 'balances' ? (
-            <section className="v-panel set-panel" aria-labelledby="set-balances">
+            <section className="v-panel set-panel glass" aria-labelledby="set-balances">
               <h2 id="set-balances">Balances &amp; budget</h2>
               {data ? <BalanceFigures data={data} /> : <p className="v-empty">Loading your wallet…</p>}
               <div className="row-wrap">
@@ -284,15 +284,15 @@ function BalanceFigures({ data }: { data: WalletData }) {
   const plan = moneyPlan(data.view);
   return (
     <div className="v-figs v-figs-3">
-      <div className="v-fig">
+      <div className="v-fig glass">
         <p className="v-fig-label">Cash</p>
         <p className="v-fig-value num">{plan.cashMinor === null ? 'Not set' : money(plan.cashMinor)}</p>
       </div>
-      <div className="v-fig">
+      <div className="v-fig glass">
         <p className="v-fig-label">On cards</p>
         <p className="v-fig-value num">{money(plan.creditMinor)}</p>
       </div>
-      <div className="v-fig">
+      <div className="v-fig glass">
         <p className="v-fig-label">Weekly plan</p>
         <p className="v-fig-value num">{plan.budgetMinor === null ? 'Not set' : money(plan.budgetMinor)}</p>
       </div>

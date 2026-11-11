@@ -44,7 +44,7 @@ export function Home({ me, name, data, actions }: { me: AccountRef; name?: strin
       <AskBar onAsk={actions.ask} />
 
       <div className="v-grid">
-        <section className="v-panel" aria-labelledby="recent-title">
+        <section className="v-panel glass" aria-labelledby="recent-title">
           <div className="v-panel-head">
             <h2 id="recent-title">Recent transactions</h2>
             <button type="button" className="v-link" onClick={actions.seeAll}>View all</button>
@@ -60,7 +60,7 @@ export function Home({ me, name, data, actions }: { me: AccountRef; name?: strin
         </section>
 
         <div className="v-side">
-          <section className="v-panel" aria-labelledby="month-title">
+          <section className="v-panel glass" aria-labelledby="month-title">
             <div className="v-panel-head">
               <h2 id="month-title">This month</h2>
             </div>
@@ -75,7 +75,7 @@ export function Home({ me, name, data, actions }: { me: AccountRef; name?: strin
             </p>
           </section>
 
-          <section className="v-panel" aria-labelledby="categories-title">
+          <section className="v-panel glass" aria-labelledby="categories-title">
             <div className="v-panel-head">
               <h2 id="categories-title">Top categories</h2>
               <button type="button" className="v-link" onClick={actions.seeInsights}>Open Insights</button>
@@ -107,21 +107,21 @@ function FigureStrip({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; ac
   const budget = plan.budgetMinor;
   return (
     <section className="v-figs" aria-label="Money position" data-tour="overview-figures">
-      <div className="v-fig">
+      <div className="v-fig glass">
         <p className="v-fig-label">Net position</p>
         <p className={`v-fig-value num${net < 0 ? ' is-neg' : ''}`}>{money(net)}</p>
       </div>
-      <div className="v-fig">
+      <div className="v-fig glass">
         <p className="v-fig-label">Cash</p>
         {plan.cashMinor === null
           ? <p className="v-fig-value is-muted">Not set</p>
           : <p className="v-fig-value num">{money(plan.cashMinor)}</p>}
       </div>
-      <div className="v-fig">
+      <div className="v-fig glass">
         <p className="v-fig-label">On cards</p>
         <p className={`v-fig-value num${plan.creditMinor > 0 ? ' is-neg' : ''}`}>{money(plan.creditMinor)}</p>
       </div>
-      <div className="v-fig">
+      <div className="v-fig glass">
         <p className="v-fig-label">Left this week</p>
         {budget === null ? (
           <p className="v-fig-value is-muted">
@@ -144,7 +144,7 @@ function FigureStrip({ plan, actions }: { plan: ReturnType<typeof moneyPlan>; ac
 
 function StartingPoint({ actions }: { actions: HomeActions }) {
   return (
-    <section className="v-panel v-setup" aria-labelledby="setup-title">
+    <section className="v-panel v-setup glass" aria-labelledby="setup-title">
       <h2 id="setup-title">Set your starting point</h2>
       <p>Add your cash, card balance and a weekly pace; Settle uses those three numbers for every total on this page.</p>
       <button type="button" className="v-btn v-btn-primary" onClick={() => actions.setup(0)}>Set up your baseline</button>
@@ -177,7 +177,7 @@ function HomeSkeleton() {
       </div>
       <div className="v-figs">
         {[0, 1, 2, 3].map((cell) => (
-          <div className="v-fig" key={cell}>
+          <div className="v-fig glass" key={cell}>
             <Skeleton height={12} width="55%" />
             <Skeleton height={28} width="80%" />
           </div>
@@ -185,10 +185,10 @@ function HomeSkeleton() {
       </div>
       <Skeleton height={38} />
       <div className="v-grid">
-        <section className="v-panel"><Skeleton height={280} /></section>
+        <section className="v-panel glass"><Skeleton height={280} /></section>
         <div className="v-side">
-          <section className="v-panel"><Skeleton height={116} /></section>
-          <section className="v-panel"><Skeleton height={168} /></section>
+          <section className="v-panel glass"><Skeleton height={116} /></section>
+          <section className="v-panel glass"><Skeleton height={168} /></section>
         </div>
       </div>
     </div>

@@ -92,7 +92,7 @@ export function InsightsTab({
               <h2 className="ins-title" id="focus-title">Weekly pace</h2>
             </div>
             <div className="ins-body">
-              <div className="ins-panel">
+              <div className="ins-panel glass">
                 <div className="ins-panel-head">
                   <p className="hint">Spent against the weekly plan.</p>
                   <button type="button" className="link-btn" onClick={() => onSetup(2)}>Edit plan</button>
@@ -149,7 +149,7 @@ export function InsightsTab({
               <h2 className="ins-title" id="heat-title">Spending calendar</h2>
             </div>
             <div className="ins-body">
-              <div className="ins-panel">
+              <div className="ins-panel glass">
                 <div className="ins-panel-head">
                   <p className="hint">Daily total, darkest is the highest.</p>
                   <div className="heat-legend" aria-hidden="true"><span>$0</span><i /><i /><i /><i /><span>{money(heatMax)}</span></div>
@@ -284,7 +284,7 @@ export function InsightsTab({
                 <h2 className="ins-title" id="payoff-title">Payoff plan</h2>
               </div>
               <div className="ins-body">
-                <div className="ins-panel">
+                <div className="ins-panel glass">
                   <div className="ins-panel-head">
                     <p className="hint">Move the slider to see what a weekly payment does. Interest is not modeled.</p>
                     <span className="amount num">{money(plan.creditMinor)}</span>

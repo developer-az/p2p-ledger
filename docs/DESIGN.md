@@ -11,7 +11,8 @@ else; screens read tokens, never hex values.
 - **Keyboard first.** Every action has a key path and a visible focus state.
   Nothing depends on a pointer hover to be discoverable.
 - **Data over decoration.** Numbers, dates and labels carry the screen. No hero
-  imagery, no gradients, no illustration behind content.
+  imagery, no illustration behind content. The only painted background in the
+  product is the single fixed wash layer described under Glass.
 - **One accent.** Indigo (`--accent`) marks the primary action and the current
   selection. It does not tint headings, icons or decoration.
 - **Colour for state only.** Green, red and amber mean positive, negative and
@@ -146,6 +147,86 @@ Transitions apply to hover, focus, pressed and open/closed states.
   rotation and its listener, the reveals, the route cross-fade and the ticker:
   the page is the static layout.
 
+## Glass
+
+One material, on static surfaces only: smoked watch crystal. It reads as a
+pane over the page, not as a coloured pane of its own — neutral fill, neutral
+border, one diagonal highlight, a soft drop. Never neon, never rainbow, never
+a tint borrowed from the accent.
+
+### Tokens (`styles/tokens.css`, light and both dark blocks)
+
+| Token | Light | Dark | Use |
+|-------|-------|------|-----|
+| `--glass-bg` | `color-mix(in srgb, var(--surface) 62%, transparent)` | `color-mix(in srgb, var(--surface) 55%, transparent)` | Panel fill over the page |
+| `--glass-bg-dense` | `color-mix(in srgb, var(--surface) 88%, transparent)` | `color-mix(in srgb, var(--surface) 78%, transparent)` | The same fill for panels that sit on a dialog scrim |
+| `--glass-border` | `color-mix(in srgb, var(--ink) 10%, transparent)` | `color-mix(in srgb, #fff 9%, transparent)` | Hairline edge |
+| `--glass-blur` | `14px` | `14px` | Frost radius |
+| `--glass-sheen` | `linear-gradient(135deg, white 18%, transparent 38%, transparent 70%, white 6%)` | same shape, white 9% and 3% | The one highlight |
+| `--glass-shadow` | `inset 0 1px 0` white 35%, plus `0 8px 24px -12px` ink 18% | `inset 0 1px 0` white 8%, plus `0 8px 24px -12px` black 50% | Edge light and drop |
+
+`--glass-bg-dense` covers the one place where the same fill would fail: a
+dialog panel frosts its own scrim (ink at 30% for the palette, 40% for a
+sheet), so the under-glass is much darker than the page and the fill goes up to
+88% (light) and 78% (dark) to hold 12px `--muted` and `--faint` text at 4.5:1.
+
+`.glass` in `styles/base.css` is the material: `background: var(--glass-bg)`,
+`backdrop-filter: blur(var(--glass-blur)) saturate(140%)` (with the `-webkit-`
+form), `1px solid var(--glass-border)`, `box-shadow: var(--glass-shadow)`, and
+the sheen as an `::after` overlay at `border-radius: inherit` with
+`pointer-events: none`. The sheen paints above the fill and below the content
+(`isolation: isolate` on the panel, `z-index: -1` on the overlay), so it never
+lightens a label and the token contrast holds.
+
+### The backdrop
+
+Glass needs something to frost. `.app` carries one fixed, non-animated layer
+(`::before`, `position: fixed`, `inset: 0`, `z-index: -1`, `pointer-events:
+none`): two very faint washes on `--bg` — `--brand-gold` at 13% top-right,
+`--accent` at 8% bottom-left. Nothing moves, nothing loops. `.lp` paints the
+same layer only when it is not already inside `.app`, so the washes never
+stack. The shell's own `--bg` fill was removed so the layer shows through.
+
+### Where it goes
+
+The sidebar (`≥768px`), the sticky top bar, `.card`, `.v-panel`, the `.v-fig`
+figure cells, `.ins-panel`, settings panels, the command palette and shortcut
+sheet panels, dialog and sheet panels, the tour rail, the sign-in aside, the
+landing figure cells and the pipeline diagram. `glass` is a class, added where
+the surface is marked up, so the material is a decision per surface.
+
+It never goes on the dial, chart internals, buttons, inputs, list rows, toasts,
+or anything that moves or scrolls inside its own container. A surface that is
+transformed is not glass: the mobile sidebar drawer is opaque `--surface` while
+it slides, and takes the material at 768px where it sits still. A glass surface
+nested inside another one keeps the fill but drops the blur and the sheen
+(`.trust-embedded .card`), so a stack never frosts twice.
+
+An SVG shape cannot hold a backdrop filter, so the landing pipeline panel
+frosts and its boxes take `--glass-bg` as a plain translucent fill on top.
+
+### Fallbacks
+
+- `@supports not (backdrop-filter: blur(1px))` (either prefix): the fill drops
+to solid `--surface` and the sheen goes.
+- `prefers-reduced-transparency: reduce`: the same solid `--surface`, no sheen,
+no blur.
+- Text contrast does not change on glass: fill and border are mixed from
+`--surface` and `--ink`, so the ratio between text and panel stays between the
+`--surface` and `--bg` values already tested at 4.5:1. The one case that needed
+more is a panel over a scrim, which takes `--glass-bg-dense`. If a surface ever
+looks too translucent behind text, raise its fill's surface share; do not touch
+the text colour.
+
+### Performance rule
+
+Never put `backdrop-filter` on an element that animates, and never on `<html>`
+or `<body>`. A blurred element is re-blurred whenever its backdrop paints, so
+it stays on panels that do not move: no transition, no transform, no scroll
+container of its own above it. The panels that fade in (palette, shortcut
+sheet) run their fade on the dialog, which carries no filter. The route
+cross-fade snapshots the painted page, so it does not cost a blur per frame.
+
 ## Typography
 
 - **Display** (`--font-display`) is Instrument Serif 400 and only ever sets the
@@ -193,7 +274,8 @@ Transitions apply to hover, focus, pressed and open/closed states.
   state uses `--neg` for the border and `--neg-soft` behind the message.
 - **Cards.** `--surface` background, 1px `--line` border, radius `--r3`. Use
   `--shadow` only where a card must separate from a same-tone panel. No heavy
-  drop shadows, no glass blur.
+  drop shadows. Cards that sit directly on the page take the glass material
+  (see Glass) instead of a flat fill.
 - **Tables and rows.** Row height `--row-h`, horizontal padding `--pad`,
   dividers in `--line`. Amounts right-aligned with `.num`. Header labels use the
   small all-caps style.

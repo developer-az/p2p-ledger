@@ -50,7 +50,7 @@ export function ResetPassword() {
         </div>
       </header>
       <main id="main" className="main reset-main">
-        <section className="card reset-card" aria-labelledby="reset-title">
+        <section className="card glass reset-card" aria-labelledby="reset-title">
           <h1 id="reset-title">{done ? 'Password updated' : 'Choose a new password'}</h1>
           {done ? (
             <>

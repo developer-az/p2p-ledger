@@ -17,6 +17,14 @@ export const SPEND_CATEGORIES = [
 export type SpendCategory = (typeof SPEND_CATEGORIES)[number];
 
 export type SpendSource = 'manual' | 'cmd' | 'import';
+export type SpendCategorySource =
+  | 'user_rule'
+  | 'user_correction'
+  | 'merchant_default'
+  | 'keyword'
+  | 'manual'
+  | 'unresolved';
+export type SpendMerchantMethod = 'exact_alias' | 'similarity' | 'unresolved';
 
 export interface SpendLogEntry {
   id: string;
@@ -28,6 +36,15 @@ export interface SpendLogEntry {
   occurredAt: string;
   source: SpendSource;
   createdAt: string;
+  /** Enrichment written at log time. Older rows lack these fields. */
+  descriptorClean?: string;
+  merchantId?: string | null;
+  merchantName?: string | null;
+  merchantMethod?: SpendMerchantMethod;
+  merchantConfidence?: number;
+  categorySource?: SpendCategorySource;
+  ruleId?: string | null;
+  ruleVersion?: number | null;
 }
 
 export interface RecordSpendInput {
@@ -37,6 +54,14 @@ export interface RecordSpendInput {
   occurredAt?: string;
   source?: SpendSource;
   currency?: string;
+  descriptorClean?: string;
+  merchantId?: string | null;
+  merchantName?: string | null;
+  merchantMethod?: SpendMerchantMethod;
+  merchantConfidence?: number;
+  categorySource?: SpendCategorySource;
+  ruleId?: string | null;
+  ruleVersion?: number | null;
 }
 
 export interface SpendCursorPage {
@@ -280,6 +305,14 @@ export class InMemorySpendLogStore implements SpendLogStore {
       occurredAt: input.occurredAt ?? now.toISOString(),
       source: input.source ?? 'manual',
       createdAt: now.toISOString(),
+      descriptorClean: input.descriptorClean,
+      merchantId: input.merchantId,
+      merchantName: input.merchantName,
+      merchantMethod: input.merchantMethod,
+      merchantConfidence: input.merchantConfidence,
+      categorySource: input.categorySource,
+      ruleId: input.ruleId,
+      ruleVersion: input.ruleVersion,
     };
     this.events.push(event);
     return { ...event, note: input.note ?? null };

@@ -83,8 +83,22 @@ export class RoutedSpendLogStore implements SpendLogStore {
 
   record(accountId: string, input: RecordSpendInput, now?: Date, key?: string): Promise<SpendLogEntry> {
     if (this.isPractice(accountId)) return this.practice.record(accountId, input, now);
+    // Enrichment columns are a TypeScript-side feature for now. Sending them to
+    // the Java ledger would fail its request model, so keep the wire payload
+    // to the fields the live API already owns.
+    const {
+      descriptorClean: _descriptorClean,
+      merchantId: _merchantId,
+      merchantName: _merchantName,
+      merchantMethod: _merchantMethod,
+      merchantConfidence: _merchantConfidence,
+      categorySource: _categorySource,
+      ruleId: _ruleId,
+      ruleVersion: _ruleVersion,
+      ...wire
+    } = input;
     return this.java.request('POST', `/v1/accounts/${encodeURIComponent(accountId)}/spends`,
-      input, key ?? randomUUID());
+      wire, key ?? randomUUID());
   }
   list(accountId: string, opts?: { since?: Date; limit?: number }): Promise<SpendLogEntry[]> {
     if (this.isPractice(accountId)) return this.practice.list(accountId, opts);

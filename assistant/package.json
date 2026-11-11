@@ -15,6 +15,7 @@
     "test": "vitest run",
     "smoke:api": "tsx scripts/smoke-api.ts",
     "eval": "tsx --env-file-if-exists=.env.local evals/run.ts",
+    "eval:merchants": "tsx scripts/eval-merchants.ts",
     "seed": "tsx scripts/seed.ts",
     "keys:rotate": "tsx --env-file-if-exists=.env.local scripts/rotate-keks.ts",
     "typecheck": "tsc --noEmit",

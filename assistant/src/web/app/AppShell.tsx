@@ -90,7 +90,7 @@ const GROUPS: { title: string; items: SectionItem[] }[] = [
     title: 'Data',
     items: [
       { section: 'imports', label: 'Imports', icon: 'upload', milestone: 'M3' },
-      { section: 'rules', label: 'Rules', icon: 'sliders', milestone: 'M4' },
+      { section: 'rules', label: 'Rules', icon: 'sliders' },
       { section: 'reports', label: 'Reports', icon: 'file' },
     ],
   },
@@ -648,7 +648,7 @@ export function AppShell({
 }
 
 /** Sections whose content is only described in the plan. */
-export const PLANNED_SECTIONS = ['imports', 'rules'] as const;
+export const PLANNED_SECTIONS = ['imports'] as const;
 
 /** Every section that renders the shared planned empty state. */
 export type PlannedSection = (typeof PLANNED_SECTIONS)[number];

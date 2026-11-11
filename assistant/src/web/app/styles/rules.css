@@ -1,0 +1,263 @@
+/* Rules page: form, saved rules, preview, and correction sheet.
+   Tokens only; every class is scoped under .rules-view or .app. */
+
+.app .rules-view .v-panel-head .v-sub {
+  margin-top: 2px;
+}
+
+.app .rules-list,
+.app .rules-tx-list,
+.app .rules-preview-list,
+.app .rules-merchants {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app .rules-list > li,
+.app .rules-tx-list > li,
+.app .rules-preview-list > li {
+  border-top: 1px solid var(--line);
+}
+
+.app .rules-list > li:first-child,
+.app .rules-tx-list > li:first-child,
+.app .rules-preview-list > li:first-child {
+  border-top: 0;
+}
+
+.app .rules-row,
+.app .rules-tx {
+  display: grid;
+  align-items: center;
+  gap: var(--s3);
+  min-width: 0;
+  padding: 10px 0;
+}
+
+.app .rules-row {
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+}
+
+.app .rules-tx {
+  grid-template-columns: 32px minmax(0, 1fr) auto auto auto;
+}
+
+.app .rules-glyph {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tint, var(--ink)) 14%, transparent);
+  color: color-mix(in srgb, var(--tint, var(--ink)) 65%, var(--ink));
+}
+
+.app .rules-main {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.app .rules-title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app .rules-sub {
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app .rules-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s1);
+}
+
+.app .rules-archive:hover {
+  color: var(--neg);
+}
+
+.app .rules-amount {
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.app .rules-chip-warn {
+  --tint: var(--warn);
+  background: var(--warn-soft);
+}
+
+.app .rules-fix {
+  white-space: nowrap;
+}
+
+.app .rules-form {
+  display: grid;
+  gap: var(--s3);
+}
+
+.app .rules-form .btn[type='submit'] {
+  justify-self: start;
+}
+
+.app .rules-form select.input {
+  appearance: auto;
+}
+
+.app .rules-preview-figs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--line);
+}
+
+.app .rules-preview-figs > div {
+  display: grid;
+  gap: 2px;
+  padding: var(--s3);
+  background: var(--surface);
+}
+
+.app .rules-preview-figs span {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.app .rules-preview-figs strong {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+  font-weight: 400;
+}
+
+.app .rules-preview-list > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s3);
+  padding: 8px 0;
+}
+
+.app .rules-sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s2);
+  padding-top: var(--s2);
+}
+
+.app .rules-cascade {
+  display: grid;
+  gap: var(--s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: cascade;
+}
+
+.app .rules-cascade li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s2);
+}
+
+.app .rules-cascade li > span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+}
+
+.app .rules-cascade strong {
+  display: block;
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+
+.app .rules-cascade p {
+  margin: 1px 0 0;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  line-height: 1.4;
+}
+
+.app .rules-merchants {
+  margin-top: var(--s3);
+}
+
+.app .rules-merchants li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+}
+
+.app .rules-merchants li:first-child {
+  border-top: 0;
+}
+
+.app .rules-merchant-meta {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  white-space: nowrap;
+}
+
+@container (max-width: 560px) {
+  .app .rules-row,
+  .app .rules-tx {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+  }
+
+  .app .rules-row .rules-actions {
+    grid-column: 2 / -1;
+    justify-content: flex-start;
+  }
+
+  .app .rules-tx .v-chip {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .app .rules-tx .rules-amount {
+    grid-column: 3;
+    justify-self: end;
+  }
+
+  .app .rules-tx .rules-fix {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
+}

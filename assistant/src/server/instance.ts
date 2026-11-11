@@ -5,6 +5,7 @@ import { CompositeLedger, isLiveLedgerReachable, PracticeLedger } from './practi
 import { createSpendLogStore } from './spend-log.js';
 import { createPersonalFinanceStore } from './personal-finance.js';
 import { createPaymentRequestStore } from './payment-requests.js';
+import { createSubscriptionTrackerStore } from './subscription-tracker.js';
 import { createAuthStore } from './auth.js';
 import { createRateLimitStore } from './rate-limit-store.js';
 import { JavaWorkflows, RoutedSpendLogStore } from './java-workflows.js';
@@ -12,6 +13,7 @@ import { JavaWorkflows, RoutedSpendLogStore } from './java-workflows.js';
 let spendLogs = createSpendLogStore();
 let personalFinance = createPersonalFinanceStore();
 let paymentRequests = createPaymentRequestStore();
+let subscriptionMarks = createSubscriptionTrackerStore();
 
 /** Shared API app for Node server, Vercel, and Vite dev middleware. */
 export function createAssistantApi() {
@@ -26,6 +28,7 @@ export function createAssistantApi() {
   spendLogs = new RoutedSpendLogStore(createSpendLogStore(dataKeys), javaWorkflows, id => ledger.isPracticeAccount(id));
   personalFinance = createPersonalFinanceStore(process.env, dataKeys);
   paymentRequests = createPaymentRequestStore();
+  subscriptionMarks = createSubscriptionTrackerStore();
   return createApp({
     ledger,
     practice,
@@ -34,6 +37,7 @@ export function createAssistantApi() {
     spendLogs,
     personalFinance,
     paymentRequests,
+    subscriptionMarks,
     javaWorkflows,
     dataKeys,
     auth: createAuthStore(),

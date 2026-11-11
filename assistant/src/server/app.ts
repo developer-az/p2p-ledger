@@ -26,6 +26,11 @@ import { peerLedgerView } from './peer-ledger.js';
 import { buildActivityFeed, buildPersonalInsights } from './money-insights.js';
 import { buildHabitsFromEntries, buildHabitsHome, SPEND_CATEGORIES, type SpendLogStore } from './spend-log.js';
 import { buildSpendingPatterns } from './spending-patterns.js';
+import { buildSubscriptionReport } from './subscriptions.js';
+import {
+  InMemorySubscriptionTrackerStore,
+  type SubscriptionTrackerStore,
+} from './subscription-tracker.js';
 import {
   buildFinanceSnapshot,
   INCOME_SOURCES,
@@ -228,6 +233,7 @@ export function createApp(deps: {
   practice: PracticeLedger;
   spendLogs: SpendLogStore;
   personalFinance?: PersonalFinanceStore;
+  subscriptionMarks?: SubscriptionTrackerStore;
   paymentRequests?: PaymentRequestStore;
   javaWorkflows?: JavaWorkflows;
   liveLedger?: LedgerWriter & LedgerAuditor;
@@ -259,6 +265,7 @@ export function createApp(deps: {
   const now = deps.now ?? (() => new Date());
   const mfaKey = resolveMfaKey(deps.mfaKey);
   const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
+  const subscriptionMarks = deps.subscriptionMarks ?? new InMemorySubscriptionTrackerStore();
   const paymentRequests = deps.paymentRequests ?? new InMemoryPaymentRequestStore();
   /**
    * Practice demo history lives in memory, so a cold serverless instance that
@@ -912,6 +919,7 @@ export function createApp(deps: {
     await deps.dataKeys?.shred(user.id);
     await personalFinance.deleteAll(user.accountId);
     await deps.spendLogs.deleteAll?.(user.accountId);
+    await subscriptionMarks.deleteAll(user.accountId);
     await auth.deleteUser(user.id);
     deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true, httpOnly: true, sameSite: 'Lax' });
     return c.json({ deleted: true });
@@ -1391,7 +1399,7 @@ export function createApp(deps: {
       const denied = await walletAccessError(c, id);
       if (denied) return denied;
       await ensurePracticeDemoSeeded(id);
-      return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, id, Math.min(limit, 100), now, tzOffsetFrom(c)));
+      return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, subscriptionMarks, id, Math.min(limit, 100), now, tzOffsetFrom(c)));
     }
     const owner = c.req.query('owner');
     if (!owner) return c.json({ error: 'owner is required' }, 400);
@@ -1714,7 +1722,27 @@ export function createApp(deps: {
   app.get('/accounts/:id', async (c) => {
     const id = c.req.param('id');
     await ensurePracticeDemoSeeded(id);
-    return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, id, 30, now, tzOffsetFrom(c)));
+    return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, subscriptionMarks, id, 30, now, tzOffsetFrom(c)));
+  });
+
+  app.post('/accounts/:id/subscriptions/:streamId/mark', async (c) => {
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const accountId = c.req.param('id');
+    const streamId = c.req.param('streamId');
+    if (!z.string().uuid().safeParse(accountId).success || !z.string().min(3).max(160).safeParse(streamId).success) {
+      return c.json({ error: 'Invalid id' }, 400);
+    }
+    const account = await deps.ledger.getAccount(accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const parsed = z.object({ markedToCancel: z.boolean() }).safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    await subscriptionMarks.set(accountId, streamId, parsed.data.markedToCancel, now());
+    const subscriptions = buildSubscriptionReport(
+      await deps.spendLogs.list(accountId, { limit: 500 }),
+      now(),
+      await subscriptionMarks.list(accountId),
+    );
+    return c.json({ subscriptions });
   });
 
   app.post('/accounts/:id/spends/import', async (c) => {
@@ -1838,7 +1866,7 @@ export function createApp(deps: {
   app.get('/accounts/:id/statement.txt', async (c) => {
     const id = c.req.param('id');
     if (!z.string().uuid().safeParse(id).success) return c.text('Invalid account id', 400);
-    const view = await accountView(deps.ledger, deps.spendLogs, personalFinance, id, 100, now, tzOffsetFrom(c));
+    const view = await accountView(deps.ledger, deps.spendLogs, personalFinance, subscriptionMarks, id, 100, now, tzOffsetFrom(c));
     if (!view) return c.text('Account not found', 404);
     const entries = await deps.ledger.entries(id, 200);
     const body = formatLedgerStatement(view, entries, {
@@ -2144,6 +2172,7 @@ async function accountView(
   ledger: LedgerReader,
   spendLogs: SpendLogStore,
   personalFinance: PersonalFinanceStore,
+  subscriptionMarks: SubscriptionTrackerStore,
   id: string,
   limit = 30,
   now: () => Date,
@@ -2159,6 +2188,7 @@ async function accountView(
   const spends = allSpends.slice(0, 80);
   const incomes = allIncomes.slice(0, 80);
   const patterns = buildSpendingPatterns(allSpends, allIncomes, now(), profile, tzOffsetMinutes);
+  const subscriptions = buildSubscriptionReport(allSpends, now(), await subscriptionMarks.list(id));
   const activityFeed = buildActivityFeed(
     base.transfers,
     spends,
@@ -2171,6 +2201,7 @@ async function accountView(
     ...base,
     habits,
     patterns,
+    subscriptions,
     finance,
     moneyProfile: profile,
     activityFeed,

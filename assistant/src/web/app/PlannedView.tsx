@@ -26,11 +26,6 @@ const PLANNED: Record<PlannedSection, { milestone: string; copy: string; icon: I
     icon: 'alert',
     copy: 'Unusual charges, each with a plain reason code.',
   },
-  imports: {
-    milestone: 'M3',
-    icon: 'download',
-    copy: 'Upload bank statements and watch each import run stage by stage.',
-  },
   rules: {
     milestone: 'M4',
     icon: 'split',

@@ -13,6 +13,7 @@ import { buildFeed, type FeedItem } from './feed.js';
 import { dayLabel, displayName, money, parseMoney } from './format.js';
 import { Home } from './Home.js';
 import { InsightsTab } from './InsightsTab.js';
+import { ImportsView } from './ImportsView.js';
 import { clearSession, loadSession, saveSession, type Session } from './session.js';
 import { SetupSheet } from './SetupSheet.js';
 import { AddSheet } from './AddSheet.js';
@@ -461,6 +462,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
               />
             ) : null}
             {viewSection === 'transactions' ? <ActivityTab data={data} onOpen={openFeedItem} /> : null}
+            {viewSection === 'imports' ? <ImportsView me={me} data={data} onChanged={reload} /> : null}
             {viewSection === 'insights' ? (
               <InsightsTab
                 data={data}

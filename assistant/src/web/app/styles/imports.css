@@ -1,0 +1,501 @@
+/* M3 Imports view. Scoped under .imports-view; tokens only. */
+
+.app .imports-view .imp-card {
+  display: grid;
+  gap: var(--s4);
+  padding: var(--s5);
+}
+
+.app .imports-view .imp-kicker {
+  margin: 0 0 var(--s1);
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app .imports-view .imp-limit {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Dashed drop target: the whole label is the file button. */
+.app .imports-view .imp-drop {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  padding: var(--s5);
+  border: 1px dashed color-mix(in srgb, var(--line) 80%, var(--ink));
+  border-radius: var(--r2);
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.app .imports-view .imp-drop:hover,
+.app .imports-view .imp-drop:focus-within {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface-2));
+}
+
+.app .imports-view .imp-drop.has-file {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--pos) 45%, var(--line));
+}
+
+.app .imports-view .imp-drop input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app .imports-view .imp-drop-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r2);
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.app .imports-view .imp-drop-copy {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app .imports-view .imp-drop-copy strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app .imports-view .imp-drop-copy span {
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
+.app .imports-view .imp-map-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--s4);
+}
+
+.app .imports-view .field > span {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.app .imports-view .imp-preset {
+  width: auto;
+  max-width: 220px;
+}
+
+.app .imports-view .imp-sample {
+  display: grid;
+  gap: var(--s2);
+}
+
+.app .imports-view .imp-sample-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+}
+
+.app .imports-view .imp-sample table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-xs);
+  white-space: nowrap;
+}
+
+.app .imports-view .imp-sample th,
+.app .imports-view .imp-sample td {
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.app .imports-view .imp-sample th {
+  color: var(--muted);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.app .imports-view .imp-sample tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.app .imports-view .imp-preset-save {
+  display: flex;
+  align-items: end;
+  gap: var(--s3);
+}
+
+.app .imports-view .imp-preset-save .field {
+  flex: 1;
+}
+
+.app .imports-view .imp-run {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.app .imports-view .imp-progress {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.app .imports-view .imp-progress li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--muted);
+  font-size: var(--t-xs);
+  text-transform: capitalize;
+}
+
+.app .imports-view .imp-progress li.is-running {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.app .imports-view .imp-progress li.is-running .imp-dot {
+  background: var(--accent);
+  animation: imp-pulse 1s ease-in-out infinite;
+}
+
+@keyframes imp-pulse {
+  50% { opacity: 0.35; }
+}
+
+.app .imports-view .imp-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.app .imports-view .imp-dot.is-ok {
+  background: var(--pos);
+}
+
+.app .imports-view .imp-dot.is-bad {
+  background: var(--neg);
+}
+
+.app .imports-view .imp-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--line);
+}
+
+.app .imports-view .imp-counts > div {
+  display: grid;
+  gap: var(--s1);
+  padding: var(--s3) var(--s4);
+  background: var(--surface-2);
+}
+
+.app .imports-view .imp-counts span {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.app .imports-view .imp-counts strong {
+  color: var(--ink);
+  font-size: var(--t-lg);
+  font-weight: 500;
+}
+
+.app .imports-view .imp-stages {
+  display: grid;
+  gap: var(--s2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.app .imports-view .imp-stages li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--surface-2);
+}
+
+.app .imports-view .imp-stages li.is-failed {
+  border-color: color-mix(in srgb, var(--neg) 40%, var(--line));
+  background: color-mix(in srgb, var(--neg) 5%, var(--surface-2));
+}
+
+.app .imports-view .imp-stage-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--pos) 14%, transparent);
+  color: var(--pos-ink, var(--pos));
+}
+
+.app .imports-view .imp-stages li.is-failed .imp-stage-icon {
+  background: color-mix(in srgb, var(--neg) 14%, transparent);
+  color: var(--neg-ink, var(--neg));
+}
+
+.app .imports-view .imp-stages li > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.app .imports-view .imp-stages strong {
+  color: var(--ink);
+  font-size: var(--t-sm);
+}
+
+.app .imports-view .imp-stages em {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-style: normal;
+}
+
+.app .imports-view .imp-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 var(--s3);
+  border-radius: 999px;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.app .imports-view .imp-badge.is-ok {
+  background: color-mix(in srgb, var(--pos) 14%, transparent);
+  color: var(--pos-ink, var(--pos));
+}
+
+.app .imports-view .imp-badge.is-bad {
+  background: color-mix(in srgb, var(--neg) 14%, transparent);
+  color: var(--neg-ink, var(--neg));
+}
+
+.app .imports-view .imp-rejections,
+.app .imports-view .imp-recon,
+.app .imports-view .imp-gates {
+  display: grid;
+  gap: var(--s2);
+}
+
+.app .imports-view .imp-rejections ul,
+.app .imports-view .imp-gates ul {
+  display: grid;
+  gap: var(--s1);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.app .imports-view .imp-rejections li {
+  display: grid;
+  grid-template-columns: 72px 120px minmax(0, 1fr);
+  gap: var(--s2);
+  align-items: baseline;
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
+.app .imports-view .imp-rejections li:last-child {
+  border-bottom: 0;
+}
+
+.app .imports-view .imp-reason {
+  color: var(--neg-ink, var(--neg));
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.app .imports-view .imp-recon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
+.app .imports-view .imp-gates summary {
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+
+.app .imports-view .imp-gates li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
+.app .imports-view .imp-gates strong {
+  color: var(--ink-2);
+}
+
+.app .imports-view .imp-history,
+.app .imports-view .imp-transactions {
+  display: grid;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.app .imports-view .imp-history > li,
+.app .imports-view .imp-transactions > li {
+  border-bottom: 1px solid var(--line);
+}
+
+.app .imports-view .imp-history > li:last-child,
+.app .imports-view .imp-transactions > li:last-child {
+  border-bottom: 0;
+}
+
+.app .imports-view .imp-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  width: 100%;
+  padding: var(--s3) 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app .imports-view .imp-history-row:hover .imp-history-main strong {
+  color: var(--accent);
+}
+
+.app .imports-view .imp-history-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app .imports-view .imp-history-main strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app .imports-view .imp-history-main span {
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
+.app .imports-view .imp-transactions li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s3) 0;
+  font-size: var(--t-sm);
+}
+
+.app .imports-view .imp-transactions li > span:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app .imports-view .imp-transactions strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app .imports-view .imp-transactions li > span:first-child span {
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
+.app .imports-view .imp-transactions .is-neg {
+  color: var(--ink);
+}
+
+.app .imports-view .imp-transactions .is-pos {
+  color: var(--pos-ink, var(--pos));
+}
+
+@media (max-width: 640px) {
+  .app .imports-view .imp-run {
+    grid-template-columns: 1fr;
+  }
+
+  .app .imports-view .imp-drop {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .app .imports-view .imp-drop .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .app .imports-view .imp-rejections li {
+    grid-template-columns: 1fr;
+  }
+
+  .app .imports-view .imp-preset-save {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

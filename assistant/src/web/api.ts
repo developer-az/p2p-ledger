@@ -175,6 +175,45 @@ export interface HabitsHome {
   };
 }
 
+export interface ImportedTransaction {
+  id: string;
+  importId: string;
+  postedDate: string;
+  amountMinor: number;
+  amount: string;
+  currency: string;
+  descriptor: string;
+  descriptorClean: string;
+  category: SpendCategory;
+  source: 'csv' | 'ofx' | 'qfx';
+  filename: string | null;
+}
+
+export interface ImportReconciliation {
+  importId: string;
+  filename: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+  reconciled: boolean;
+  statementClosingMinor: number | null;
+  computedClosingMinor: number | null;
+  differenceMinor: number | null;
+}
+
+export interface NormalizedTransactionView {
+  id: string;
+  accountId: string;
+  source: 'logged' | 'imported';
+  kind: 'expense' | 'income';
+  amountMinor: number;
+  signedAmountMinor: number;
+  currency: string;
+  category: SpendCategory;
+  description: string;
+  occurredAt: string;
+  importId?: string;
+}
+
 export interface AccountView {
   id: string;
   owner: string;
@@ -189,7 +228,82 @@ export interface AccountView {
   activityFeed?: ActivityFeedRow[];
   insights?: PersonalInsights;
   spendEntries?: SpendEntry[];
+  importedTransactions?: ImportedTransaction[];
+  reconciliations?: ImportReconciliation[];
+  normalizedTransactions?: NormalizedTransactionView[];
   transfers: AccountActivity[];
+}
+
+export interface ImportColumnMapping {
+  date: string;
+  description: string;
+  amount?: string | null;
+  debit?: string | null;
+  credit?: string | null;
+  balance?: string | null;
+  category?: string | null;
+  dateFormat?: 'auto' | 'YMD' | 'MDY' | 'DMY';
+  amountSign?: 'as-is' | 'invert';
+  currency?: string;
+}
+
+export interface ImportStageState {
+  status: 'pending' | 'running' | 'passed' | 'failed';
+  label: string;
+  detail: string;
+  at?: string;
+}
+
+export interface ImportRecord {
+  id: string;
+  accountId: string;
+  fileHash: string;
+  filename: string;
+  source: 'csv' | 'ofx' | 'qfx';
+  status: 'received' | 'posted' | 'failed' | 'rejected';
+  pipelineVersion: string;
+  stages: Record<'parse' | 'validate' | 'stage' | 'dedupe' | 'post', ImportStageState>;
+  counts: { parsed: number; rejected: number; duplicates: number; posted: number };
+  statement: {
+    currency: string;
+    start: string | null;
+    end: string | null;
+    openingBalanceMinor: number | null;
+    closingBalanceMinor: number | null;
+    rowCount: number;
+    balanceIssues: number;
+  };
+  quality: { id: 'row_count' | 'date_sanity' | 'sign_convention' | 'section_totals' | 'balance_continuity'; label: string; status: 'passed' | 'failed'; detail: string }[];
+  reconciliation: {
+    reconciled: boolean;
+    statementOpenedMinor: number | null;
+    statementClosedMinor: number | null;
+    computedClosedMinor: number | null;
+    differenceMinor: number | null;
+    rowsMatched: number;
+    detail: string;
+  };
+  errors: { lineNumber: number; reason: 'empty_file' | 'unsupported_type' | 'unterminated_quote' | 'missing_header' | 'missing_column' | 'no_transactions' | 'malformed_ofx' | 'bad_date' | 'bad_amount' | 'bad_balance' | 'empty_description'; detail: string }[];
+  presetId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ImportPreview {
+  source: 'csv' | 'ofx' | 'qfx';
+  columns: string[];
+  delimiter?: string;
+  suggestedMapping: ImportColumnMapping | null;
+  sampleRows: string[][];
+}
+
+export interface ImportPreset {
+  id: string;
+  name: string;
+  source: 'csv' | 'ofx' | 'qfx';
+  mapping: ImportColumnMapping;
+  builtIn: boolean;
+  createdAt?: string;
 }
 
 export interface SpendEntry {
@@ -821,6 +935,38 @@ export const api = {
   }, key: string = idempotencyKey()) => call<{ requests: PaymentRequestView[] }>('/api/requests', {
     method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(body),
   }),
+  importPreview: (accountId: string, body: { filename: string; content: string }) =>
+    call<ImportPreview>(`/api/accounts/${encodeURIComponent(accountId)}/imports/preview`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  importUpload: (accountId: string, body: {
+    filename: string;
+    content: string;
+    mapping?: ImportColumnMapping;
+    presetId?: string | null;
+    accountKind?: 'checking' | 'credit';
+    expectedRowCount?: number;
+    expectedOutflowMinor?: number;
+    openingBalanceMinor?: number | null;
+  }) =>
+    call<{ import: ImportRecord; created: boolean; reconciled: boolean; transactions: ImportedTransaction[] }>(
+      `/api/accounts/${encodeURIComponent(accountId)}/imports`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+  imports: (accountId: string) =>
+    call<{ imports: ImportRecord[] }>(`/api/accounts/${encodeURIComponent(accountId)}/imports`),
+  importDetail: (accountId: string, importId: string) =>
+    call<{ import: ImportRecord; transactions: ImportedTransaction[]; reconciled: boolean }>(
+      `/api/accounts/${encodeURIComponent(accountId)}/imports/${encodeURIComponent(importId)}`,
+    ),
+  importPresets: (accountId: string) =>
+    call<{ presets: ImportPreset[] }>(`/api/accounts/${encodeURIComponent(accountId)}/imports/presets`),
+  saveImportPreset: (accountId: string, body: { name: string; source: 'csv' | 'ofx' | 'qfx'; mapping: ImportColumnMapping }) =>
+    call<{ preset: ImportPreset }>(`/api/accounts/${encodeURIComponent(accountId)}/imports/presets`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   importSpends: (accountId: string, csv: string) =>
     call<{ imported: number; duplicates: number; rows: number }>(`/api/accounts/${encodeURIComponent(accountId)}/spends/import`, {
       method: 'POST', body: JSON.stringify({ csv, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),

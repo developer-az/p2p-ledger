@@ -16,9 +16,10 @@ else; screens read tokens, never hex values.
   selection. It does not tint headings, icons or decoration.
 - **Colour for state only.** Green, red and amber mean positive, negative and
   warning, never emphasis or branding.
-- **Motion under 150ms, state changes only.** `--dur` is 120ms, applied to
-  hover, focus, pressed and disclosure. Nothing animates on load or scrolls by
-  itself.
+- **Motion under 150ms for state changes.** `--dur` is 120ms, applied to
+  hover, focus, pressed and disclosure. The landing page owns the one long
+  motion in the product: the guilloché dial and the section reveals, both
+  specified under Motion and both static under `prefers-reduced-motion`.
 - **No mascot, streaks, confetti or celebratory copy.** A transaction is
   recorded; that is the whole reward.
 
@@ -114,9 +115,36 @@ read `--row-h` and `--pad`, so they follow the preference without extra rules.
 |-------|-------|
 | `--dur` | 120ms |
 | `--ease` | `cubic-bezier(0.2, 0, 0, 1)` |
+| Route cross-fade | 160ms |
+| Section reveal | 400ms, `translateY(12px)` to 0 |
+| Figure ticker | 600ms, easeOutCubic |
+| Dial rosette | one turn / 120s, linear |
+| Dial track swing | ±30° across the hero |
 
-Transitions apply to hover, focus, pressed and open/closed states. Long
-animations, parallax, auto-scrolling and celebratory effects are out.
+Transitions apply to hover, focus, pressed and open/closed states.
+
+- Only `transform`, `opacity` and `filter` are animated. Nothing animates
+  layout: collapsing the sidebar swaps the grid column and width at once and
+  only fades and slides the labels.
+- Interface feedback stays under 300ms. The landing set piece is the one long
+  motion: the dial's rosette turns once every two minutes and its minute track
+  counter-rotates at most ±30° as the hero crosses the viewport. The rosette
+  pauses off screen, and the single passive, rAF-throttled scroll listener that
+  writes `--dial-turn` on the dial element exists only while the dial is on
+  screen. Nothing is written to `<html>` or `<body>` during scroll.
+- Route changes inside the app shell cross-fade through the native View
+  Transitions API, feature-detected in `router.ts`; the 160ms fade lives in
+  `styles/shell.css`.
+- Scroll reveals use one IntersectionObserver that sets `data-in` on each
+  landing section once, with the fade in CSS. Sections are only hidden once
+  `<html>` carries `js-reveal`, which the observer setup adds, so the page is
+  readable without JavaScript.
+- The figure strip counts up once on entry, writes `textContent` directly (no
+  re-render per frame) and ends on the server-rendered string, so the final
+  value is exact.
+- `prefers-reduced-motion: reduce` removes the rosette rotation, the track
+  rotation and its listener, the reveals, the route cross-fade and the ticker:
+  the page is the static layout.
 
 ## Typography
 

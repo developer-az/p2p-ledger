@@ -130,6 +130,22 @@ function currentHref(): string {
   return `${window.location.pathname}${window.location.search}`;
 }
 
+/** The bits of the View Transitions API this app uses. */
+type ViewTransitionLike = {
+  finished?: Promise<void>;
+  updateCallbackDone?: Promise<void>;
+};
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (update: () => void | Promise<void>) => ViewTransitionLike;
+};
+
+/** Two frames: React commits its state update before the new snapshot is taken. */
+function afterPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
+
 /** Pushes (or replaces) history and notifies route listeners. */
 export function navigate(route: Route, opts: { replace?: boolean; search?: string } = {}): void {
   if (typeof window === 'undefined') return;
@@ -137,7 +153,35 @@ export function navigate(route: Route, opts: { replace?: boolean; search?: strin
   if (href === currentHref()) return;
   if (opts.replace) window.history.replaceState(null, '', href);
   else window.history.pushState(null, '', href);
-  window.dispatchEvent(new PopStateEvent('popstate'));
+
+  const update = () => {
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+  const reduced = typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const start = (document as ViewTransitionDocument).startViewTransition;
+
+  // Route changes cross-fade through the native View Transitions API when the
+  // browser has it (styles/shell.css sets the 160ms fade). Reduced motion and
+  // browsers without support get the plain, instant state update.
+  if (reduced || typeof start !== 'function') {
+    update();
+    return;
+  }
+  // A route change during a running transition aborts the old one; the
+  // resulting rejections are expected, so swallow both.
+  let transition: ViewTransitionLike | undefined;
+  try {
+    transition = start.call(document, () => {
+      update();
+      return afterPaint();
+    });
+  } catch {
+    update();
+    return;
+  }
+  transition?.finished?.catch(() => undefined);
+  transition?.updateCallbackDone?.catch(() => undefined);
 }
 
 /** Reads the current route and re-reads it on back/forward navigation. */

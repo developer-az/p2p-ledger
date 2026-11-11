@@ -37,7 +37,8 @@
   align-self: start;
   background: var(--surface);
   border-right: 1px solid var(--line);
-  transition: width var(--dur) var(--ease);
+  /* No width transition: the grid column and the sidebar width change at once,
+     and only the labels fade and slide (see the rail rules below). */
   z-index: 40;
 }
 
@@ -90,8 +91,33 @@
   justify-content: center;
 }
 
-.app .shell.is-rail .shell-brand-word {
-  display: none;
+/* Rail: labels leave the flow in one go so icons stay centred, then fade and
+   slide. Nothing here animates layout. */
+.app .shell-item-label,
+.app .shell-item-tag,
+.app .shell-group-label,
+.app .shell-brand-word,
+.app .shell-account-name {
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease),
+    visibility 0s linear;
+}
+
+.app .shell.is-rail .shell-item-label,
+.app .shell.is-rail .shell-item-tag,
+.app .shell.is-rail .shell-group-label,
+.app .shell.is-rail .shell-brand-word,
+.app .shell.is-rail .shell-account-name {
+  position: absolute;
+  opacity: 0;
+  transform: translateX(-6px);
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease),
+    visibility 0s linear var(--dur);
 }
 
 .app .shell-icon-btn {
@@ -163,10 +189,6 @@
   text-transform: uppercase;
 }
 
-.app .shell.is-rail .shell-group-label {
-  display: none;
-}
-
 .app .shell.is-rail .shell-group {
   margin-top: var(--s2);
   padding-top: var(--s2);
@@ -236,11 +258,6 @@
 .app .shell.is-rail .shell-item {
   justify-content: center;
   padding: 0;
-}
-
-.app .shell.is-rail .shell-item-label,
-.app .shell.is-rail .shell-item-tag {
-  display: none;
 }
 
 .app .shell-nav-end {
@@ -315,10 +332,6 @@
   width: 40px;
   justify-content: center;
   padding: 0;
-}
-
-.app .shell.is-rail .shell-account-name {
-  display: none;
 }
 
 .app .shell-menu {
@@ -674,6 +687,44 @@
 @media (prefers-reduced-motion: reduce) {
   .app .shell-sidebar {
     transition: none;
+  }
+
+  .app .shell-item-label,
+  .app .shell-item-tag,
+  .app .shell-group-label,
+  .app .shell-brand-word,
+  .app .shell-account-name {
+    transition: none;
+  }
+}
+
+/* ---------- Route transitions ----------
+   navigate() wraps the state update in document.startViewTransition when the
+   browser has it and the visitor allows motion; styles/landing.css and this
+   file's ordinary transitions keep working when it does not. */
+
+@keyframes shell-view-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes shell-view-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+::view-transition-old(root) {
+  animation: shell-view-out 160ms var(--ease) both;
+}
+
+::view-transition-new(root) {
+  animation: shell-view-in 160ms var(--ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
   }
 }
 

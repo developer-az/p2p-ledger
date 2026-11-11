@@ -18,14 +18,42 @@ function drawing(spec: typeof DIAL_LARGE) {
 const LARGE = drawing(DIAL_LARGE);
 const SMALL = drawing(DIAL_SMALL);
 
+const circle = (c: { cx: number; cy: number }, r: number, key: number) => (
+  <circle key={key} cx={c.cx} cy={c.cy} r={r} />
+);
+
 /**
- * Settle's emblem: an engine-turned (guilloché) watch dial. Static. Geometry
- * lives in brand-dial.ts (pure, tested).
+ * Settle's emblem: an engine-turned (guilloché) watch dial. Geometry lives in
+ * brand-dial.ts (pure, tested).
+ *
+ * `variant="mark"` (the default) is the static emblem, at `size` px.
+ * `variant="hero"` always draws the full DIAL_LARGE and splits it into two
+ * groups the landing page can move apart: `.dial-rosette` (rose-engine circles)
+ * and `.dial-track` (the 60-tick minute track). The bezel, boss ring and boss
+ * stay fixed in both.
  */
-export function BrandMark({ size = 24, title, className }: { size?: number; title?: string; className?: string }) {
-  const small = size <= 24;
+export function BrandMark({
+  size = 24,
+  title,
+  className,
+  variant = 'mark',
+}: {
+  size?: number;
+  title?: string;
+  className?: string;
+  variant?: 'mark' | 'hero';
+}) {
+  const hero = variant === 'hero';
+  const small = !hero && size <= 24;
   const spec = small ? DIAL_SMALL : DIAL_LARGE;
   const d = small ? SMALL : LARGE;
+
+  const track = (
+    <>
+      <path d={d.minorPath} strokeWidth={spec.tickWidth} />
+      {d.majorPath && <path d={d.majorPath} strokeWidth={spec.majorWidth} />}
+    </>
+  );
 
   return (
     <svg
@@ -40,13 +68,16 @@ export function BrandMark({ size = 24, title, className }: { size?: number; titl
       aria-label={title}
     >
       <circle cx="32" cy="32" r={spec.bezelR} strokeWidth={spec.bezelWidth} />
-      <path d={d.minorPath} strokeWidth={spec.tickWidth} />
-      {d.majorPath && <path d={d.majorPath} strokeWidth={spec.majorWidth} />}
-      <g strokeWidth={spec.roseWidth}>
-        {d.rosette.map((c, i) => (
-          <circle key={i} cx={c.cx} cy={c.cy} r={spec.roseR} />
-        ))}
-      </g>
+      {hero ? <g className="dial-track">{track}</g> : track}
+      {hero ? (
+        <g className="dial-rosette" strokeWidth={spec.roseWidth}>
+          {d.rosette.map((c, i) => circle(c, spec.roseR, i))}
+        </g>
+      ) : (
+        <g strokeWidth={spec.roseWidth}>
+          {d.rosette.map((c, i) => circle(c, spec.roseR, i))}
+        </g>
+      )}
       {d.bossRing && <circle cx="32" cy="32" r={d.bossRing.r} strokeWidth={d.bossRing.width} />}
       <circle cx="32" cy="32" r={spec.bossR} fill="currentColor" stroke="none" />
     </svg>

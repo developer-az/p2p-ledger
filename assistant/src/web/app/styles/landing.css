@@ -92,8 +92,81 @@
 }
 .app .lp-label { grid-column: span 3; display: grid; gap: var(--s2); align-content: start; }
 .app .lp-content { grid-column: span 9; display: grid; gap: var(--s6); align-content: start; min-width: 0; }
-/* Landing emblem: the grid gap is --s6, so pull it back to --s5 below the seal. */
-.app .lp-emblem { margin-bottom: calc(var(--s5) - var(--s6)); }
+
+/* ---------- Reveals (see the observer in Welcome.tsx) ----------
+   Content is visible by default; the observer adds `js-reveal` on <html> once
+   at setup, and only then do sections wait for data-in. Nothing toggles during
+   scroll except data-in on the section itself. */
+
+html.js-reveal .app .lp-section {
+  opacity: 0;
+  transform: translateY(12px);
+}
+html.js-reveal .app .lp-section[data-in="true"] {
+  opacity: 1;
+  transform: none;
+  transition: opacity 400ms var(--ease), transform 400ms var(--ease);
+}
+
+/* ---------- 01 Signature: the guilloché dial ----------
+   The hero dial sits beside the headline on wide screens and above it below
+   1024px. The rosette turns once every 120s in CSS; the minute track follows
+   the scroll through the --dial-turn custom property that Welcome.tsx writes
+   on the dial element only. Off screen the animation is paused and no scroll
+   listener exists. */
+
+.app .lp-hero-copy { display: grid; gap: var(--s6); align-content: start; min-width: 0; }
+.app .lp-hero-dial {
+  --dial-turn: 0;
+  justify-self: start;
+  width: 120px;
+  height: 120px;
+}
+.app .lp-hero-dial > .brand-mark { display: block; width: 100%; height: auto; }
+
+@keyframes lp-dial-turn {
+  to { transform: rotate(360deg); }
+}
+
+.app .lp-hero-dial .dial-rosette,
+.app .lp-hero-dial .dial-track {
+  transform-box: view-box;
+  transform-origin: 32px 32px;
+}
+.app .lp-hero-dial .dial-rosette {
+  animation: lp-dial-turn 120s linear infinite;
+}
+.app .lp-hero-dial.is-paused .dial-rosette { animation-play-state: paused; }
+.app .lp-hero-dial .dial-track {
+  transform: rotate(calc(var(--dial-turn) * 1deg));
+}
+
+@media (min-width: 1024px) {
+  .app .lp-hero .lp-content {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    column-gap: var(--s8);
+    align-items: center;
+  }
+  .app .lp-hero-copy { grid-column: 1; grid-row: 1; }
+  .app .lp-hero-dial {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    width: 280px;
+    height: 280px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.js-reveal .app .lp-section,
+  html.js-reveal .app .lp-section[data-in="true"] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .app .lp-hero-dial .dial-rosette { animation: none; }
+  .app .lp-hero-dial .dial-track { transform: none; }
+}
 .app .lp-num { font-family: var(--font-display); font-size: var(--t-base); line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--ink-2); }
 .app .lp-label-text {
   margin: 0;

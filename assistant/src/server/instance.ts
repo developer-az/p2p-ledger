@@ -4,6 +4,7 @@ import { HttpLedgerClient } from './ledger.js';
 import { CompositeLedger, isLiveLedgerReachable, PracticeLedger } from './practice-ledger.js';
 import { createSpendLogStore } from './spend-log.js';
 import { createPersonalFinanceStore } from './personal-finance.js';
+import { createEnrichmentStore } from './enrichment/store.js';
 import { createPaymentRequestStore } from './payment-requests.js';
 import { createAuthStore } from './auth.js';
 import { createRateLimitStore } from './rate-limit-store.js';
@@ -11,6 +12,7 @@ import { JavaWorkflows, RoutedSpendLogStore } from './java-workflows.js';
 
 let spendLogs = createSpendLogStore();
 let personalFinance = createPersonalFinanceStore();
+let enrichment = createEnrichmentStore();
 let paymentRequests = createPaymentRequestStore();
 
 /** Shared API app for Node server, Vercel, and Vite dev middleware. */
@@ -25,6 +27,7 @@ export function createAssistantApi() {
   const dataKeys = createDataKeyStore();
   spendLogs = new RoutedSpendLogStore(createSpendLogStore(dataKeys), javaWorkflows, id => ledger.isPracticeAccount(id));
   personalFinance = createPersonalFinanceStore(process.env, dataKeys);
+  enrichment = createEnrichmentStore(process.env);
   paymentRequests = createPaymentRequestStore();
   return createApp({
     ledger,

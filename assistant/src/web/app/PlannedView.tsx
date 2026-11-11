@@ -31,11 +31,6 @@ const PLANNED: Record<PlannedSection, { milestone: string; copy: string; icon: I
     icon: 'download',
     copy: 'Upload bank statements and watch each import run stage by stage.',
   },
-  rules: {
-    milestone: 'M4',
-    icon: 'split',
-    copy: 'Rules that set categories by merchant and amount, previewed before they apply.',
-  },
   reports: {
     milestone: 'M6',
     icon: 'list',

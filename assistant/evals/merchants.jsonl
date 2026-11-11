@@ -1,0 +1,70 @@
+{"descriptor":"SQ *STARBUCKS #1234","expected":"m_starbucks"}
+{"descriptor":"STARBUCKS COFFEE 800-555-0100","expected":"m_starbucks"}
+{"descriptor":"SBUX SEATTLE WA","expected":"m_starbucks"}
+{"descriptor":"BLUE BOTTLE COFFEE 4","expected":"m_blue_bottle"}
+{"descriptor":"CHIPOTLE 1234","expected":"m_chipotle"}
+{"descriptor":"MCDONALDS F123","expected":"m_mcdonalds"}
+{"descriptor":"MCDONALD S #55","expected":"m_mcdonalds"}
+{"descriptor":"SWEETGREEN NYC","expected":"m_sweetgreen"}
+{"descriptor":"SHAKE SHACK","expected":"m_shake_shack"}
+{"descriptor":"DD DOORDASH","expected":"m_doordash"}
+{"descriptor":"UBER EATS","expected":"m_uber_eats"}
+{"descriptor":"GRUBHUB","expected":"m_grubhub"}
+{"descriptor":"TRADER JOES #123","expected":"m_trader_joes"}
+{"descriptor":"TRADER JOE S","expected":"m_trader_joes"}
+{"descriptor":"WHOLE FOODS MKT","expected":"m_whole_foods"}
+{"descriptor":"WHOLEFDS","expected":"m_whole_foods"}
+{"descriptor":"SAFEWAY STORE 1234","expected":"m_safeway"}
+{"descriptor":"KROGER FUEL","expected":"m_kroger"}
+{"descriptor":"COSTCO WHSE #123","expected":"m_costco"}
+{"descriptor":"WAL MART","expected":"m_walmart"}
+{"descriptor":"TARGET T 1234","expected":"m_target"}
+{"descriptor":"AMZN MKTP US*123","expected":"m_amazon"}
+{"descriptor":"AMAZON MKTPLACE PMTS","expected":"m_amazon"}
+{"descriptor":"BEST BUY 123","expected":"m_best_buy"}
+{"descriptor":"THE HOME DEPOT","expected":"m_home_depot"}
+{"descriptor":"APPLE.COM/BILL","expected":"m_apple"}
+{"descriptor":"ETSY INC","expected":"m_etsy"}
+{"descriptor":"SHELL OIL 123","expected":"m_shell"}
+{"descriptor":"CHEVRON GAS","expected":"m_chevron"}
+{"descriptor":"EXXONMOBIL","expected":"m_exxon"}
+{"descriptor":"UBER TRIP HELP.UBER.COM","expected":"m_uber"}
+{"descriptor":"LYFT RIDE","expected":"m_lyft"}
+{"descriptor":"MTA NYC TRANSIT","expected":"m_mta"}
+{"descriptor":"DELTA AIR LINES","expected":"m_delta"}
+{"descriptor":"NETFLIX.COM","expected":"m_netflix"}
+{"descriptor":"SPOTIFY USA","expected":"m_spotify"}
+{"descriptor":"HULU LLC","expected":"m_hulu"}
+{"descriptor":"DISNEY BUNDLE","expected":"m_disney"}
+{"descriptor":"AMC THEATRES","expected":"m_amc"}
+{"descriptor":"COMCAST XFINITY","expected":"m_comcast"}
+{"descriptor":"VERIZON WIRELESS","expected":"m_verizon"}
+{"descriptor":"AT&T","expected":"m_att"}
+{"descriptor":"PG&E","expected":"m_pge"}
+{"descriptor":"CVS PHARMACY","expected":"m_cvs"}
+{"descriptor":"WALGREENS PHARMACY","expected":"m_walgreens"}
+{"descriptor":"KAISER PERMANENTE","expected":"m_kaiser"}
+{"descriptor":"PLANET FITNESS","expected":"m_planet_fitness"}
+{"descriptor":"PETCO ANIMAL","expected":"m_petco"}
+{"descriptor":"MARRIOTT HOTELS","expected":"m_marriott"}
+{"descriptor":"POS DEBIT STARBUCKS STORE 123","expected":"m_starbucks"}
+{"descriptor":"CHECKCARD CHIPOTLE 1234","expected":"m_chipotle"}
+{"descriptor":"SQ *BLUE BOTTLE #99","expected":"m_blue_bottle"}
+{"descriptor":"TST* SHAKE SHACK","expected":"m_shake_shack"}
+{"descriptor":"PAYPAL *SPOTIFY","expected":"m_spotify"}
+{"descriptor":"SP *NETFLIX","expected":"m_netflix"}
+{"descriptor":"STRIPE *ETSY","expected":"m_etsy"}
+{"descriptor":"UBER *EATS","expected":"m_uber_eats"}
+{"descriptor":"AMZN MKTP US*AMAZON","expected":"m_amazon"}
+{"descriptor":"WHOLEFDS MKT #123","expected":"m_whole_foods"}
+{"descriptor":"STARBUKS #123","expected":"m_starbucks"}
+{"descriptor":"TRADER JOE #123","expected":"m_trader_joes"}
+{"descriptor":"CHIPTLE #123","expected":"m_chipotle"}
+{"descriptor":"NETFLX.COM","expected":"m_netflix"}
+{"descriptor":"UNKNOWN MERCHANT 88","expected":null}
+{"descriptor":"CORNER MART 88","expected":null}
+{"descriptor":"LOCAL PLUMBER","expected":null}
+{"descriptor":"PARKING GARAGE 4","expected":null}
+{"descriptor":"ZZZ RANDOM SHOP","expected":null}
+{"descriptor":"THE CORNER STORE","expected":null}
+{"descriptor":"ACME RENTAL","expected":null}

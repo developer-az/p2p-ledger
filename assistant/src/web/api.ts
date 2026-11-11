@@ -201,6 +201,97 @@ export interface SpendEntry {
   occurredAt: string;
 }
 
+export type CategorySource =
+  | 'user_rule'
+  | 'user_correction'
+  | 'merchant_default'
+  | 'keyword'
+  | 'manual'
+  | 'unresolved';
+
+export type MerchantMethod = 'exact_alias' | 'similarity' | 'unresolved';
+
+export interface MerchantRecordView {
+  id: string;
+  name: string;
+  domain: string | null;
+  defaultCategory: SpendCategory | null;
+  aliases: string[];
+}
+
+export interface RuleView {
+  id: string;
+  ruleId: string;
+  accountId: string;
+  merchantContains: string;
+  maxAmountMinor: number | null;
+  category: SpendCategory;
+  version: number;
+  status: 'active' | 'archived';
+  createdAt: string;
+}
+
+export interface EnrichedSpendRowView {
+  id: string;
+  amountMinor: number;
+  amount: string;
+  note: string | null;
+  occurredAt: string;
+  spendSource: 'manual' | 'cmd' | 'import';
+  descriptorClean: string;
+  merchant: MerchantRecordView | null;
+  merchantId: string | null;
+  merchantName: string | null;
+  merchantDomain: string | null;
+  merchantMethod: MerchantMethod;
+  merchantConfidence: number;
+  merchantDefaultCategory: SpendCategory | null;
+  category: SpendCategory;
+  categorySource: CategorySource;
+  ruleId: string | null;
+  ruleVersion: number | null;
+  matchedKeyword: string | null;
+}
+
+export interface RulesResponse {
+  merchants: MerchantRecordView[];
+  rules: RuleView[];
+  versions: RuleView[];
+  transactions: EnrichedSpendRowView[];
+  stats: {
+    transactions: number;
+    merchants: number;
+    rules: number;
+    resolved: number;
+    unresolved: number;
+    autoCategorized: number;
+    corrected: number;
+  };
+}
+
+export interface RulePreviewRowView {
+  transactionId: string;
+  descriptorClean: string;
+  merchantName: string | null;
+  amountMinor: number;
+  occurredAt: string;
+  previousCategory: SpendCategory | null;
+  previousSource: CategorySource;
+  category: SpendCategory;
+}
+
+export interface RulePreviewView {
+  affected: number;
+  transactions: RulePreviewRowView[];
+  byCategory: { category: SpendCategory; count: number; amountMinor: number }[];
+}
+
+export interface MerchantCorrectionView {
+  merchant: MerchantRecordView;
+  override: { category: SpendCategory; source: CategorySource };
+  transaction: EnrichedSpendRowView;
+}
+
 export interface PatternDay {
   date: string;
   spendMinor: number;
@@ -861,6 +952,37 @@ export const api = {
     call<RaceResult>('/api/race', { method: 'POST', body: JSON.stringify({ accountId, fromAccountId }) }),
   tamper: (accountId: string, transferId: string) =>
     call<TamperReport>('/api/tamper', { method: 'POST', body: JSON.stringify({ accountId, transferId }) }),
+  rules: (accountId: string) =>
+    call<RulesResponse>(`/api/accounts/${encodeURIComponent(accountId)}/rules`),
+  previewRule: (accountId: string, body: { merchantContains: string; maxAmountMinor: number | null; category: SpendCategory }) =>
+    call<RulePreviewView>(`/api/accounts/${encodeURIComponent(accountId)}/rules/preview`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  createRule: (accountId: string, body: { merchantContains: string; maxAmountMinor: number | null; category: SpendCategory }) =>
+    call<RuleView>(`/api/accounts/${encodeURIComponent(accountId)}/rules`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateRule: (accountId: string, ruleId: string, body: { merchantContains: string; maxAmountMinor: number | null; category: SpendCategory }) =>
+    call<RuleView>(`/api/accounts/${encodeURIComponent(accountId)}/rules/${encodeURIComponent(ruleId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  applyRule: (accountId: string, ruleId: string) =>
+    call<{ applied: number; skipped: number }>(`/api/accounts/${encodeURIComponent(accountId)}/rules/${encodeURIComponent(ruleId)}/apply`, {
+      method: 'POST',
+      body: '{}',
+    }),
+  archiveRule: (accountId: string, ruleId: string) =>
+    call<{ archived: boolean }>(`/api/accounts/${encodeURIComponent(accountId)}/rules/${encodeURIComponent(ruleId)}`, {
+      method: 'DELETE',
+    }),
+  correctMerchant: (accountId: string, body: { transactionId: string; merchantName: string; category?: SpendCategory }) =>
+    call<MerchantCorrectionView>(`/api/accounts/${encodeURIComponent(accountId)}/merchants/corrections`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   chat: (accountId: string, messages: Turn[]) =>
     call<{
       answer: string;

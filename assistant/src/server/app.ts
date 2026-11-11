@@ -46,6 +46,8 @@ import { MAX_MINOR_UI } from './money.js';
 import { LlmGuard, trimHistory } from './llm-guard.js';
 import { API_HEADERS, securityHeaders } from './security-headers.js';
 import { createMailer, passwordResetEmail, type Mailer } from './mailer.js';
+import { isBreachedPassword } from './breached-password.js';
+import { LoginThrottle } from './login-throttle.js';
 import { retryAfterSeconds } from './rate-limit.js';
 import { InMemoryRateLimitStore, durableLimiter, type RateLimitStore } from './rate-limit-store.js';
 import { SETTLE_RAILS, type SettleRail } from './payment-requests.js';
@@ -185,6 +187,8 @@ export function createApp(deps: {
   /** Shared hit counters. Production passes Postgres so limits span instances; tests default to memory. */
   rateLimitStore?: RateLimitStore;
   now?: () => Date;
+  /** HIBP password check. Tests inject a fake; VITEST defaults to no network. */
+  breachedPassword?: (password: string) => Promise<boolean>;
 }) {
   const now = deps.now ?? (() => new Date());
   const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
@@ -240,6 +244,13 @@ export function createApp(deps: {
   const allowProof = durableLimiter(rateLimitStore, 'proof', 12, 60_000);
   const clientIp = (c: { req: { header(name: string): string | undefined } }) =>
     c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
+  // Per-process sign-in counters (see login-throttle.ts). IPs get 20 free
+  // failures because one address can legitimately try several accounts.
+  const threatNow = () => now().getTime();
+  const accountThrottle = new LoginThrottle({ now: threatNow });
+  const ipThrottle = new LoginThrottle({ now: threatNow, blockAfter: 20 });
+  const breachedPassword = deps.breachedPassword
+    ?? (process.env.VITEST ? async () => false : isBreachedPassword);
   const sessionUser = async (c: Context) => {
     const token = getCookie(c, SESSION_COOKIE);
     return token ? auth.userForToken(hashSessionToken(token), now()) : null;
@@ -427,6 +438,8 @@ export function createApp(deps: {
     const displayName = parsed.data.displayName.replace(/\s+/g, ' ');
     if (process.env.NODE_ENV === 'production' && !auth.persistent)
       return c.json({ error: 'Account creation is temporarily unavailable. Please try again later.' }, 503);
+    if (await breachedPassword(parsed.data.password))
+      return c.json({ error: 'breached_password' }, 400);
     let user;
     try {
       user = await auth.provision({ email, password: parsed.data.password, displayName }, async (reserved) => {
@@ -441,7 +454,8 @@ export function createApp(deps: {
         }
       });
     } catch (e) {
-      if (e instanceof EmailTakenError) return c.json({ error: e.message }, 409);
+      // Constant body: the reply must not describe the existing account.
+      if (e instanceof EmailTakenError) return c.json({ error: 'signup_failed' }, 409);
       return c.json({ error: 'We could not finish creating your account. Try again with the same email and password.' }, 503);
     }
     const userId = user.id;
@@ -458,11 +472,28 @@ export function createApp(deps: {
     const parsed = loginBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Enter the email and password for your account.' }, 400);
     const email = parsed.data.email.toLowerCase();
+    const accountKey = 'acct:' + email;
+    const ipKey = 'ip:' + clientIp(c);
+    const accountVerdict = accountThrottle.check(accountKey);
+    const ipVerdict = ipThrottle.check(ipKey);
+    if (!accountVerdict.allowed || !ipVerdict.allowed) {
+      const retryAfterSec = Math.max(accountVerdict.retryAfterSec, ipVerdict.retryAfterSec);
+      c.header('Retry-After', String(retryAfterSec));
+      return c.json({ error: 'too_many_attempts' }, 429);
+    }
     if (!await auth.allowAuthAttempt('credentials:' + email, now()))
       return c.json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
     const user = await auth.findByEmail(email);
+    // A missing email still pays the scrypt cost, so timing does not separate
+    // unknown accounts from wrong passwords.
     const ok = await verifyPassword(parsed.data.password, user?.passwordHash ?? await dummyPasswordHash());
-    if (!user || !ok) return c.json({ error: 'Email or password is incorrect.' }, 401);
+    if (!user || !ok) {
+      accountThrottle.fail(accountKey);
+      ipThrottle.fail(ipKey);
+      return c.json({ error: 'Email or password is incorrect.' }, 401);
+    }
+    accountThrottle.succeed(accountKey);
+    ipThrottle.succeed(ipKey);
     await issueSession(c, user.id);
     return c.json({
       user: { email: user.email, displayName: user.displayName },
@@ -574,6 +605,8 @@ export function createApp(deps: {
       if (field === 'password') return c.json({ error: 'Use at least 8 characters.' }, 400);
       return c.json({ error: 'This reset link is invalid or has expired. Ask for a new one.' }, 400);
     }
+    if (await breachedPassword(parsed.data.password))
+      return c.json({ error: 'breached_password' }, 400);
     const userId = await auth.completeReset(hashSessionToken(parsed.data.token), now(), await hashPassword(parsed.data.password));
     if (!userId) return c.json({ error: 'This reset link is invalid or has expired. Ask for a new one.' }, 400);
     await issueSession(c, userId);

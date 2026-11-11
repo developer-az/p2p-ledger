@@ -389,6 +389,10 @@ const API_DOWN =
   'Cannot reach the assistant API. If this is the live site, wait a moment and refresh (Vercel cold start). Locally: npm run dev or npm run dev:stack.';
 
 function requestError(status: number, path: string, body: { error?: string; code?: string }): string {
+  // Machine-readable auth codes from the server, shown as plain sentences.
+  if (body.error === 'too_many_attempts') return 'Too many attempts. Try again in a few minutes.';
+  if (body.error === 'breached_password') return 'This password has appeared in a data breach. Choose a different one.';
+  if (body.error === 'signup_failed') return "We couldn't create that account. If you already have one, sign in instead.";
   if (body.error) return body.error;
   if (status === 502 || status === 504) {
     return 'Assistant API timed out. Redeploy or retry in a few seconds (serverless cold start).';

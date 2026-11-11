@@ -355,26 +355,10 @@ export function buildCashForecast(input: {
   const detected = detectRecurring(input.transactions);
   const recurringOutflows = detected.filter((stream) => stream.direction === 'out');
 
-  let incomeStreams = detected.filter((stream) => stream.direction === 'in');
-  const incomeRows = input.transactions.filter((txn) => txn.direction === 'in');
-  if (incomeStreams.length === 0 && incomeRows.length > 0) {
-    const latest = incomeRows.reduce((newest, txn) =>
-      Date.parse(txn.occurredAt) > Date.parse(newest.occurredAt) ? txn : newest);
-    const lastDate = dateKey(Date.parse(latest.occurredAt));
-    incomeStreams = [{
-      key: `in:${latest.merchantKey}:fallback`,
-      merchant: latest.merchant,
-      merchantKey: latest.merchantKey,
-      direction: 'in',
-      category: latest.category,
-      amountMinor: Math.round(median(incomeRows.map((txn) => txn.amountMinor))),
-      intervalDays: 30,
-      occurrences: incomeRows.length,
-      lastDate,
-      nextDate: addDaysKey(lastDate, 30),
-      confidence: 'low',
-    }];
-  }
+  // Income only enters the projection when detectRecurring found a cadence with
+  // at least two occurrences. A single one-off deposit must not become a
+  // monthly payment.
+  const incomeStreams = detected.filter((stream) => stream.direction === 'in');
 
   const recurringOutKeys = new Set(recurringOutflows.map((stream) => stream.merchantKey));
   const windowStartMs = startMs - DISCRETIONARY_WINDOW_DAYS * DAY_MS;
@@ -445,9 +429,8 @@ export function buildCashForecast(input: {
     .filter((event) => event.direction === 'in')
     .map((event) => ({ date: event.date, amountMinor: event.amountMinor, merchant: event.merchant }));
 
-  const monthlyIncomeMinor = incomeStreams.length > 0
-    ? incomeStreams.reduce((sum, stream) => sum + monthlyFromInterval(stream.amountMinor, stream.intervalDays), 0)
-    : Math.round((incomeRows.reduce((sum, txn) => sum + txn.amountMinor, 0) / DISCRETIONARY_WINDOW_DAYS) * 30);
+  const monthlyIncomeMinor = incomeStreams
+    .reduce((sum, stream) => sum + monthlyFromInterval(stream.amountMinor, stream.intervalDays), 0);
   const monthlyRecurringOutflowMinor = recurringOutflows
     .reduce((sum, stream) => sum + monthlyFromInterval(stream.amountMinor, stream.intervalDays), 0);
 
@@ -469,9 +452,9 @@ export function buildCashForecast(input: {
     assumptions: [
       'Recurring means the same merchant repeats every 7, 14, 30 or 91 days.',
       'Everything else uses your average logged spend over the last 90 days, spread evenly.',
-      incomeStreams.length > 0 && detected.some((stream) => stream.direction === 'in')
+      incomeStreams.length > 0
         ? 'Planned income uses the cadence found in your income logs.'
-        : 'With only one income logged, the projection assumes it repeats monthly.',
+        : 'No recurring income was detected, so the projection leaves income out.',
     ],
   };
 }
@@ -766,7 +749,10 @@ export function buildMonthlyReport(input: {
 }
 
 function csvCell(value: string | number | null): string {
-  const text = value === null ? '' : String(value);
+  const raw = value === null ? '' : String(value);
+  // Spreadsheet apps execute cells that start with these characters. Prefix
+  // with an apostrophe before RFC 4180 quoting so the text stays text.
+  const text = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
@@ -793,7 +779,7 @@ export function reportCsv(report: MonthlyReport): string {
   for (const row of report.byCategory) {
     lines.push([
       row.kind,
-      csvCell(row.key),
+      row.key,
       csvMinor(row.inMinor),
       csvMinor(row.outMinor),
       row.count,
@@ -802,7 +788,7 @@ export function reportCsv(report: MonthlyReport): string {
   lines.push('', 'Top merchants', 'Merchant,Spend,Count,Share %');
   for (const merchant of report.topMerchants) {
     lines.push([
-      csvCell(merchant.merchant),
+      merchant.merchant,
       csvMinor(merchant.spendMinor),
       merchant.count,
       merchant.sharePct,

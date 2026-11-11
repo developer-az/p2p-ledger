@@ -24,7 +24,7 @@ import {
 } from './bank-sim.js';
 import { peerLedgerView } from './peer-ledger.js';
 import { buildActivityFeed, buildPersonalInsights } from './money-insights.js';
-import { buildHabitsFromEntries, buildHabitsHome, SPEND_CATEGORIES, type SpendLogStore } from './spend-log.js';
+import { buildHabitsFromEntries, buildHabitsHome, SPEND_CATEGORIES, type SpendLogEntry, type SpendLogStore } from './spend-log.js';
 import { buildSpendingPatterns } from './spending-patterns.js';
 import { buildCashForecast, buildMonthlyReport, buildRiskAlerts, normalizeTransactions, reportCsv } from './risk.js';
 import { InMemoryAlertDismissalStore, type AlertDismissalStore } from './alert-store.js';
@@ -32,6 +32,7 @@ import {
   buildFinanceSnapshot,
   INCOME_SOURCES,
   InMemoryPersonalFinanceStore,
+  type IncomeLogEntry,
   type PersonalFinanceStore,
 } from './personal-finance.js';
 import { formatMoney } from './money.js';
@@ -218,6 +219,28 @@ const PASSKEY_CHALLENGE_TTL_MS = 5 * 60_000;
  */
 const EXPORT_PAGE_SIZE = 500;
 
+/** Risk snapshots page the same way; each page is bounded so a large history cannot stall a request. */
+const RISK_PAGE_SIZE = 500;
+const FORECAST_LOOKBACK_DAYS = 90;
+const DAY_MS = 86_400_000;
+
+/**
+ * First row a risk snapshot needs: the selected month, its comparison month and
+ * the forecast's discretionary lookback. The profile period start is added by
+ * the caller because period totals are computed from the same rows.
+ */
+function riskWindowStart(at: Date, month?: string): Date {
+  const fallback = `${at.getUTCFullYear()}-${String(at.getUTCMonth() + 1).padStart(2, '0')}`;
+  const selected = month && /^\d{4}-\d{2}$/.test(month) ? month : fallback;
+  const [yearText, monthText] = selected.split('-');
+  const year = Number(yearText);
+  const monthIndex = Number(monthText) - 1;
+  const comparisonMonthStart = Date.UTC(year, monthIndex - 1, 1);
+  const forecastStart = Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate())
+    - FORECAST_LOOKBACK_DAYS * DAY_MS;
+  return new Date(Math.min(comparisonMonthStart, forecastStart));
+}
+
 /**
  * Rate limiters are built once per app instance (see rate-limit-store.ts). The
  * chat limiter guards the paid LLM quota; the rest guard writes. All of them
@@ -293,16 +316,55 @@ export function createApp(deps: {
     return seeding;
   };
 
+  /** Load every spend row at or after `since`, across keyset pages. */
+  const listSpendsSince = async (accountId: string, since: Date): Promise<SpendLogEntry[]> => {
+    const rows: SpendLogEntry[] = [];
+    let cursor: string | null = null;
+    for (;;) {
+      const page = await deps.spendLogs.listSpendCursorPage(accountId, cursor, RISK_PAGE_SIZE, since);
+      rows.push(...page.rows);
+      if (page.rows.length === 0 || page.next === null || page.next === cursor) break;
+      cursor = page.next;
+    }
+    const sinceMs = since.getTime();
+    return rows.filter((row) => {
+      const at = Date.parse(row.occurredAt);
+      return Number.isFinite(at) && at >= sinceMs;
+    });
+  };
+
+  /** Load every income row at or after `since`, across id keyset pages. */
+  const listIncomesSince = async (accountId: string, since: Date): Promise<IncomeLogEntry[]> => {
+    const rows: IncomeLogEntry[] = [];
+    let afterId: string | null = null;
+    for (;;) {
+      const page = await personalFinance.listIncomePage(accountId, afterId, RISK_PAGE_SIZE, since);
+      rows.push(...page);
+      const next = page[page.length - 1]?.id;
+      if (page.length < RISK_PAGE_SIZE || !next || next === afterId) break;
+      afterId = next;
+    }
+    const sinceMs = since.getTime();
+    return rows.filter((row) => {
+      const at = Date.parse(row.occurredAt);
+      return Number.isFinite(at) && at >= sinceMs;
+    });
+  };
+
   /** Load the rows and settings every forecast, alert and report route needs. */
-  const riskSnapshot = async (accountId: string) => {
+  const riskSnapshot = async (accountId: string, options: { month?: string } = {}) => {
     await ensurePracticeDemoSeeded(accountId);
     const account = await deps.ledger.getAccount(accountId);
     if (!account) return null;
     const at = now();
     const profile = await personalFinance.getProfile(accountId, account.currency, at);
-    const spends = await deps.spendLogs.list(accountId, { limit: 500 });
-    const incomes = await personalFinance.listIncome(accountId, { limit: 500 });
     const periodStart = Date.parse(profile.periodStart);
+    const windowStart = riskWindowStart(at, options.month).getTime();
+    const since = new Date(Number.isFinite(periodStart) ? Math.min(periodStart, windowStart) : windowStart);
+    const [spends, incomes] = await Promise.all([
+      listSpendsSince(accountId, since),
+      listIncomesSince(accountId, since),
+    ]);
     const periodIncome = incomes
       .filter((row) => Date.parse(row.occurredAt) >= periodStart)
       .reduce((sum, row) => sum + row.amountMinor, 0);
@@ -1480,7 +1542,7 @@ export function createApp(deps: {
   });
 
   app.get('/accounts/:id/reports/monthly', async (c) => {
-    const snapshot = await riskSnapshot(c.req.param('id'));
+    const snapshot = await riskSnapshot(c.req.param('id'), { month: c.req.query('month') });
     if (!snapshot) return c.json({ error: 'Account not found' }, 404);
     return c.json(buildMonthlyReport({
       now: snapshot.at,
@@ -1491,7 +1553,7 @@ export function createApp(deps: {
   });
 
   app.get('/accounts/:id/reports/monthly.csv', async (c) => {
-    const snapshot = await riskSnapshot(c.req.param('id'));
+    const snapshot = await riskSnapshot(c.req.param('id'), { month: c.req.query('month') });
     if (!snapshot) return c.json({ error: 'Account not found' }, 404);
     const report = buildMonthlyReport({
       now: snapshot.at,

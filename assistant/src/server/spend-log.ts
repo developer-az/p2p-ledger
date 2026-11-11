@@ -49,9 +49,9 @@ export interface SpendLogStore {
   record(accountId: string, input: RecordSpendInput, now?: Date, idempotencyKey?: string): Promise<SpendLogEntry>;
   list(accountId: string, opts?: { since?: Date; limit?: number }): Promise<SpendLogEntry[]>;
   /** Ascending id keyset page used by older callers. */
-  listSpendPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]>;
-  /** Opaque-cursor page used by bounded data export. */
-  listSpendCursorPage(accountId: string, cursor: string | null, limit: number): Promise<SpendCursorPage>;
+  listSpendPage(accountId: string, afterId: string | null, limit: number, since?: Date): Promise<SpendLogEntry[]>;
+  /** Opaque-cursor page used by bounded data export and risk snapshots. */
+  listSpendCursorPage(accountId: string, cursor: string | null, limit: number, since?: Date): Promise<SpendCursorPage>;
   /** Alias kept for callers that use the same name as the income store. */
   listPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]>;
   /** Remove one manual log. Returns false when it was already gone. */
@@ -295,18 +295,20 @@ export class InMemorySpendLogStore implements SpendLogStore {
     return Promise.all(rows.map((entry) => this.decodeEntry(entry)));
   }
 
-  async listSpendPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]> {
+  async listSpendPage(accountId: string, afterId: string | null, limit: number, since?: Date): Promise<SpendLogEntry[]> {
+    const sinceMs = since?.getTime();
     const rows = this.events
       .filter((entry) => entry.accountId === accountId && (afterId === null || entry.id > afterId))
+      .filter((entry) => sinceMs === undefined || Date.parse(entry.occurredAt) >= sinceMs)
       .sort((a, b) => a.id.localeCompare(b.id))
       .slice(0, Math.max(1, limit));
     return Promise.all(rows.map((entry) => this.decodeEntry(entry)));
   }
 
-  async listSpendCursorPage(accountId: string, cursor: string | null, limit: number): Promise<SpendCursorPage> {
+  async listSpendCursorPage(accountId: string, cursor: string | null, limit: number, since?: Date): Promise<SpendCursorPage> {
     const pageSize = Math.max(1, limit);
     // Keep the old method as the seam so test subclasses still observe page sizes.
-    const rows = await this.listSpendPage(accountId, cursor, pageSize);
+    const rows = await this.listSpendPage(accountId, cursor, pageSize, since);
     const next = rows.length < pageSize ? null : rows[rows.length - 1]!.id;
     return { rows, next };
   }

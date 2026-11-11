@@ -4,6 +4,7 @@ import { HttpLedgerClient } from './ledger.js';
 import { CompositeLedger, isLiveLedgerReachable, PracticeLedger } from './practice-ledger.js';
 import { createSpendLogStore } from './spend-log.js';
 import { createPersonalFinanceStore } from './personal-finance.js';
+import { createAlertDismissalStore } from './alert-store.js';
 import { createPaymentRequestStore } from './payment-requests.js';
 import { createSubscriptionTrackerStore } from './subscription-tracker.js';
 import { createAuthStore } from './auth.js';
@@ -12,6 +13,7 @@ import { JavaWorkflows, RoutedSpendLogStore } from './java-workflows.js';
 
 let spendLogs = createSpendLogStore();
 let personalFinance = createPersonalFinanceStore();
+let alertDismissals = createAlertDismissalStore();
 let paymentRequests = createPaymentRequestStore();
 let subscriptionMarks = createSubscriptionTrackerStore();
 
@@ -27,6 +29,7 @@ export function createAssistantApi() {
   const dataKeys = createDataKeyStore();
   spendLogs = new RoutedSpendLogStore(createSpendLogStore(dataKeys), javaWorkflows, id => ledger.isPracticeAccount(id));
   personalFinance = createPersonalFinanceStore(process.env, dataKeys);
+  alertDismissals = createAlertDismissalStore(process.env);
   paymentRequests = createPaymentRequestStore();
   subscriptionMarks = createSubscriptionTrackerStore();
   return createApp({
@@ -36,6 +39,7 @@ export function createAssistantApi() {
     isLiveLedgerUp,
     spendLogs,
     personalFinance,
+    alertDismissals,
     paymentRequests,
     subscriptionMarks,
     javaWorkflows,

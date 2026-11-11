@@ -85,8 +85,8 @@ export interface PersonalFinanceStore {
   startNewPeriod(accountId: string, currency: string, now?: Date): Promise<MoneyProfile>;
   recordIncome(accountId: string, input: RecordIncomeInput, now?: Date): Promise<IncomeLogEntry>;
   listIncome(accountId: string, opts?: { since?: Date; limit?: number }): Promise<IncomeLogEntry[]>;
-  /** Ascending id keyset page used by bounded data export. */
-  listIncomePage(accountId: string, afterId: string | null, limit: number): Promise<IncomeLogEntry[]>;
+  /** Ascending id keyset page used by bounded data export and risk snapshots. */
+  listIncomePage(accountId: string, afterId: string | null, limit: number, since?: Date): Promise<IncomeLogEntry[]>;
   /** Account deletion: removes the profile and every income row for this account. */
   deleteAll(accountId: string): Promise<void>;
 }
@@ -274,9 +274,11 @@ export class InMemoryPersonalFinanceStore implements PersonalFinanceStore {
     return Promise.all(rows.map((entry) => this.decodeEntry(entry)));
   }
 
-  async listIncomePage(accountId: string, afterId: string | null, limit: number): Promise<IncomeLogEntry[]> {
+  async listIncomePage(accountId: string, afterId: string | null, limit: number, since?: Date): Promise<IncomeLogEntry[]> {
+    const sinceMs = since?.getTime();
     const rows = this.incomes
       .filter((entry) => entry.accountId === accountId && (afterId === null || entry.id > afterId))
+      .filter((entry) => sinceMs === undefined || Date.parse(entry.occurredAt) >= sinceMs)
       .sort((a, b) => a.id.localeCompare(b.id))
       .slice(0, Math.max(1, limit));
     return Promise.all(rows.map((entry) => this.decodeEntry(entry)));
@@ -565,7 +567,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
     }
   }
 
-  async listIncomePage(accountId: string, afterId: string | null, limit: number): Promise<IncomeLogEntry[]> {
+  async listIncomePage(accountId: string, afterId: string | null, limit: number, since?: Date): Promise<IncomeLogEntry[]> {
     const c = await this.client();
     let rows: Record<string, unknown>[];
     try {
@@ -576,7 +578,11 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
                    from income_logs where account_id = $1`;
         if (afterId !== null) {
           params.push(afterId);
-          sql += ` and id > $2::uuid`;
+          sql += ` and id > $${params.length}::uuid`;
+        }
+        if (since) {
+          params.push(since.toISOString());
+          sql += ` and occurred_at >= $${params.length}`;
         }
         params.push(Math.max(1, limit));
         sql += ` order by id asc limit $${params.length}`;

@@ -16,6 +16,7 @@
     "smoke:api": "tsx scripts/smoke-api.ts",
     "eval": "tsx --env-file-if-exists=.env.local evals/run.ts",
     "seed": "tsx scripts/seed.ts",
+    "keys:rotate": "tsx --env-file-if-exists=.env.local scripts/rotate-keks.ts",
     "typecheck": "tsc --noEmit",
     "check:deployment": "tsx scripts/check-deployment.ts",
     "check:bundle": "node scripts/check-bundle.mjs",

@@ -34,6 +34,7 @@ import {
 } from './personal-finance.js';
 import { formatMoney } from './money.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
+import type { DataKeyStore } from './envelope.js';
 import { loadAccountView, type WeeklyFinance } from './tools.js';
 import {
   InMemoryPaymentRequestStore,
@@ -226,6 +227,8 @@ export function createApp(deps: {
   securityState?: SecurityStateStore;
   /** 32-byte AES key that encrypts stored TOTP secrets. Defaults to MFA_ENCRYPTION_KEY. */
   mfaKey?: Buffer;
+  /** Envelope-encryption keys. Account deletion shreds the user's data key first. */
+  dataKeys?: DataKeyStore;
   now?: () => Date;
   /** HIBP password check. Tests inject a fake; VITEST defaults to no network. */
   breachedPassword?: (password: string) => Promise<boolean>;
@@ -823,6 +826,11 @@ export function createApp(deps: {
     if (!parsed.success) return c.json({ error: 'confirm_required' }, 400);
 
     await audit(c, user.id, 'account_deleted');
+    // Crypto-shredding: destroy the wrapped data key before the rows go, so
+    // ciphertext that survives in live tables or backups can never be read.
+    // Rows are account-scoped while other material is user-scoped, so both die.
+    await deps.dataKeys?.shred(user.accountId);
+    await deps.dataKeys?.shred(user.id);
     await personalFinance.deleteAll(user.accountId);
     await deps.spendLogs.deleteAll?.(user.accountId);
     await auth.deleteUser(user.id);

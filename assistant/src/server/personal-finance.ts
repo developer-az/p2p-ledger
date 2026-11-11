@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { pgConfig } from './db-tls.js';
+import type { FieldCipher } from './envelope.js';
 import { databaseUrlFromEnv } from './integrity-postgres.js';
 import { formatMoney } from './money.js';
 import { RLS_DDL, withUser } from './rls.js';
@@ -201,6 +202,18 @@ export class InMemoryPersonalFinanceStore implements PersonalFinanceStore {
   private profiles = new Map<string, MoneyProfile>();
   private incomes: IncomeLogEntry[] = [];
 
+  constructor(private readonly cipher?: FieldCipher) {}
+
+  private async encodeNote(accountId: string, note: string | null | undefined): Promise<string | null> {
+    if (note == null) return null;
+    return this.cipher ? await this.cipher.encryptField(accountId, note) : note;
+  }
+
+  private async decodeEntry(entry: IncomeLogEntry): Promise<IncomeLogEntry> {
+    if (entry.note == null || !this.cipher) return entry;
+    return { ...entry, note: await this.cipher.decryptField(entry.accountId, entry.note) };
+  }
+
   async getProfile(accountId: string, currency: string, now = new Date()): Promise<MoneyProfile> {
     const existing = this.profiles.get(accountId);
     if (existing) return existing;
@@ -242,28 +255,30 @@ export class InMemoryPersonalFinanceStore implements PersonalFinanceStore {
       amountMinor: input.amountMinor,
       currency: input.currency ?? 'USD',
       source: input.source,
-      note: input.note ?? null,
+      note: await this.encodeNote(accountId, input.note),
       occurredAt: input.occurredAt ?? now.toISOString(),
       createdAt: now.toISOString(),
     };
     this.incomes.push(event);
-    return event;
+    return { ...event, note: input.note ?? null };
   }
 
   async listIncome(accountId: string, opts?: { since?: Date; limit?: number }): Promise<IncomeLogEntry[]> {
     const limit = opts?.limit ?? 100;
     const since = opts?.since?.getTime();
-    return this.incomes
+    const rows = this.incomes
       .filter((e) => e.accountId === accountId && (since === undefined || Date.parse(e.occurredAt) >= since))
       .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
       .slice(0, limit);
+    return Promise.all(rows.map((entry) => this.decodeEntry(entry)));
   }
 
   async listIncomePage(accountId: string, afterId: string | null, limit: number): Promise<IncomeLogEntry[]> {
-    return this.incomes
+    const rows = this.incomes
       .filter((entry) => entry.accountId === accountId && (afterId === null || entry.id > afterId))
       .sort((a, b) => a.id.localeCompare(b.id))
       .slice(0, Math.max(1, limit));
+    return Promise.all(rows.map((entry) => this.decodeEntry(entry)));
   }
 
   async deleteAll(accountId: string): Promise<void> {
@@ -302,7 +317,20 @@ create index if not exists income_logs_account_id_idx on income_logs (account_id
 export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
   private schemaReady = false;
 
-  constructor(private readonly connectionString: string) {}
+  constructor(
+    private readonly connectionString: string,
+    private readonly cipher?: FieldCipher,
+  ) {}
+
+  private async encodeNote(accountId: string, note: string | null | undefined): Promise<string | null> {
+    if (note == null) return null;
+    return this.cipher ? await this.cipher.encryptField(accountId, note) : note;
+  }
+
+  private async decodeNote(accountId: string, note: string | null): Promise<string | null> {
+    if (note == null || !this.cipher) return note;
+    return this.cipher.decryptField(accountId, note);
+  }
 
   private async client() {
     const { default: pg } = await import('pg');
@@ -443,6 +471,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
     if (input.amountMinor <= 0) throw new Error('amountMinor must be positive');
     const id = randomUUID();
     const occurredAt = input.occurredAt ?? now.toISOString();
+    const note = await this.encodeNote(accountId, input.note);
     const c = await this.client();
     try {
       await this.ensureSchema(c);
@@ -456,7 +485,7 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
             input.amountMinor,
             input.currency ?? 'USD',
             input.source,
-            input.note ?? null,
+            note,
             occurredAt,
             now.toISOString(),
           ],
@@ -495,16 +524,16 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
           params.push(limit);
         }
         const res = await c.query(sql, params);
-        return res.rows.map((row: Record<string, unknown>) => ({
+        return await Promise.all(res.rows.map(async (row: Record<string, unknown>) => ({
           id: String(row.id),
           accountId: String(row.account_id),
           amountMinor: Number(row.amount_minor),
           currency: String(row.currency),
           source: row.source as IncomeSource,
-          note: row.note as string | null,
+          note: await this.decodeNote(accountId, row.note as string | null),
           occurredAt: new Date(String(row.occurred_at)).toISOString(),
           createdAt: new Date(String(row.created_at)).toISOString(),
-        }));
+        })));
       });
     } finally {
       await c.end();
@@ -539,16 +568,16 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
         params.push(Math.max(1, limit));
         sql += ` order by id asc limit $${params.length}`;
         const res = await c.query(sql, params);
-        return res.rows.map((row: Record<string, unknown>) => ({
+        return await Promise.all(res.rows.map(async (row: Record<string, unknown>) => ({
           id: String(row.id),
           accountId: String(row.account_id),
           amountMinor: Number(row.amount_minor),
           currency: String(row.currency),
           source: row.source as IncomeSource,
-          note: row.note as string | null,
+          note: await this.decodeNote(accountId, row.note as string | null),
           occurredAt: new Date(String(row.occurred_at)).toISOString(),
           createdAt: new Date(String(row.created_at)).toISOString(),
-        }));
+        })));
       });
     } finally {
       await c.end();
@@ -556,10 +585,10 @@ export class PostgresPersonalFinanceStore implements PersonalFinanceStore {
   }
 }
 
-export function createPersonalFinanceStore(env: NodeJS.ProcessEnv = process.env): PersonalFinanceStore {
+export function createPersonalFinanceStore(env: NodeJS.ProcessEnv = process.env, cipher?: FieldCipher): PersonalFinanceStore {
   const url = databaseUrlFromEnv(env);
-  if (url) return new PostgresPersonalFinanceStore(url);
-  return new InMemoryPersonalFinanceStore();
+  if (url) return new PostgresPersonalFinanceStore(url, cipher);
+  return new InMemoryPersonalFinanceStore(cipher);
 }
 
 export function isIncomeSource(value: string): value is IncomeSource {

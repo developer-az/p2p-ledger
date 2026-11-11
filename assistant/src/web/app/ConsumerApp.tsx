@@ -1,51 +1,42 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LazyMotion } from 'motion/react';
-import './app.css';
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/components.css';
 import { api, onWakeRetry, type BootstrapResponse, type SpendCategory } from '../api.js';
 import { ActivitySheet } from './ActivitySheet.js';
 import { ActivityTab } from './ActivityTab.js';
 import { AskTab } from './AskTab.js';
 import { useWallet } from './data.js';
-import type { FeedItem } from './feed.js';
+import { buildFeed, type FeedItem } from './feed.js';
 import { DemoGuide, type DemoStepId } from './DemoGuide.js';
-import { displayName, parseMoney } from './format.js';
+import { dayLabel, displayName, money, parseMoney } from './format.js';
 import { Home } from './Home.js';
 import { InsightsTab } from './InsightsTab.js';
 import { clearSession, loadSession, saveSession, type Session } from './session.js';
 import { SetupSheet } from './SetupSheet.js';
-import { AddMoneySheet } from './SimpleSheets.js';
 import { AddSheet } from './AddSheet.js';
-import { NeedsYouCard, SettleUpSheet } from './SettleUp.js';
-import { WalletTab } from './WalletTab.js';
-import { Avatar, ErrorNotice, Icon, ToastProvider, useToast, type IconName } from './ui.js';
-import { FloatingDock, useSwipeNav } from './dock.js';
+import { SettingsView } from './SettingsView.js';
+import { ErrorNotice, ToastProvider, useToast } from './ui.js';
+import { AppShell, appRoute, sectionLabel, settingsTabLabel, isPlannedSection } from './AppShell.js';
+import { PlannedView } from './PlannedView.js';
 import { AppPreloader } from './Preloader.js';
 import { bootProgress, useBootProgress } from './boot-progress.js';
 import { LoadingSteps } from './LoadingSteps.js';
 import { Welcome } from './Welcome.js';
 import { SignIn } from './SignIn.js';
-import { navigate, useRoute } from './router.js';
-import { BrandMark } from './BrandMark.js';
+import { navigate, APP_SECTIONS, SETTINGS_TABS, useRoute, type AppSection, type Route } from './router.js';
 import { READINESS_POLL_CAP_MS, readinessPollDelays, runReadinessPoll } from './readiness-poll.js';
 import { SiteFooter } from './SiteFooter.js';
-import { applyTheme, nextTheme, readTheme, saveTheme, themeLabel, type ThemePref } from './theme.js';
+import { applyTheme, nextTheme, readTheme, saveTheme, type ThemePref } from './theme.js';
+import { applyDensity, densityLabel, readDensity, saveDensity, type DensityPref } from './density.js';
+import { CommandPalette, type PaletteRow } from './CommandPalette.js';
+import { ShortcutSheet } from './ShortcutSheet.js';
 
 /** Animation features load in their own chunk; `strict` rejects a stray full `motion.*` import. */
 const loadMotion = () => import('./motion-features.js').then((mod) => mod.default);
 
-type Tab = 'today' | 'activity' | 'patterns' | 'ask' | 'wallet';
-/** The dock: four places and one "+" in the middle. Wallet lives in the account menu. */
-const TABS: { id: Tab; label: string; icon: IconName }[] = [
-  { id: 'today', label: 'Today', icon: 'home' },
-  { id: 'activity', label: 'Activity', icon: 'list' },
-  { id: 'patterns', label: 'Patterns', icon: 'chart' },
-  { id: 'ask', label: 'Ask', icon: 'sparkle' },
-];
-const TAB_TITLES: Record<Tab, string> = { today: 'Today', activity: 'Activity', patterns: 'Patterns', ask: 'Ask', wallet: 'Wallet' };
-/** Tab order drives swipe direction: left reveals the next tab, right the previous. */
-const TAB_IDS: Tab[] = TABS.map((t) => t.id);
-
-type Sheetname = null | 'add' | 'log' | 'setup' | 'settle';
+type Sheetname = null | 'log' | 'setup';
 
 const DEMO_STEPS: DemoStepId[] = ['baseline', 'log', 'income', 'patterns', 'pace'];
 
@@ -76,6 +67,11 @@ function loadDemoProgress(key: string): DemoStepId[] {
   } catch {
     return [];
   }
+}
+
+/** "light" to "Light", for the next-theme hint in the palette. */
+function preferenceName(pref: string): string {
+  return pref.charAt(0).toUpperCase() + pref.slice(1);
 }
 
 export function ConsumerApp() {
@@ -198,25 +194,6 @@ export function ConsumerApp() {
   );
 }
 
-/** The logo always leads home: out of the sample household to the welcome page, or to Today in a wallet. */
-function Brand({ onHome }: { onHome?: () => void }) {
-  return (
-    <a
-      className="brand"
-      href="/"
-      aria-label="Settle home"
-      onClick={onHome ? (e) => {
-        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-        e.preventDefault();
-        onHome();
-      } : undefined}
-    >
-      <BrandMark size={28} />
-      <span className="brand-word">settle</span>
-    </a>
-  );
-}
-
 function Signed({ boot, session, onSwitch, onSignOut }: {
   boot: BootstrapResponse;
   session: Session;
@@ -246,7 +223,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
     bootProgress.dispatch({ type: 'fail', id: running.id, at: Date.now(), reason: error });
   }, [error, walletArrived]);
 
-  const [tab, setTab] = useState<Tab>('today');
   const [demoProgress, setDemoProgress] = useState<DemoStepId[]>(() => (demo ? loadDemoProgress(demoKey) : []));
   const guideHiddenKey = `settle:demo-guide-hidden:${me.id}`;
   const [showDemoGuide, setShowDemoGuideState] = useState(() => !readFlag(guideHiddenKey));
@@ -261,13 +237,20 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   const [item, setItem] = useState<FeedItem | null>(null);
   const [logPreset, setLogPreset] = useState<{ category?: SpendCategory; amountMinor?: number }>({});
   const [addMode, setAddMode] = useState<'spent' | 'got'>('spent');
-  const [settleMode, setSettleMode] = useState<'ask' | 'settle'>('ask');
   const [askSeed, setAskSeed] = useState<string | null>(null);
-  const [menu, setMenu] = useState(false);
   const [theme, setTheme] = useState<ThemePref>(() => readTheme());
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [density, setDensity] = useState<DensityPref>(() => readDensity());
+  // AppShell owns the rail state and hands its toggle over for the palette.
+  const sidebarToggle = useRef<(() => void) | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const toast = useToast();
   const route = useRoute();
+  /** Signed-in sessions only ever render an app route; other URLs are corrected below. */
+  const appView: Extract<Route, { kind: 'app' }> = route.kind === 'app' ? route : { kind: 'app', section: 'overview' };
+  const viewSection = appView.section;
+  const viewSettingsTab = appView.section === 'settings' ? appView.tab ?? 'profile' : null;
+  const statementHref = `/api/accounts/${encodeURIComponent(me.id)}/statement.txt`;
 
   // OAuth failures can land on any signed-in URL, not just the ones that expect
   // them. Say what happened, then drop the query so a reload stays quiet.
@@ -292,13 +275,44 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   }, []);
 
   useEffect(() => {
-    if (!menu) return;
-    const close = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenu(false); };
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenu(false); };
-    document.addEventListener('mousedown', close);
-    document.addEventListener('keydown', esc);
-    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc); };
-  }, [menu]);
+    // Same for density: theme-init.js sets it before paint, but a blocked
+    // script must not leave the saved preference unapplied.
+    applyDensity(readDensity());
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    const next = nextTheme(theme);
+    saveTheme(next);
+    applyTheme(next);
+    setTheme(next);
+  }, [theme]);
+
+  const toggleDensity = useCallback(() => {
+    const next: DensityPref = density === 'compact' ? 'comfortable' : 'compact';
+    saveDensity(next);
+    applyDensity(next);
+    setDensity(next);
+  }, [density]);
+
+  // The Appearance tab picks an exact preference; the shell button cycles.
+  const chooseTheme = useCallback((next: ThemePref) => {
+    saveTheme(next);
+    applyTheme(next);
+    setTheme(next);
+  }, []);
+
+  const chooseDensity = useCallback((next: DensityPref) => {
+    saveDensity(next);
+    applyDensity(next);
+    setDensity(next);
+  }, []);
+
+  // A signed-in visitor on a non-app URL (a stale link, an OAuth redirect that
+  // dropped the path) belongs on the overview, not on the landing page.
+  useEffect(() => {
+    if (route.kind === 'app') return;
+    navigate({ kind: 'app', section: 'overview' }, { replace: true });
+  }, [route]);
 
   const markDemo = useCallback((step: DemoStepId) => {
     if (!demo) return;
@@ -323,16 +337,16 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
     setShowDemoGuideState(!readFlag(guideHiddenKey));
   }, [demo, demoKey, guideHiddenKey]);
 
-  // Escape closes the quest card, unless a sheet or the menu has the key first.
+  // Escape closes the quest card, unless a sheet has the key first.
   useEffect(() => {
-    if (!demo || !showDemoGuide || sheet || menu) return;
+    if (!demo || !showDemoGuide || sheet) return;
     const esc = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       setShowDemoGuide(false);
     };
     document.addEventListener('keydown', esc);
     return () => document.removeEventListener('keydown', esc);
-  }, [demo, showDemoGuide, sheet, menu, setShowDemoGuide]);
+  }, [demo, showDemoGuide, sheet, setShowDemoGuide]);
 
   useEffect(() => {
     if (!demo || !data) return;
@@ -356,27 +370,23 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
   }, [data, me.id]);
 
   useEffect(() => {
-    document.title = `${TAB_TITLES[tab]} · Settle`;
-  }, [tab]);
+    document.title = viewSettingsTab
+      ? `${settingsTabLabel(viewSettingsTab)} · Settings · Settle`
+      : `${sectionLabel(viewSection)} · Settle`;
+  }, [viewSection, viewSettingsTab]);
 
-  const go = (t: Tab) => {
-    if (demo && t === 'patterns') markDemo('patterns');
-    setTab(t);
+  const go = useCallback((section: AppSection) => {
+    if (demo && section === 'insights') markDemo('patterns');
+    navigate(appRoute(section));
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-  // Swipe-driven navigation on the main pane. Vertical scrolling still wins.
-  const swipe = useSwipeNav(TAB_IDS, tab, go);
+  }, [demo, markDemo]);
   const closeSheet = () => setSheet(null);
-  const openSettle = (mode: 'ask' | 'settle' = 'ask') => {
-    setSettleMode(mode);
-    setSheet('settle');
-  };
 
-  const openLog = (preset: { category?: SpendCategory; amountMinor?: number } = {}) => {
+  const openLog = useCallback((preset: { category?: SpendCategory; amountMinor?: number } = {}) => {
     setLogPreset(preset);
     setAddMode('spent');
     setSheet('log');
-  };
+  }, []);
   const openIncome = () => {
     setLogPreset({});
     setAddMode('got');
@@ -388,7 +398,81 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
     go('ask');
   };
 
-  const openFeedItem = (feedItem: FeedItem) => setItem(feedItem);
+  const openFeedItem = useCallback((feedItem: FeedItem) => setItem(feedItem), []);
+
+  const paletteCommands = useMemo<PaletteRow[]>(() => {
+    const rows: PaletteRow[] = [];
+
+    for (const section of APP_SECTIONS) {
+      const keywords: string[] = [section];
+      if (section === 'insights') keywords.push('patterns');
+      if (section === 'overview') keywords.push('home');
+      rows.push({
+        id: `go-${section}`,
+        kind: 'command',
+        label: `Go to ${sectionLabel(section)}`,
+        keywords,
+        run: () => go(section),
+      });
+    }
+
+    for (const tab of SETTINGS_TABS) {
+      rows.push({
+        id: `settings-${tab}`,
+        kind: 'command',
+        label: `Open settings: ${settingsTabLabel(tab)}`,
+        run: () => navigate({ kind: 'app', section: 'settings', tab }),
+      });
+    }
+
+    const nextDensity: DensityPref = density === 'compact' ? 'comfortable' : 'compact';
+    rows.push(
+      { id: 'new-transaction', kind: 'command', label: 'New transaction', run: () => openLog() },
+      {
+        id: 'toggle-theme',
+        kind: 'command',
+        label: 'Toggle theme',
+        hint: preferenceName(nextTheme(theme)),
+        run: toggleTheme,
+      },
+      {
+        id: 'toggle-density',
+        kind: 'command',
+        label: `Switch to ${densityLabel(nextDensity).toLowerCase()} density`,
+        hint: densityLabel(density),
+        run: toggleDensity,
+      },
+      { id: 'toggle-sidebar', kind: 'command', label: 'Collapse or expand sidebar', run: () => sidebarToggle.current?.() },
+      { id: 'shortcuts', kind: 'command', label: 'Keyboard shortcuts', run: () => setHelpOpen(true) },
+      {
+        id: demo ? 'exit-sample' : 'sign-out',
+        kind: 'command',
+        label: demo ? 'Exit sample' : 'Sign out',
+        run: onSignOut,
+      },
+    );
+
+    return rows;
+  }, [demo, density, go, onSignOut, openLog, theme, toggleDensity, toggleTheme]);
+
+  const paletteTransactions = useMemo<PaletteRow[]>(() => {
+    if (!data) return [];
+    return buildFeed(data.view).map((feedItem) => {
+      const sign = feedItem.signedMinor < 0 ? '\u2212' : feedItem.signedMinor > 0 ? '+' : '';
+      return {
+        id: `transaction-${feedItem.id}`,
+        kind: 'transaction',
+        label: feedItem.title,
+        hint: dayLabel(feedItem.occurredAt),
+        keywords: [feedItem.subtitle, feedItem.category ?? ''],
+        amount: `${sign}${money(Math.abs(feedItem.signedMinor))}`,
+        run: () => {
+          navigate(appRoute('transactions'));
+          openFeedItem(feedItem);
+        },
+      };
+    });
+  }, [data, openFeedItem]);
 
   const handleDemoStep = (step: DemoStepId) => {
     switch (step) {
@@ -404,7 +488,7 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         openIncome();
         break;
       case 'patterns':
-        go('patterns');
+        go('insights');
         break;
       case 'pace':
         setSetupMode('edit');
@@ -423,68 +507,33 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         onSignOut();
         navigate({ kind: 'signup' });
       }}
-      onPatterns={() => go('patterns')}
+      onPatterns={() => go('insights')}
     />
   ) : null;
 
   return (
     <>
-      <header className="topbar">
-        <div className="topbar-inner">
-          <Brand onHome={demo ? onSignOut : () => { setMenu(false); setSheet(null); go('today'); }} />
-          {demo ? <button type="button" className="demo-pill" onClick={() => setShowDemoGuide(true)} title="Open the guided demo">Demo</button> : null}
-          <span className="spacer" />
-          <div className="top-actions">
-            {refreshing ? <span className="sync-pill" role="status" aria-label="Updating your wallet"><span className="sync-dot" /></span> : null}
-            <button type="button" className="theme-toggle" aria-label={themeLabel(theme)} title={themeLabel(theme)} onClick={() => {
-              const next = nextTheme(theme);
-              saveTheme(next);
-              applyTheme(next);
-              setTheme(next);
-            }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                {theme === 'light' ? (
-                  <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></>
-                ) : theme === 'dark' ? (
-                  <path d="M20.5 14.1A8.5 8.5 0 0 1 9.9 3.5 8.5 8.5 0 1 0 20.5 14.1Z" />
-                ) : (
-                  <><circle cx="12" cy="12" r="9" /><path d="M12 3a9 9 0 0 0 0 18Z" fill="currentColor" stroke="none" /></>
-                )}
-              </svg>
-            </button>
-            <div className="menu-wrap" ref={menuRef}>
-              <button type="button" className="wallet-chip" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
-                <Avatar owner={me.owner} small />{who}
-              </button>
-              {menu ? (
-                <div className="menu" role="menu">
-                  {session.user ? <p className="menu-email">{session.user.email}</p> : null}
-                  {session.household.length > 1 ? (
-                    <>
-                      <p className="menu-label">View as</p>
-                      {session.household.filter((h) => h.id !== me.id).map((h) => (
-                        <button key={h.id} type="button" role="menuitem" onClick={() => { setMenu(false); onSwitch({ account: h, household: session.household, demo: session.demo }); }}>
-                          <Avatar owner={h.owner} small />{displayName(h.owner)}
-                        </button>
-                      ))}
-                      <hr />
-                    </>
-                  ) : null}
-                  <button type="button" role="menuitem" onClick={() => { setMenu(false); setSetupMode('edit'); setSetupStep(0); setSheet('setup'); }}>
-                    <Icon name="settings" size={18} />Edit money snapshot
-                  </button>
-                  <a role="menuitem" href={`/api/accounts/${encodeURIComponent(me.id)}/statement.txt`}><Icon name="download" size={18} />Download statement</a>
-                  <button type="button" role="menuitem" onClick={() => { setMenu(false); go('wallet'); }}><Icon name="wallet" size={18} />Wallet & trust</button>
-                  <hr />
-                  <button type="button" role="menuitem" onClick={onSignOut}><Icon name="logout" size={18} />{demo ? 'Exit sample' : 'Sign out'}</button>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main id="main" className="main" {...swipe}>
+      <AppShell
+        route={appView}
+        who={who}
+        householdLabel={demo ? 'Sample household' : who}
+        demo={demo}
+        accounts={session.household}
+        accountId={me.id}
+        email={session.user?.email}
+        statementHref={statementHref}
+        themePref={theme}
+        syncing={refreshing}
+        onNew={() => openLog()}
+        onOpenPalette={() => setPaletteOpen(true)}
+        onOpenHelp={() => setHelpOpen(true)}
+        onSignOut={onSignOut}
+        onSwitch={(account) => onSwitch({ account, household: session.household, demo: session.demo })}
+        onEditBalances={() => navigate({ kind: 'app', section: 'settings', tab: 'balances' })}
+        onToggleTheme={toggleTheme}
+        onOpenGuide={demo ? () => setShowDemoGuide(true) : undefined}
+        sidebarToggleRef={sidebarToggle}
+      >
         {error && !data ? <ErrorNotice message={error} onRetry={() => void reload()} /> : null}
         {error && data ? (
           <div className="notice notice-warn sync-banner" role="status">
@@ -504,23 +553,21 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
             />
           </div>
         ) : (
-          <div className="view" key={tab}>
-            {tab === 'today' ? (
+          <div className="view" key={viewSection}>
+            {viewSection === 'overview' ? (
               <Home
                 me={me}
                 name={session.user?.displayName}
                 data={data}
                 guide={demoGuide}
                 actions={{
-                  addMoney: () => setSheet('add'),
                   logSpend: openLog,
                   logIncome: openIncome,
-                  settleUp: () => openSettle('ask'),
                   ask,
                   openItem: openFeedItem,
-                  seeAll: () => go('activity'),
-                  seeInsights: () => go('patterns'),
-                  seeWallet: () => go('wallet'),
+                  seeAll: () => go('transactions'),
+                  seeInsights: () => go('insights'),
+                  seeWallet: () => go('settings'),
                   setup: (step) => {
                     setSetupMode(data?.view.moneyProfile?.walletCashMinor == null ? 'onboarding' : 'edit');
                     setSetupStep(step ?? 0);
@@ -529,40 +576,45 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
                 }}
               />
             ) : null}
-            {tab === 'activity' ? <ActivityTab data={data} onOpen={openFeedItem} /> : null}
-            {tab === 'patterns' ? (
+            {viewSection === 'transactions' ? <ActivityTab data={data} onOpen={openFeedItem} /> : null}
+            {viewSection === 'insights' ? (
               <InsightsTab
                 data={data}
                 onLog={() => openLog()}
                 onSetup={(step) => { setSetupMode('edit'); setSetupStep(step ?? 0); setSheet('setup'); }}
                 onAsk={() => ask('What stands out about my spending this month?')}
                 demo={demo}
-                onDemoHome={demo ? () => { go('today'); setShowDemoGuide(true); } : undefined}
+                onDemoHome={demo ? () => { go('overview'); setShowDemoGuide(true); } : undefined}
               />
             ) : null}
-            {tab === 'ask' ? <AskTab accountId={me.id} boot={boot} seed={askSeed} onSeedUsed={() => setAskSeed(null)} /> : null}
-            {tab === 'wallet' ? (
-              <WalletTab
+            {viewSection === 'ask' ? <AskTab accountId={me.id} boot={boot} seed={askSeed} onSeedUsed={() => setAskSeed(null)} /> : null}
+            {viewSection === 'settings' ? (
+              <SettingsView
+                tab={viewSettingsTab ?? 'profile'}
+                name={who}
+                email={session.user?.email}
+                demo={demo}
                 me={me}
                 data={data}
-                viewer={{ email: session.user?.email, demo }}
-                actions={{
-                  setup: () => { setSetupMode(data?.view.moneyProfile?.walletCashMinor == null ? 'onboarding' : 'edit'); setSetupStep(0); setSheet('setup'); },
-                  logIncome: openIncome,
-                  addMoney: () => setSheet('add'),
-                  ask: () => ask(),
-                  signOut: onSignOut,
-                  reload,
+                statementHref={statementHref}
+                theme={theme}
+                density={density}
+                onTheme={chooseTheme}
+                onDensity={chooseDensity}
+                onSignOut={onSignOut}
+                onEditBalances={() => {
+                  setSetupMode('edit');
+                  setSetupStep(0);
+                  setSheet('setup');
                 }}
+                onReload={reload}
               />
             ) : null}
+            {isPlannedSection(viewSection) ? <PlannedView section={viewSection} /> : null}
           </div>
         )}
-      </main>
+      </AppShell>
 
-      <FloatingDock tabs={TABS} active={tab} onSelect={go} syncing={refreshing} onAdd={() => openLog()} addOpen={sheet === 'log'} />
-
-      <AddMoneySheet open={sheet === 'add'} onClose={closeSheet} me={me} onChanged={reload} />
       <AddSheet
         open={sheet === 'log'}
         onClose={closeSheet}
@@ -575,7 +627,6 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         walletRun={walletRun}
         onSpent={() => markDemo('log')}
         onIncome={() => markDemo('income')}
-        onSplit={() => openSettle('ask')}
       />
       <SetupSheet
         open={sheet === 'setup'}
@@ -592,7 +643,13 @@ function Signed({ boot, session, onSwitch, onSignOut }: {
         }}
       />
       <ActivitySheet item={item} accountId={me.id} onClose={() => setItem(null)} onChanged={reload} />
-      <SettleUpSheet open={sheet === 'settle'} onClose={closeSheet} me={me} onChanged={reload} initialMode={settleMode} />
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={paletteCommands}
+        transactions={paletteTransactions}
+      />
+      <ShortcutSheet open={helpOpen} onClose={() => setHelpOpen(false)} />
     </>
   );
 }

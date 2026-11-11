@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
+import './styles/views.css';
 import { buildFeed, filterFeed, type FeedFilter, type FeedItem } from './feed.js';
 import { FeedList } from './FeedList.js';
 import { money } from './format.js';
-import { EmptyState, Icon, Skeleton } from './ui.js';
+import { Icon, Skeleton } from './ui.js';
 import type { WalletData } from './data.js';
 
 const FILTERS: { id: FeedFilter; label: string }[] = [
@@ -26,40 +27,37 @@ export function ActivityTab({ data, onOpen }: { data: WalletData | null; onOpen:
   const inn = month?.incomeMinor ?? 0;
 
   return (
-    <div className="activity-page">
-      <header className="patterns-head">
-        <div>
-          <p className="eyebrow">Activity</p>
-          <h1>Every move, in one place.</h1>
-          <p className="page-sub">Logged spends, income, and the ledger entries behind your balance.</p>
-        </div>
+    <div className="v-view">
+      <header className="v-head">
+        <h1 className="v-title">Transactions</h1>
+        <p className="v-sub">Logged spending, income and ledger entries.</p>
       </header>
 
-      <div className="stat-strip" aria-label="This month">
-        <div className="stat-tile stat-tile-ink">
-          <span className="stat-label">Out this month</span>
-          <strong className="num">{money(out)}</strong>
+      <section className="v-figs v-figs-3" aria-label="This month">
+        <div className="v-fig">
+          <p className="v-fig-label">Out this month</p>
+          <p className="v-fig-value num">{money(out)}</p>
         </div>
-        <div className="stat-tile">
-          <span className="stat-label">In this month</span>
-          <strong className="num">{money(inn)}</strong>
+        <div className="v-fig">
+          <p className="v-fig-label">In this month</p>
+          <p className="v-fig-value num">{money(inn)}</p>
         </div>
-        <div className="stat-tile">
-          <span className="stat-label">Active days, 30d</span>
-          <strong className="num">{patterns?.totals.activeDays30d ?? 0}</strong>
+        <div className="v-fig">
+          <p className="v-fig-label">Active days in the last 30</p>
+          <p className="v-fig-value num">{patterns?.totals.activeDays30d ?? 0}</p>
         </div>
-      </div>
+      </section>
 
-      <section className="card activity-card">
-        <div className="activity-tools">
-          <div className="seg" role="group" aria-label="Filter activity">
+      <section className="v-panel">
+        <div className="v-toolbar">
+          <div className="v-seg" role="group" aria-label="Filter activity">
             {FILTERS.map((f) => (
               <button key={f.id} type="button" aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
                 {f.label}
               </button>
             ))}
           </div>
-          <label className="search" htmlFor="activity-search">
+          <label className="v-search" htmlFor="activity-search">
             <Icon name="search" size={16} />
             <input
               id="activity-search"
@@ -72,13 +70,14 @@ export function ActivityTab({ data, onOpen }: { data: WalletData | null; onOpen:
         </div>
 
         {shown.length === 0 ? (
-          <EmptyState title={feed.length === 0 ? 'Nothing here yet' : 'Nothing matches'}>
-            {feed.length === 0 ? 'Logged spending and ledger entries show up here, with a receipt on every one.' : 'Try a different filter or a shorter search.'}
-          </EmptyState>
+          <div className="v-empty">
+            <p className="v-empty-title">{feed.length === 0 ? 'Nothing here yet' : 'Nothing matches'}</p>
+            <p>{feed.length === 0 ? 'Logged spending and ledger entries show up here, with a receipt on every one.' : 'Try a different filter or a shorter search.'}</p>
+          </div>
         ) : (
           <>
-            <p className="hint activity-count">{shown.length} {shown.length === 1 ? 'entry' : 'entries'}</p>
-            <div key={filter} className="feed-in"><FeedList items={shown} onOpen={onOpen} dayTotals /></div>
+            <p className="v-count">{shown.length} {shown.length === 1 ? 'entry' : 'entries'}</p>
+            <div key={filter} className="v-feed"><FeedList items={shown} onOpen={onOpen} dayTotals /></div>
           </>
         )}
       </section>

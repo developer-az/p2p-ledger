@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import './styles/views.css';
+import './styles/ask.css';
 import { api, type BootstrapResponse, type ToolCall, type Turn } from '../api.js';
 import { useDebouncedCallback, useOnceGuard } from './debounce.js';
 import { Icon } from './ui.js';
@@ -108,11 +110,10 @@ export function AskTab({
 
   return (
     <div className="ask-page">
-      <header className="patterns-head ask-head">
+      <header className="ask-head">
         <div>
-          <p className="eyebrow">Ask</p>
-          <h1>A conversation with your records.</h1>
-          <p className="page-sub">Read-only answers about your wallet, your habits and your declines. It cannot move money.</p>
+          <h1 className="v-title">Ask</h1>
+          <p className="v-sub">Read-only answers about your wallet, your habits and your declines. It cannot move money.</p>
         </div>
         <span className="pill pill-good"><Icon name="lock" size={14} /> Read-only</span>
       </header>

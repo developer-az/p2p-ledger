@@ -109,7 +109,7 @@ export function SetupSheet({
     <Sheet
       open={open}
       title={mode === 'onboarding' ? 'Set your starting point' : 'Edit your snapshot'}
-      subtitle={mode === 'onboarding' ? 'Three numbers. Thirty seconds.' : 'Change one number without changing anything else.'}
+      subtitle={mode === 'onboarding' ? 'Cash, card balances and a weekly plan.' : 'Change one number without changing anything else.'}
       onClose={onClose}
     >
       <div className="setup">
@@ -122,7 +122,6 @@ export function SetupSheet({
 
         {step === 0 ? (
           <div className="setup-panel">
-            <div className="setup-icon">💵</div>
             <h3>What&apos;s in your spending account right now?</h3>
             <p className="muted">Checking, debit, cash in your pocket — the money you can actually spend today.</p>
             <label className="setup-amount">
@@ -149,7 +148,6 @@ export function SetupSheet({
 
         {step === 1 ? (
           <div className="setup-panel">
-            <div className="setup-icon">💳</div>
             <h3>What do you owe on cards?</h3>
             <p className="muted">The total balance, not the minimum payment. We keep it separate from cash.</p>
             <label className="setup-amount">
@@ -178,7 +176,6 @@ export function SetupSheet({
 
         {step === 2 ? (
           <div className="setup-panel">
-            <div className="setup-icon">🎯</div>
             <h3>What feels comfortable to spend in a week?</h3>
             <p className="muted">
               This is your weekly spending pace — how much you&apos;re okay logging before the ring fills up.

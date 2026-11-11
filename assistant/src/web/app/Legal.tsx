@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import './app.css';
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/components.css';
 import { SiteFooter } from './SiteFooter.js';
 
 export function Legal({ page }: { page: 'privacy' | 'terms' | 'google-signin' }) {

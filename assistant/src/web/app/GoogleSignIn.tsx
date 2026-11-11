@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { GoogleButton } from './GoogleButton.js';
-import './app.css';
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/components.css';
 
 export function GoogleSignIn() {
   const [accepted, setAccepted] = useState(false);

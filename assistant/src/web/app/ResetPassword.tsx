@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
-import './app.css';
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/components.css';
 
 /** Reads the one-time token from the link's fragment (never sent to the server in logs or Referer). */
 function tokenFromLocation(): string {

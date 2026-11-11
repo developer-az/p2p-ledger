@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import './styles/insights.css';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import type { PatternCategory, PatternDay, SpendingPatterns } from '../api.js';
 import { categoryMeta } from './categories.js';

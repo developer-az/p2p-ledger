@@ -1,0 +1,248 @@
+/* Command palette and keyboard shortcut sheet. Tokens only, 4px grid. */
+
+.app .palette-dialog,
+.app .shortcut-dialog {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: 12vh var(--s4) var(--s4);
+  border: 0;
+  /* The dialog covers the viewport, so its own background is the backdrop. */
+  background: color-mix(in srgb, var(--ink) 30%, transparent);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--t-base);
+  text-align: left;
+  overflow-y: auto;
+  display: none;
+}
+
+.app .palette-dialog[open],
+.app .shortcut-dialog[open] {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.app .palette-dialog::backdrop,
+.app .shortcut-dialog::backdrop {
+  background: transparent;
+}
+
+.app .palette-panel,
+.app .shortcut-panel {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r3);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: palette-fade var(--dur) var(--ease);
+}
+
+.app .palette-panel {
+  max-width: 560px;
+}
+
+.app .shortcut-panel {
+  max-width: 480px;
+}
+
+@keyframes palette-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---------- Palette ---------- */
+
+.app .palette-input {
+  display: block;
+  width: 100%;
+  min-height: var(--row-h);
+  padding: 0 var(--s3);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--t-md);
+}
+
+.app .palette-input::placeholder {
+  color: var(--muted);
+}
+
+.app .palette-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: calc(-1 * var(--s1));
+  border-radius: var(--r3) var(--r3) 0 0;
+}
+
+.app .palette-list {
+  padding: var(--s1) 0 var(--s2);
+  max-height: 52vh;
+  overflow-y: auto;
+}
+
+.app .palette-group-label,
+.app .shortcut-group-label {
+  margin: var(--s2) var(--s3) var(--s1);
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app .palette-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-height: var(--row-h);
+  padding: 0 var(--s3);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.app .palette-row[aria-selected="true"] {
+  background: var(--surface-2);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.app .palette-row-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app .palette-row-hint {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+
+.app .palette-row-amount {
+  flex: none;
+  font-size: var(--t-sm);
+}
+
+.app .palette-empty {
+  margin: 0;
+  padding: var(--s5) var(--s3);
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ---------- Shortcut sheet ---------- */
+
+.app .shortcut-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s2) var(--s2) var(--s2) var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+
+.app .shortcut-title {
+  margin: 0;
+  font-size: var(--t-md);
+  font-weight: 600;
+}
+
+.app .shortcut-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r2);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.app .shortcut-close:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.app .shortcut-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.app .shortcut-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s1) var(--s3) var(--s4);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.app .shortcut-group-label {
+  margin: var(--s2) 0 var(--s1);
+}
+
+.app .shortcut-rows {
+  margin: 0;
+}
+
+.app .shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  min-height: var(--row-h);
+  border-bottom: 1px solid var(--line);
+}
+
+.app .shortcut-row:last-child {
+  border-bottom: 0;
+}
+
+.app .shortcut-row dt {
+  min-width: 0;
+}
+
+.app .shortcut-row dd {
+  margin: 0;
+  flex: none;
+}
+
+.app .palette-panel kbd,
+.app .shortcut-panel kbd {
+  padding: 0 var(--s1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  white-space: nowrap;
+}
+
+@media (max-width: 639px) {
+  .app .palette-dialog,
+  .app .shortcut-dialog {
+    /* Full width minus one spacing step on small screens. */
+    padding: 12vh var(--s2) var(--s2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app .palette-panel,
+  .app .shortcut-panel {
+    animation: none;
+  }
+}

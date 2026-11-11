@@ -1,0 +1,660 @@
+/* Design system v2 view styles: Overview and Transactions.
+   Tokens only. Rules are scoped to the views that import this file. */
+
+/* ---------- Page header ---------- */
+
+/* The view root is the container every strip and grid queries, so layouts
+   respond to the column they actually get, not the viewport width. */
+.app .v-view {
+  display: grid;
+  gap: var(--s6);
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.app .v-head {
+  display: grid;
+  gap: var(--s1);
+}
+
+.app .v-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.app .v-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+
+/* ---------- Figure strip ---------- */
+
+/* Two columns by default; the view root is the container (see `.v-view`), so
+   the strip widens only when there is room for it. */
+.app .v-figs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  min-width: 0;
+  background: var(--line);
+  border-block: 1px solid var(--line);
+}
+
+.app .v-figs-3 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app .v-figs-3 .v-fig:last-child {
+  grid-column: 1 / -1;
+}
+
+@container (min-width: 720px) {
+  .app .v-figs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 600px) {
+  .app .v-figs-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .app .v-figs-3 .v-fig:last-child {
+    grid-column: auto;
+  }
+}
+
+.app .v-fig {
+  display: grid;
+  gap: var(--s1);
+  align-content: start;
+  min-width: 0;
+  min-height: 84px;
+  padding: var(--s4);
+  background: var(--bg);
+}
+
+.app .v-fig-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app .v-fig-value {
+  margin: 0;
+  min-height: 32px;
+  color: var(--ink);
+  font-size: clamp(20px, 6vw, var(--t-xl));
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.app .v-fig-value.is-neg {
+  color: var(--neg);
+}
+
+.app .v-fig-value.is-muted {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--muted);
+  font-size: var(--t-md);
+  font-weight: 400;
+  white-space: normal;
+}
+
+/* The "of $X" / "over $X" tail drops to its own line instead of splitting the number. */
+.app .v-fig-note {
+  display: block;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  font-weight: 400;
+}
+
+.app .v-fig-value.is-neg .v-fig-note {
+  color: inherit;
+}
+
+/* ---------- Panels ---------- */
+
+.app .v-panel {
+  min-width: 0;
+  padding: var(--s5);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--surface);
+}
+
+.app .v-panel h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.app .v-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-bottom: var(--s4);
+}
+
+.app .v-link {
+  padding: 0;
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--accent);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.app .v-link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.app .v-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.app .v-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+
+.app .v-btn:hover {
+  border-color: var(--ink);
+  background: var(--surface-2);
+}
+
+.app .v-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.app .v-btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.app .v-btn-primary:hover {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.app .v-setup {
+  display: grid;
+  justify-items: start;
+  gap: var(--s2);
+}
+
+.app .v-setup p {
+  margin: 0;
+  max-width: 60ch;
+  color: var(--muted);
+  font-size: var(--t-base);
+  line-height: 1.5;
+}
+
+.app .v-setup .v-btn {
+  margin-top: var(--s2);
+}
+
+/* ---------- Ask bar ---------- */
+
+.app .v-ask {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding-left: var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--surface);
+}
+
+.app .v-ask:focus-within {
+  border-color: var(--ink);
+}
+
+.app .v-ask input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--ink);
+  font-size: var(--t-base);
+}
+
+.app .v-ask input::placeholder {
+  color: var(--faint);
+}
+
+.app .v-ask-go {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: 3px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.app .v-ask-go:hover {
+  background: var(--surface-2);
+}
+
+.app .v-ask-go:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Two-column body ---------- */
+
+.app .v-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s5);
+}
+
+.app .v-side {
+  display: grid;
+  gap: var(--s5);
+  min-width: 0;
+}
+
+.app .v-month-value {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--t-2xl);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+.app .v-compare {
+  margin: var(--s2) 0 0;
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+
+.app .v-compare .is-pos {
+  color: var(--pos);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.app .v-compare .is-neg {
+  color: var(--neg);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ---------- Category bars ---------- */
+
+.app .v-cats {
+  display: grid;
+  gap: var(--s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app .v-cat {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+}
+
+.app .v-cat-label {
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app .v-cat-amount {
+  color: var(--ink);
+  font-size: var(--t-sm);
+  text-align: right;
+}
+
+.app .v-cat-track {
+  grid-column: 1 / -1;
+  height: 4px;
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.app .v-cat-bar {
+  display: block;
+  height: 100%;
+  background: color-mix(in srgb, var(--ink) 70%, transparent);
+}
+
+/* ---------- Feed rows ---------- */
+
+.app .v-feed-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app .v-feed-list > li {
+  border-bottom: 1px solid var(--line);
+}
+
+.app .v-feed-list > li:last-child {
+  border-bottom: 0;
+}
+
+.app .v-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  min-height: var(--row-h);
+  padding: 0 var(--pad);
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.app .v-row:hover {
+  background: var(--surface-2);
+}
+
+.app .v-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.app .v-row-main {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.app .v-row-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--t-base);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app .v-row-sub {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app .v-chip {
+  justify-self: start;
+  padding: 0 var(--s2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  color: var(--muted);
+  font-size: var(--t-xs);
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.app .v-amount {
+  grid-column: 3;
+  justify-self: end;
+  color: var(--ink);
+  font-size: var(--t-base);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.app .v-amount.is-pos {
+  color: var(--pos);
+}
+
+.app .v-amount.is-failed {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.app .v-day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s3) var(--pad) var(--s1);
+  border-bottom: 1px solid var(--line);
+}
+
+.app .v-day-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app .v-day-total {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 500;
+}
+
+.app .v-day-total.is-pos {
+  color: var(--pos);
+}
+
+/* ---------- Empty states ---------- */
+
+.app .v-empty {
+  margin: 0;
+  padding: var(--s4) 0;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+.app .v-empty p {
+  margin: 0;
+}
+
+.app .v-empty-title {
+  color: var(--ink);
+  font-size: var(--t-base);
+  font-weight: 500;
+}
+
+/* ---------- Transactions toolbar ---------- */
+
+.app .v-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-bottom: var(--s3);
+}
+
+.app .v-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--surface-2);
+}
+
+.app .v-seg button {
+  min-height: 30px;
+  padding: 0 var(--s3);
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  font-weight: 400;
+}
+
+.app .v-seg button:hover {
+  color: var(--ink);
+}
+
+.app .v-seg button[aria-pressed="true"] {
+  border-color: var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.app .v-seg button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.app .v-search {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  height: 36px;
+  min-width: 220px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.app .v-search:focus-within {
+  border-color: var(--ink);
+}
+
+.app .v-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--ink);
+  font-size: var(--t-sm);
+}
+
+.app .v-search input::placeholder {
+  color: var(--faint);
+}
+
+.app .v-count {
+  margin: var(--s3) 0 var(--s1);
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+
+.app .v-feed {
+  margin-top: var(--s1);
+}
+
+/* ---------- Skeleton ---------- */
+
+.app .v-skeleton .skeleton {
+  border-radius: var(--r2);
+  background: var(--surface-2);
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 1023px) {
+  .app .v-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  .app .v-toolbar {
+    align-items: stretch;
+  }
+
+  .app .v-search {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 639px) {
+  .app .v-row {
+    align-items: start;
+    padding-block: var(--s2);
+  }
+
+  .app .v-row-main {
+    display: grid;
+    gap: 2px;
+  }
+
+  .app .v-chip {
+    margin-top: 2px;
+  }
+
+  .app .v-seg {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .app .v-seg button {
+    flex: 1 0 auto;
+  }
+
+  .app .v-search {
+    height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app .v-skeleton .skeleton {
+    background: var(--surface-2);
+    animation: none;
+  }
+}

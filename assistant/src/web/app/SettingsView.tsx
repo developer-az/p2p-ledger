@@ -212,7 +212,7 @@ export function SettingsView({
           ) : null}
 
           {tab === 'appearance' ? (
-            <section className="v-panel set-panel" aria-labelledby="set-appearance">
+            <section className="v-panel set-panel" aria-labelledby="set-appearance" data-tour="settings-appearance">
               <h2 id="set-appearance">Appearance</h2>
               <fieldset className="set-fieldset">
                 <legend className="set-legend">Theme</legend>

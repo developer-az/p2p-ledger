@@ -39,6 +39,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npx vite build
+      - run: npm run check:bundle
       - name: Production API smoke (optional)
         if: vars.ASSISTANT_URL != ''
         env:

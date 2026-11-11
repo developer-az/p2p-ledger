@@ -16,15 +16,11 @@ export function InsightsTab({
   onLog,
   onSetup,
   onAsk,
-  demo,
-  onDemoHome,
 }: {
   data: WalletData | null;
   onLog: () => void;
   onSetup: (step?: 0 | 1 | 2) => void;
   onAsk: () => void;
-  demo?: boolean;
-  onDemoHome?: () => void;
 }) {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [weeklyPayment, setWeeklyPayment] = useState(5_000);
@@ -41,11 +37,6 @@ export function InsightsTab({
 
   return (
     <div className="patterns">
-      {demo && onDemoHome ? (
-        <div className="demo-patterns-bar" role="region" aria-label="Demo navigation">
-          <button type="button" className="btn btn-primary btn-sm" onClick={onDemoHome}>← Back to demo home</button>
-        </div>
-      ) : null}
       <header className="insight-head">
         <div>
           <h1 className="v-title">Insights</h1>
@@ -105,7 +96,7 @@ export function InsightsTab({
               </div>
             </section>
 
-            <section className="card month-focus" aria-labelledby="month-title">
+            <section className="card month-focus" aria-labelledby="month-title" data-tour="insights-charts">
               <div className="card-head">
                 <div><p className="eyebrow">{patterns?.month.label}</p><h2 id="month-title">This month</h2></div>
               </div>

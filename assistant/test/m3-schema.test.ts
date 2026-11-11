@@ -116,6 +116,9 @@ describe.skipIf(!TEST_DATABASE_URL)('imports migration', () => {
       await client.query(IMPORTS_UP_SQL);
       // Re-running the migration must be safe for deploys that retry.
       await client.query(IMPORTS_UP_SQL);
+      // The private test schema needs an explicit usage grant for the app role;
+      // the production public schema already has one.
+      await client.query(`grant usage on schema ${schemaName} to settle_app`);
 
       const userId = randomUUID();
       await client.query('begin');
@@ -133,21 +136,23 @@ describe.skipIf(!TEST_DATABASE_URL)('imports migration', () => {
         [rawId, userId, importId],
       );
       await client.query(
-        `insert into transactions (id, account_id, import_id, raw_row_id, posted_date, amount_minor,
+        `insert into transactions (id, account_id, import_id, raw_row_id, line_number, posted_date, amount_minor,
            currency, descriptor_raw, descriptor_clean, category_id, source, dedupe_key, idempotency_key, pipeline_version)
-         values ($1, $2, $3, $4, '2026-07-15', -550, 'USD', 'enc:v1:blob', 'coffee', 'dining',
+         values ($1, $2, $3, $4, 2, '2026-07-15', -550, 'USD', 'enc:v1:blob', 'coffee', 'dining',
            'csv', $5, $6, 'm3.1.0')`,
         [randomUUID(), userId, importId, rawId, 'a'.repeat(64), 'import-ffff-2'],
       );
       await client.query('commit');
 
       await client.query('begin');
+      await client.query('set local role settle_app');
       await client.query(`set local app.user_id = '${userId}'`);
       const visible = await client.query('select count(*)::int as n from transactions');
       expect(visible.rows[0].n).toBe(1);
       await client.query('commit');
 
       await client.query('begin');
+      await client.query('set local role settle_app');
       await client.query(`set local app.user_id = '${randomUUID()}'`);
       const hidden = await client.query('select count(*)::int as n from transactions');
       expect(hidden.rows[0].n).toBe(0);

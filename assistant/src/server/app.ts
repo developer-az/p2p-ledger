@@ -24,12 +24,20 @@ import {
 } from './bank-sim.js';
 import { peerLedgerView } from './peer-ledger.js';
 import { buildActivityFeed, buildPersonalInsights } from './money-insights.js';
-import { buildHabitsFromEntries, buildHabitsHome, SPEND_CATEGORIES, type SpendLogStore } from './spend-log.js';
+import { buildHabitsFromEntries, buildHabitsHome, SPEND_CATEGORIES, type SpendLogEntry, type SpendLogStore } from './spend-log.js';
 import { buildSpendingPatterns } from './spending-patterns.js';
+import { buildCashForecast, buildMonthlyReport, buildRiskAlerts, normalizeTransactions, reportCsv } from './risk.js';
+import { InMemoryAlertDismissalStore, type AlertDismissalStore } from './alert-store.js';
+import { buildSubscriptionReport } from './subscriptions.js';
+import {
+  InMemorySubscriptionTrackerStore,
+  type SubscriptionTrackerStore,
+} from './subscription-tracker.js';
 import {
   buildFinanceSnapshot,
   INCOME_SOURCES,
   InMemoryPersonalFinanceStore,
+  type IncomeLogEntry,
   type PersonalFinanceStore,
 } from './personal-finance.js';
 import { formatMoney } from './money.js';
@@ -248,6 +256,28 @@ const PASSKEY_CHALLENGE_TTL_MS = 5 * 60_000;
  */
 const EXPORT_PAGE_SIZE = 500;
 
+/** Risk snapshots page the same way; each page is bounded so a large history cannot stall a request. */
+const RISK_PAGE_SIZE = 500;
+const FORECAST_LOOKBACK_DAYS = 90;
+const DAY_MS = 86_400_000;
+
+/**
+ * First row a risk snapshot needs: the selected month, its comparison month and
+ * the forecast's discretionary lookback. The profile period start is added by
+ * the caller because period totals are computed from the same rows.
+ */
+function riskWindowStart(at: Date, month?: string): Date {
+  const fallback = `${at.getUTCFullYear()}-${String(at.getUTCMonth() + 1).padStart(2, '0')}`;
+  const selected = month && /^\d{4}-\d{2}$/.test(month) ? month : fallback;
+  const [yearText, monthText] = selected.split('-');
+  const year = Number(yearText);
+  const monthIndex = Number(monthText) - 1;
+  const comparisonMonthStart = Date.UTC(year, monthIndex - 1, 1);
+  const forecastStart = Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate())
+    - FORECAST_LOOKBACK_DAYS * DAY_MS;
+  return new Date(Math.min(comparisonMonthStart, forecastStart));
+}
+
 /**
  * Rate limiters are built once per app instance (see rate-limit-store.ts). The
  * chat limiter guards the paid LLM quota; the rest guard writes. All of them
@@ -262,6 +292,9 @@ export function createApp(deps: {
   personalFinance?: PersonalFinanceStore;
   /** Merchant aliases, rules and category corrections. Defaults to memory. */
   enrichment?: EnrichmentStore;
+  /** Dismissed alert ids. Defaults to memory; production passes Postgres. */
+  alertDismissals?: AlertDismissalStore;
+  subscriptionMarks?: SubscriptionTrackerStore;
   paymentRequests?: PaymentRequestStore;
   javaWorkflows?: JavaWorkflows;
   liveLedger?: LedgerWriter & LedgerAuditor;
@@ -294,6 +327,8 @@ export function createApp(deps: {
   const mfaKey = resolveMfaKey(deps.mfaKey);
   const personalFinance = deps.personalFinance ?? new InMemoryPersonalFinanceStore();
   const enrichment = deps.enrichment ?? new InMemoryEnrichmentStore(now);
+  const alertDismissals = deps.alertDismissals ?? new InMemoryAlertDismissalStore();
+  const subscriptionMarks = deps.subscriptionMarks ?? new InMemorySubscriptionTrackerStore();
   const paymentRequests = deps.paymentRequests ?? new InMemoryPaymentRequestStore();
   /**
    * Practice demo history lives in memory, so a cold serverless instance that
@@ -321,6 +356,78 @@ export function createApp(deps: {
       });
     practiceSeedInFlight.set(accountId, seeding);
     return seeding;
+  };
+
+  /** Load every spend row at or after `since`, across keyset pages. */
+  const listSpendsSince = async (accountId: string, since: Date): Promise<SpendLogEntry[]> => {
+    const rows: SpendLogEntry[] = [];
+    let cursor: string | null = null;
+    for (;;) {
+      const page = await deps.spendLogs.listSpendCursorPage(accountId, cursor, RISK_PAGE_SIZE, since);
+      rows.push(...page.rows);
+      if (page.rows.length === 0 || page.next === null || page.next === cursor) break;
+      cursor = page.next;
+    }
+    const sinceMs = since.getTime();
+    return rows.filter((row) => {
+      const at = Date.parse(row.occurredAt);
+      return Number.isFinite(at) && at >= sinceMs;
+    });
+  };
+
+  /** Load every income row at or after `since`, across id keyset pages. */
+  const listIncomesSince = async (accountId: string, since: Date): Promise<IncomeLogEntry[]> => {
+    const rows: IncomeLogEntry[] = [];
+    let afterId: string | null = null;
+    for (;;) {
+      const page = await personalFinance.listIncomePage(accountId, afterId, RISK_PAGE_SIZE, since);
+      rows.push(...page);
+      const next = page[page.length - 1]?.id;
+      if (page.length < RISK_PAGE_SIZE || !next || next === afterId) break;
+      afterId = next;
+    }
+    const sinceMs = since.getTime();
+    return rows.filter((row) => {
+      const at = Date.parse(row.occurredAt);
+      return Number.isFinite(at) && at >= sinceMs;
+    });
+  };
+
+  /** Load the rows and settings every forecast, alert and report route needs. */
+  const riskSnapshot = async (accountId: string, options: { month?: string } = {}) => {
+    await ensurePracticeDemoSeeded(accountId);
+    const account = await deps.ledger.getAccount(accountId);
+    if (!account) return null;
+    const at = now();
+    const profile = await personalFinance.getProfile(accountId, account.currency, at);
+    const periodStart = Date.parse(profile.periodStart);
+    const windowStart = riskWindowStart(at, options.month).getTime();
+    const since = new Date(Number.isFinite(periodStart) ? Math.min(periodStart, windowStart) : windowStart);
+    const [spends, incomes] = await Promise.all([
+      listSpendsSince(accountId, since),
+      listIncomesSince(accountId, since),
+    ]);
+    const periodIncome = incomes
+      .filter((row) => Date.parse(row.occurredAt) >= periodStart)
+      .reduce((sum, row) => sum + row.amountMinor, 0);
+    const periodSpend = spends
+      .filter((row) => Date.parse(row.occurredAt) >= periodStart)
+      .reduce((sum, row) => sum + row.amountMinor, 0);
+    let currentBalanceMinor = account.balanceMinor;
+    if (profile.walletCashMinor !== null) {
+      currentBalanceMinor = profile.walletCashMinor + periodIncome;
+      if (profile.spendLogsAffectWallet) currentBalanceMinor -= periodSpend;
+    }
+    return {
+      account,
+      at,
+      profile,
+      spends,
+      incomes,
+      patterns: buildSpendingPatterns(spends, incomes, at, profile, 0),
+      transactions: normalizeTransactions(spends, incomes),
+      currentBalanceMinor,
+    };
   };
   const llmGuard = deps.llmGuard ?? new LlmGuard();
   const auth = deps.auth ?? new InMemoryAuthStore();
@@ -946,7 +1053,9 @@ export function createApp(deps: {
     await deps.dataKeys?.shred(user.accountId);
     await deps.dataKeys?.shred(user.id);
     await personalFinance.deleteAll(user.accountId);
+    await alertDismissals.deleteAll(user.accountId);
     await deps.spendLogs.deleteAll?.(user.accountId);
+    await subscriptionMarks.deleteAll(user.accountId);
     await auth.deleteUser(user.id);
     deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true, httpOnly: true, sameSite: 'Lax' });
     return c.json({ deleted: true });
@@ -1426,7 +1535,7 @@ export function createApp(deps: {
       const denied = await walletAccessError(c, id);
       if (denied) return denied;
       await ensurePracticeDemoSeeded(id);
-      return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, id, Math.min(limit, 100), now, tzOffsetFrom(c)));
+      return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, subscriptionMarks, id, Math.min(limit, 100), now, tzOffsetFrom(c)));
     }
     const owner = c.req.query('owner');
     if (!owner) return c.json({ error: 'owner is required' }, 400);
@@ -1434,6 +1543,71 @@ export function createApp(deps: {
     if (denied) return denied;
     const accounts = await deps.ledger.accountsByOwner(owner);
     return c.json(accounts.map((a) => ({ id: a.id, owner: a.ownerId })));
+  });
+
+  app.get('/accounts/:id/forecast', async (c) => {
+    const snapshot = await riskSnapshot(c.req.param('id'));
+    if (!snapshot) return c.json({ error: 'Account not found' }, 404);
+    return c.json(buildCashForecast({
+      now: snapshot.at,
+      currentBalanceMinor: snapshot.currentBalanceMinor,
+      transactions: snapshot.transactions,
+      currency: snapshot.account.currency,
+      horizonDays: 90,
+    }));
+  });
+
+  app.get('/accounts/:id/alerts', async (c) => {
+    const accountId = c.req.param('id');
+    const snapshot = await riskSnapshot(accountId);
+    if (!snapshot) return c.json({ error: 'Account not found' }, 404);
+    const dismissed = await alertDismissals.list(accountId);
+    const alerts = buildRiskAlerts({
+      now: snapshot.at,
+      transactions: snapshot.transactions,
+      currentBalanceMinor: snapshot.currentBalanceMinor,
+      weeklyBudgetMinor: snapshot.profile.weeklyBudgetMinor,
+      weeklySpentMinor: snapshot.patterns.week.spentMinor,
+      weekStart: snapshot.patterns.week.start,
+      dismissed,
+    });
+    return c.json({ alerts, generatedAt: snapshot.at.toISOString() });
+  });
+
+  app.post('/accounts/:id/alerts/:alertId/dismiss', async (c) => {
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const accountId = c.req.param('id');
+    const alertId = c.req.param('alertId');
+    if (!alertId || alertId.length > 200) return c.json({ error: 'Invalid alert' }, 400);
+    if (!await deps.ledger.getAccount(accountId)) return c.json({ error: 'Account not found' }, 404);
+    await alertDismissals.dismiss(accountId, alertId, now());
+    return c.json({ ok: true });
+  });
+
+  app.get('/accounts/:id/reports/monthly', async (c) => {
+    const snapshot = await riskSnapshot(c.req.param('id'), { month: c.req.query('month') });
+    if (!snapshot) return c.json({ error: 'Account not found' }, 404);
+    return c.json(buildMonthlyReport({
+      now: snapshot.at,
+      transactions: snapshot.transactions,
+      month: c.req.query('month'),
+      currency: snapshot.account.currency,
+    }));
+  });
+
+  app.get('/accounts/:id/reports/monthly.csv', async (c) => {
+    const snapshot = await riskSnapshot(c.req.param('id'), { month: c.req.query('month') });
+    if (!snapshot) return c.json({ error: 'Account not found' }, 404);
+    const report = buildMonthlyReport({
+      now: snapshot.at,
+      transactions: snapshot.transactions,
+      month: c.req.query('month'),
+      currency: snapshot.account.currency,
+    });
+    return c.body(reportCsv(report), 200, {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="settle-report-${report.month}.csv"`,
+    });
   });
 
   app.post('/accounts', async (c) => {
@@ -1749,7 +1923,27 @@ export function createApp(deps: {
   app.get('/accounts/:id', async (c) => {
     const id = c.req.param('id');
     await ensurePracticeDemoSeeded(id);
-    return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, id, 30, now, tzOffsetFrom(c)));
+    return respondAccount(c, await accountView(deps.ledger, deps.spendLogs, personalFinance, subscriptionMarks, id, 30, now, tzOffsetFrom(c)));
+  });
+
+  app.post('/accounts/:id/subscriptions/:streamId/mark', async (c) => {
+    if (!await allowWrite(clientIp(c))) return c.json({ error: 'Too many requests' }, 429);
+    const accountId = c.req.param('id');
+    const streamId = c.req.param('streamId');
+    if (!z.string().uuid().safeParse(accountId).success || !z.string().min(3).max(160).safeParse(streamId).success) {
+      return c.json({ error: 'Invalid id' }, 400);
+    }
+    const account = await deps.ledger.getAccount(accountId);
+    if (!account || account.type !== 'USER') return c.json({ error: 'Account not found' }, 404);
+    const parsed = z.object({ markedToCancel: z.boolean() }).safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid body' }, 400);
+    await subscriptionMarks.set(accountId, streamId, parsed.data.markedToCancel, now());
+    const subscriptions = buildSubscriptionReport(
+      await deps.spendLogs.list(accountId, { limit: 500 }),
+      now(),
+      await subscriptionMarks.list(accountId),
+    );
+    return c.json({ subscriptions });
   });
 
   app.post('/accounts/:id/spends/import', async (c) => {
@@ -2045,7 +2239,7 @@ export function createApp(deps: {
   app.get('/accounts/:id/statement.txt', async (c) => {
     const id = c.req.param('id');
     if (!z.string().uuid().safeParse(id).success) return c.text('Invalid account id', 400);
-    const view = await accountView(deps.ledger, deps.spendLogs, personalFinance, id, 100, now, tzOffsetFrom(c));
+    const view = await accountView(deps.ledger, deps.spendLogs, personalFinance, subscriptionMarks, id, 100, now, tzOffsetFrom(c));
     if (!view) return c.text('Account not found', 404);
     const entries = await deps.ledger.entries(id, 200);
     const body = formatLedgerStatement(view, entries, {
@@ -2351,6 +2545,7 @@ async function accountView(
   ledger: LedgerReader,
   spendLogs: SpendLogStore,
   personalFinance: PersonalFinanceStore,
+  subscriptionMarks: SubscriptionTrackerStore,
   id: string,
   limit = 30,
   now: () => Date,
@@ -2366,6 +2561,7 @@ async function accountView(
   const spends = allSpends.slice(0, 80);
   const incomes = allIncomes.slice(0, 80);
   const patterns = buildSpendingPatterns(allSpends, allIncomes, now(), profile, tzOffsetMinutes);
+  const subscriptions = buildSubscriptionReport(allSpends, now(), await subscriptionMarks.list(id));
   const activityFeed = buildActivityFeed(
     base.transfers,
     spends,
@@ -2378,6 +2574,7 @@ async function accountView(
     ...base,
     habits,
     patterns,
+    subscriptions,
     finance,
     moneyProfile: profile,
     activityFeed,

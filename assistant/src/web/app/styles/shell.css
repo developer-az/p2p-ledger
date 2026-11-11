@@ -242,6 +242,7 @@
   height: var(--row-h);
   min-width: 0;
   padding: 0 var(--s2);
+  touch-action: manipulation;
   border-radius: var(--r2);
   color: var(--ink-2);
   font-size: var(--t-sm);
@@ -482,6 +483,8 @@
 
 .app .shell-menu-btn {
   display: none;
+  /* A tap opens on the click, without the 300ms double-tap-zoom delay. */
+  touch-action: manipulation;
 }
 
 .app .shell-breadcrumb {
@@ -629,11 +632,17 @@
 
 /* ---------- Mobile drawer ---------- */
 
+/* The drawer scrim: a plain dimming layer, never a frosted surface, so it
+   cannot paint a blurred copy of the page over the drawer. Stacking on mobile
+   is top bar (20) < scrim (50) < drawer (60). */
 .app .shell-backdrop {
   position: fixed;
   inset: 0;
   z-index: 50;
   background: color-mix(in srgb, var(--ink) 40%, transparent);
+  -webkit-tap-highlight-color: transparent;
+  /* No double-tap zoom delay, so a tap on the scrim is not re-targeted. */
+  touch-action: manipulation;
 }
 
 @media (max-width: 767px) {
@@ -649,8 +658,11 @@
     height: 100dvh;
     transform: translateX(-100%);
     transition: transform var(--dur) var(--ease);
+    /* Above the scrim (50) and the top bar (20): a tap inside the drawer is
+       always the nav's, never the scrim's. */
     z-index: 60;
     padding: var(--s3);
+    touch-action: manipulation;
   }
 
   /* The drawer slides on transform, so it carries no backdrop filter there:

@@ -106,16 +106,17 @@ export class RoutedSpendLogStore implements SpendLogStore {
     if (opts?.since) params.set('since', opts.since.toISOString());
     return this.java.request('GET', `/v1/accounts/${encodeURIComponent(accountId)}/spends?${params}`);
   }
-  async listSpendPage(accountId: string, afterId: string | null, limit: number): Promise<SpendLogEntry[]> {
-    if (this.isPractice(accountId)) return this.practice.listSpendPage(accountId, afterId, limit);
+  async listSpendPage(accountId: string, afterId: string | null, limit: number, since?: Date): Promise<SpendLogEntry[]> {
+    if (this.isPractice(accountId)) return this.practice.listSpendPage(accountId, afterId, limit, since);
     // The old signature cannot carry the timestamp half of the Java keyset. It
     // accepts an opaque cursor too, and an unrecognised id means "no more rows".
-    return (await this.listSpendCursorPage(accountId, afterId, limit)).rows;
+    return (await this.listSpendCursorPage(accountId, afterId, limit, since)).rows;
   }
-  async listSpendCursorPage(accountId: string, cursor: string | null, limit: number): Promise<SpendCursorPage> {
-    if (this.isPractice(accountId)) return this.practice.listSpendCursorPage(accountId, cursor, limit);
+  async listSpendCursorPage(accountId: string, cursor: string | null, limit: number, since?: Date): Promise<SpendCursorPage> {
+    if (this.isPractice(accountId)) return this.practice.listSpendCursorPage(accountId, cursor, limit, since);
     const pageSize = Math.min(500, Math.max(1, limit));
     const params = new URLSearchParams({ limit: String(pageSize) });
+    if (since) params.set('since', since.toISOString());
     if (cursor !== null) {
       const decoded = decodeSpendCursor(cursor);
       if (!decoded) return { rows: [], next: null };

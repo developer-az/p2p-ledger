@@ -121,8 +121,8 @@ export function SignIn({
           <h1>{mode === 'create' ? 'Create your account' : 'Sign in to Settle'}</h1>
           <p className="signin-lede">
             {mode === 'create'
-              ? 'One email, one wallet. You start empty, and the sample household never mixes with yours.'
-              : 'Sign in and pick up right where you left off.'}
+              ? 'One email, one wallet, kept apart from the sample household.'
+              : 'Sign in to see your wallet and your logged entries.'}
           </p>
 
           <form className="signin-form" aria-busy={busy} onSubmit={(e) => { e.preventDefault(); void submitAccount(); }}>

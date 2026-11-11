@@ -318,7 +318,7 @@ function SpendImport({ accountId, onChanged }: { accountId: string; onChanged?: 
   }
   return (
     <div className="set-import">
-      <p className="set-copy">Bring spending into Activity and Patterns. These logs do not move money. Requires a live wallet.</p>
+      <p className="set-copy">Bring spending into Transactions and Insights. These logs do not move money. Requires a live wallet.</p>
       <p className="set-copy muted">Use YYYY-MM-DD dates and positive amounts such as 12.50. Include transactionId to catch duplicates across statements.</p>
       <a className="link-btn" download="settle-expenses.csv" href={'data:text/csv;charset=utf-8,' + encodeURIComponent('date,amount,category,note,transactionId\n2026-01-01,12.50,groceries,Weekly groceries,EXAMPLE-1\n')}>Download CSV template</a>
       <label htmlFor="expense-csv">Expense CSV (up to 2,000 rows)</label>

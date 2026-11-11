@@ -113,7 +113,7 @@ export function AskTab({
       <header className="ask-head">
         <div>
           <h1 className="v-title">Ask</h1>
-          <p className="v-sub">Read-only answers about your wallet, your habits and your declines. It cannot move money.</p>
+          <p className="v-sub">Read-only answers about your wallet, your habits and your declines; it cannot move money.</p>
         </div>
         <span className="pill pill-good"><Icon name="lock" size={14} /> Read-only</span>
       </header>
@@ -121,7 +121,7 @@ export function AskTab({
       <section className="card ask-panel" aria-label="Conversation">
         {!modelOn ? (
           <p className="notice notice-warn" style={{ fontSize: '0.92rem' }}>
-            The language model is not connected on this server, so answers are built directly from your records. Accurate, just plainer.
+            The language model is not connected on this server, so answers come straight from your records.
           </p>
         ) : null}
         <div className="chat" aria-live="polite">
@@ -165,7 +165,7 @@ export function AskTab({
           <input id="ask-input" className="input" placeholder="Ask about your money" value={text} maxLength={400} onChange={(e) => setText(e.target.value)} />
           <button className="btn btn-primary" type="submit" disabled={busy || !text.trim()} aria-label="Send question"><Icon name="send" /></button>
         </form>
-        <p className="hint ask-hint">Answers come from read-only tools scoped to this wallet. Nothing leaves your records except the question.</p>
+        <p className="hint ask-hint">Answers come from read-only tools scoped to this wallet; nothing leaves your records except the question.</p>
       </section>
     </div>
   );

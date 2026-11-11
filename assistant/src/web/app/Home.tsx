@@ -146,7 +146,7 @@ function StartingPoint({ actions }: { actions: HomeActions }) {
   return (
     <section className="v-panel v-setup" aria-labelledby="setup-title">
       <h2 id="setup-title">Set your starting point</h2>
-      <p>Add your cash, card balance and a weekly pace. Settle uses those three numbers for every total on this page.</p>
+      <p>Add your cash, card balance and a weekly pace; Settle uses those three numbers for every total on this page.</p>
       <button type="button" className="v-btn v-btn-primary" onClick={() => actions.setup(0)}>Set up your baseline</button>
     </section>
   );

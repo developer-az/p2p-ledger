@@ -92,7 +92,7 @@ export function SiteFooter({ boot, session, variant }: {
             {boot ? (
               <p className={`site-footer-status${boot.live ? ' is-live' : ''}`}>
                 <span className="site-footer-dot" aria-hidden="true" />
-                {boot.live ? 'Ledger online' : 'Ledger waking up'}
+                {boot.live ? 'Ledger online' : 'Ledger starting'}
               </p>
             ) : null}
           </div>

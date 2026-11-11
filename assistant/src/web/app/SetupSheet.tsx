@@ -96,7 +96,7 @@ export function SetupSheet({
         spendLogsAffectWallet: affectsWallet,
       });
       await onSaved(step);
-      toast(mode === 'onboarding' ? 'Baseline saved. This is your starting line.' : 'Your snapshot is updated.', { tone: 'good' });
+      toast(mode === 'onboarding' ? 'Baseline saved.' : 'Your snapshot is updated.', { tone: 'good' });
       onClose();
     } catch (e) {
       setError((e as Error).message);
@@ -178,8 +178,8 @@ export function SetupSheet({
           <div className="setup-panel">
             <h3>What feels comfortable to spend in a week?</h3>
             <p className="muted">
-              This is your weekly spending pace — how much you&apos;re okay logging before the ring fills up.
-              It is not your net. Net is cash plus income minus logged spend minus card balance; each spend you log lowers net.
+              Your weekly spending pace, not your net. Net is cash plus income minus logged spend minus card
+              balance, so each spend you log lowers it.
             </p>
             <label className="setup-amount">
               <span>$</span>
@@ -207,12 +207,12 @@ export function SetupSheet({
                 </label>
                 <p className="hint setup-toggle-hint">
                   {affectsWallet
-                    ? 'Each spend you log lowers the net number on Today until you edit cash again.'
-                    : 'Spends stay as history only — your cash baseline stays where you set it.'}
+                    ? 'Each spend you log lowers the net figure on Overview until you edit cash again.'
+                    : 'Spends stay as history only, and your cash baseline stays where you set it.'}
                 </p>
               </div>
             ) : null}
-            <p className="hint">Pace chips scale from your cash balance ({balanceForPace === null ? 'set cash first' : money(balanceForPace)}). Change the plan whenever life changes.</p>
+            <p className="hint">Pace chips scale from your cash balance ({balanceForPace === null ? 'set cash first' : money(balanceForPace)}). You can change the plan at any time.</p>
           </div>
         ) : null}
 

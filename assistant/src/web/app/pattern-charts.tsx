@@ -51,30 +51,43 @@ export function MonthPaceChart({
   const projY = TOP + scaleY(m.projectedMinor, max, PLOT);
   const refY = TOP + scaleY(previous30Minor, max, PLOT);
 
+  const showsRef = previous30Minor > 0;
+
   return (
     <figure className="pchart">
+      {/* Axis text and the point marker live in HTML so they stay at --t-xs no
+          matter how wide the column gets; the SVG only draws the plot. */}
+      <div className="pchart-plot">
         <svg
           viewBox="0 0 320 140"
-          width="100%"
+          preserveAspectRatio="none"
           role="img"
           aria-label={`Spending so far in ${month.label}: ${money(last.cumulativeMinor)}. On pace for ${money(m.projectedMinor)} by day ${month.daysInMonth}.`}
         >
-          <line className="pchart-base" x1={0} y1={BASE} x2={WIDTH} y2={BASE} />
+          <line className="pchart-base" x1={0} y1={BASE} x2={WIDTH} y2={BASE} vectorEffect="non-scaling-stroke" />
           <g transform="translate(0 8)">
             <path className="pchart-area" d={areaPath(values, WIDTH, PLOT, max, count)} />
-            <path className="pchart-line" d={linePath(values, WIDTH, PLOT, max, count)} />
+            <path className="pchart-line" d={linePath(values, WIDTH, PLOT, max, count)} vectorEffect="non-scaling-stroke" />
           </g>
-          <line className="pchart-proj" x1={lastX} y1={lastY} x2={WIDTH} y2={projY} />
-          {previous30Minor > 0 ? (
-            <>
-              <line className="pchart-ref" x1={0} y1={refY} x2={WIDTH} y2={refY} />
-              <text className="pchart-label" x={318} y={refY - 4} textAnchor="end">Previous 30 days</text>
-            </>
+          <line className="pchart-proj" x1={lastX} y1={lastY} x2={WIDTH} y2={projY} vectorEffect="non-scaling-stroke" />
+          {showsRef ? (
+            <line className="pchart-ref" x1={0} y1={refY} x2={WIDTH} y2={refY} vectorEffect="non-scaling-stroke" />
           ) : null}
-          <circle className="pchart-dot" cx={lastX} cy={lastY} r={4} />
-          <text className="pchart-axis" x={0} y={137} textAnchor="start">1</text>
-          <text className="pchart-axis" x={WIDTH} y={137} textAnchor="end">{String(count)}</text>
         </svg>
+        {showsRef ? (
+          <span className="pchart-ref-label" style={{ top: `${(refY / 140) * 100}%` }}>
+            Previous 30 days
+          </span>
+        ) : null}
+        <span
+          className="pchart-dot"
+          style={{ left: `${(lastX / WIDTH) * 100}%`, top: `${(lastY / 140) * 100}%` }}
+        />
+      </div>
+      <div className="pchart-xaxis" aria-hidden="true">
+        <span>1</span>
+        <span>{String(count)}</span>
+      </div>
       <figcaption>
         <strong>On pace for {money(m.projectedMinor)}</strong>
         {` · ${money(m.paceMinorPerDay)} a day so far`}

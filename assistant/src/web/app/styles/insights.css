@@ -1,11 +1,15 @@
-/* Insights view and pattern charts on v2 tokens. Imported by InsightsTab and
-   pattern-charts. Marks are ink, axes are hairlines, accent marks one point. */
+/* Insights: a statement register. Sections sit on 1px --line rules, each with a
+   label column (all-caps kicker plus a display title) and the data on the right,
+   the way the landing page's numbered sections read. Three surfaces keep a
+   border: weekly pace, the spending calendar and card payoff. Everything else
+   is ruled rows. Imported by InsightsTab and pattern-charts. */
 
 .app .patterns {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--s6);
+  gap: 0;
   min-width: 0;
+  container-type: inline-size;
 }
 
 /* ---------- Page header ---------- */
@@ -16,6 +20,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--s4);
+  min-width: 0;
 }
 
 .app .insight-head > div {
@@ -24,19 +29,103 @@
   min-width: 0;
 }
 
-/* ---------- Layout ---------- */
+/* ---------- Register rows ---------- */
 
-.app .patterns-top {
+.app .ins-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-  gap: var(--s4);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s3);
+  min-width: 0;
+  padding: var(--s6) 0;
+  border-top: 1px solid var(--line);
 }
 
-.app .patterns-mid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: var(--s4);
+.app .patterns > .ins-row:last-child {
+  border-bottom: 1px solid var(--line);
 }
+
+.app .ins-label {
+  display: grid;
+  gap: var(--s1);
+  align-content: start;
+  min-width: 0;
+}
+
+.app .ins-kicker,
+.app .ins-flag,
+.app .ins-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.app .ins-title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--t-lg);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.app .ins-body {
+  display: grid;
+  gap: var(--s4);
+  min-width: 0;
+}
+
+.app .ins-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+
+/* The three bordered surfaces: pace, calendar, payoff. */
+.app .ins-panel {
+  min-width: 0;
+  padding: var(--s5);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--surface);
+}
+
+.app .ins-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2) var(--s4);
+  margin-bottom: var(--s4);
+}
+
+.app .ins-panel-head .hint {
+  max-width: 60ch;
+}
+
+.app .ins-panel-head .amount {
+  color: var(--ink);
+  font-size: var(--t-md);
+}
+
+@container (min-width: 768px) {
+  .app .ins-row {
+    grid-template-columns: minmax(160px, 3fr) minmax(0, 9fr);
+    column-gap: var(--s6);
+    row-gap: var(--s4);
+    padding: var(--s8) 0;
+  }
+
+  .app .ins-title {
+    font-size: var(--t-xl);
+  }
+}
+
+/* ---------- This week: pace ---------- */
 
 .app .focus-body {
   display: flex;
@@ -45,6 +134,8 @@
 }
 
 .app .focus-copy {
+  display: grid;
+  gap: var(--s1);
   min-width: 0;
 }
 
@@ -57,23 +148,31 @@
   line-height: 1.15;
 }
 
+@container (max-width: 639px) {
+  .app .focus-body {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s4);
+  }
+}
+
 /* ---------- This month ---------- */
 
 .app .month-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  background: var(--line);
+  grid-template-columns: minmax(0, 1fr);
+  border-block: 1px solid var(--line);
 }
 
 .app .month-grid > div {
   display: grid;
   gap: var(--s1);
-  padding: var(--s3);
-  background: var(--bg);
+  padding: var(--s3) 0;
+  border-top: 1px solid var(--line);
+}
+
+.app .month-grid > div:first-child {
+  border-top: 0;
 }
 
 .app .month-grid strong {
@@ -85,36 +184,102 @@
 
 .app .month-line {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--s2);
-  margin-top: var(--s4);
   color: var(--muted);
   font-size: var(--t-xs);
+}
+
+@container (min-width: 640px) {
+  .app .month-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .app .month-grid > div {
+    padding: 0 0 0 var(--s4);
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+
+  .app .month-grid > div:first-child {
+    padding-left: 0;
+    border-left: 0;
+  }
 }
 
 /* ---------- Charts ---------- */
 
 .app .pchart {
-  margin: var(--s3) 0 var(--s1);
+  margin: 0;
 }
 
+/* Charts render at one fixed visual scale: the plot is capped at 560x180 and
+   every label is HTML at --t-xs, so nothing inside a viewBox can scale the
+   type up when the column widens. */
 .app .pchart svg {
   display: block;
   overflow: visible;
 }
 
-.app .pchart svg:not(.pchart-svg-trend) {
-  max-height: 240px;
+.app .pchart-plot {
+  position: relative;
+  max-width: 560px;
+  height: 140px;
+}
+
+.app .pchart-plot svg {
+  width: 100%;
+  height: 100%;
+}
+
+.app .pchart-ref-label {
+  position: absolute;
+  right: 0;
+  padding: 0 2px;
+  transform: translateY(-100%);
+  /* The pace chart sits on the page, not on a panel. */
+  background: var(--bg);
+  color: var(--muted);
+  font-size: var(--t-xs);
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.app .pchart-dot {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.app .pchart-xaxis {
+  display: flex;
+  justify-content: space-between;
+  max-width: 560px;
+  margin-top: var(--s1);
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
 }
 
 .app .pchart-svg-trend {
   height: 160px;
+  max-height: 180px;
 }
 
-@media (min-width: 640px) {
+@container (min-width: 640px) {
+  .app .pchart-plot {
+    height: 160px;
+  }
+
   .app .pchart-svg-trend {
-    height: 200px;
+    height: 180px;
   }
 }
 
@@ -143,22 +308,9 @@
   stroke-dasharray: 2 4;
 }
 
-.app .pchart-dot {
-  fill: var(--accent);
-  stroke: var(--surface);
-  stroke-width: 2;
-}
-
 .app .pchart-base {
   stroke: var(--line);
   stroke-width: 1;
-}
-
-.app .pchart-axis,
-.app .pchart-label {
-  fill: var(--muted);
-  font-family: var(--font);
-  font-size: var(--t-xs);
 }
 
 .app .pchart-bar {
@@ -178,6 +330,7 @@
 }
 
 .app .pchart-scrub {
+  max-width: 560px;
   border-radius: var(--r2);
   cursor: pointer;
   touch-action: pan-y;
@@ -208,19 +361,10 @@
 
 /* ---------- Category movers ---------- */
 
-.app .movers-title {
-  margin: 0 0 var(--s2);
-  color: var(--muted);
-  font-size: var(--t-xs);
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .app .movers {
   display: grid;
   gap: var(--s2);
-  margin: 0 0 var(--s4);
+  margin: 0;
   padding: 0;
   list-style: none;
 }
@@ -297,8 +441,9 @@
 
 .app .cat-list {
   display: grid;
-  margin: var(--s4) 0 0;
+  margin: 0;
   padding: 0;
+  border-bottom: 1px solid var(--line);
   list-style: none;
 }
 
@@ -352,6 +497,16 @@
   color: var(--pos);
 }
 
+@container (max-width: 639px) {
+  .app .cat-list li {
+    grid-template-columns: 8px minmax(0, 1fr) 36px 76px;
+  }
+
+  .app .cat-change {
+    display: none;
+  }
+}
+
 /* ---------- Weekday bars ---------- */
 
 .app .weekday-bars {
@@ -360,7 +515,6 @@
   align-items: end;
   gap: var(--s2);
   height: 180px;
-  margin-top: var(--s2);
 }
 
 .app .weekday-bar {
@@ -373,7 +527,7 @@
 
 .app .weekday-value {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--t-xs);
   white-space: nowrap;
 }
 
@@ -409,7 +563,14 @@
   font-weight: 600;
 }
 
-/* ---------- Calendar heatmap ---------- */
+@container (max-width: 639px) {
+  .app .weekday-bars {
+    height: 150px;
+  }
+}
+
+/* ---------- Calendar heatmap ----------
+   Four ink steps, no accent: the accent marks selection, not a data scale. */
 
 .app .heat-legend {
   display: flex;
@@ -417,31 +578,31 @@
   gap: var(--s1);
   color: var(--muted);
   font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .app .heat-legend i {
   width: 12px;
   height: 12px;
   border-radius: var(--r1);
-  background: color-mix(in srgb, var(--accent) 15%, var(--surface));
+  background: color-mix(in srgb, var(--ink) 12%, var(--surface));
 }
 
 .app .heat-legend i:nth-of-type(2) {
-  background: color-mix(in srgb, var(--accent) 35%, var(--surface));
+  background: color-mix(in srgb, var(--ink) 28%, var(--surface));
 }
 
 .app .heat-legend i:nth-of-type(3) {
-  background: color-mix(in srgb, var(--accent) 60%, var(--surface));
+  background: color-mix(in srgb, var(--ink) 48%, var(--surface));
 }
 
 .app .heat-legend i:nth-of-type(4) {
-  background: color-mix(in srgb, var(--accent) 85%, var(--surface));
+  background: color-mix(in srgb, var(--ink) 72%, var(--surface));
 }
 
 .app .heat {
   display: flex;
   gap: var(--s2);
-  margin-top: var(--s1);
   padding-bottom: var(--s1);
   overflow-x: auto;
 }
@@ -458,7 +619,7 @@
   justify-content: center;
   width: 12px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--t-xs);
 }
 
 .app .heat-weeks {
@@ -494,19 +655,19 @@
 }
 
 .app .heat-1 {
-  background: color-mix(in srgb, var(--accent) 15%, var(--surface));
+  background: color-mix(in srgb, var(--ink) 12%, var(--surface));
 }
 
 .app .heat-2 {
-  background: color-mix(in srgb, var(--accent) 35%, var(--surface));
+  background: color-mix(in srgb, var(--ink) 28%, var(--surface));
 }
 
 .app .heat-3 {
-  background: color-mix(in srgb, var(--accent) 60%, var(--surface));
+  background: color-mix(in srgb, var(--ink) 48%, var(--surface));
 }
 
 .app .heat-4 {
-  background: color-mix(in srgb, var(--accent) 85%, var(--surface));
+  background: color-mix(in srgb, var(--ink) 72%, var(--surface));
 }
 
 .app .heat-cell.is-selected {
@@ -516,28 +677,32 @@
 
 .app .heat-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   gap: var(--s5);
 }
 
 .app .heat-side {
   display: grid;
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  background: var(--line);
+  gap: 0;
+  border-top: 1px solid var(--line);
 }
 
 .app .heat-side > div:not(.heat-detail) {
   display: grid;
-  gap: var(--s1);
-  padding: var(--s2) var(--s3);
-  background: var(--surface);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--s1) var(--s3);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.app .heat-side .stat-label {
+  grid-column: 1 / -1;
 }
 
 .app .heat-side strong {
+  grid-column: 1;
   color: var(--ink);
   font-size: var(--t-base);
   font-weight: 600;
@@ -545,8 +710,10 @@
 }
 
 .app .heat-side small {
+  grid-column: 2;
   color: var(--muted);
   font-size: var(--t-xs);
+  text-align: right;
 }
 
 .app .heat-detail {
@@ -554,6 +721,8 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--s2);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--line);
 }
 
 .app .heat-detail span {
@@ -562,7 +731,26 @@
 }
 
 .app .heat-hint {
-  padding: var(--s1) var(--s2);
+  padding: var(--s3) 0;
+}
+
+@container (min-width: 900px) {
+  .app .heat-body {
+    grid-template-columns: minmax(0, 1fr) 240px;
+    gap: var(--s6);
+  }
+}
+
+@container (max-width: 479px) {
+  .app .heat-cell {
+    width: 20px;
+    height: 20px;
+  }
+
+  .app .heat-weekdays,
+  .app .heat-week {
+    grid-template-rows: repeat(7, 20px);
+  }
 }
 
 /* ---------- Try this week ---------- */
@@ -572,6 +760,7 @@
   gap: 0;
   margin: 0;
   padding: 0;
+  border-bottom: 1px solid var(--line);
   list-style: none;
   counter-reset: try;
 }
@@ -619,51 +808,60 @@
   white-space: nowrap;
 }
 
-/* ---------- Three things worth knowing ---------- */
+@container (max-width: 479px) {
+  .app .try-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
 
-.app .story-grid {
+  .app .try-save {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
+
+/* ---------- What stands out ---------- */
+
+.app .story-list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--s4);
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--line);
+  list-style: none;
 }
 
 .app .story {
-  padding-top: var(--s3);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s1);
+  padding: var(--s3) 0;
   border-top: 1px solid var(--line);
 }
 
-.app .story h3 {
-  margin: var(--s2) 0 0;
+.app .story-copy h3 {
+  margin: 0;
   color: var(--ink);
   font-size: var(--t-base);
   font-weight: 600;
 }
 
-.app .story p {
+.app .story-copy p {
   margin: var(--s1) 0 0;
   color: var(--muted);
   font-size: var(--t-sm);
+  line-height: 1.5;
 }
 
-.app .story-mark {
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r1);
-  color: var(--muted);
-  font-size: var(--t-xs);
-}
+@container (min-width: 640px) {
+  .app .story {
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: var(--s4);
+    align-items: baseline;
+  }
 
-.app .story-good .story-mark {
-  border-color: var(--pos);
-  color: var(--pos);
-}
-
-.app .story-warn .story-mark {
-  border-color: var(--warn);
-  color: var(--warn);
+  .app .ins-flag {
+    padding-top: 1px;
+  }
 }
 
 /* ---------- Card payoff ---------- */
@@ -671,12 +869,16 @@
 .app .payoff-slider {
   display: grid;
   gap: var(--s2);
-  margin-top: var(--s4);
 }
 
 .app .payoff-slider span {
   color: var(--muted);
   font-size: var(--t-sm);
+}
+
+.app .payoff-slider span strong {
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .app .payoff-slider input[type="range"] {
@@ -687,6 +889,7 @@
 
 .app .payoff-result {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: var(--s2);
   margin-top: var(--s2);
@@ -697,98 +900,6 @@
   font-size: var(--t-lg);
   font-weight: 600;
   letter-spacing: -0.01em;
-}
-
-/* ---------- Empty states ---------- */
-
-.app .empty-patterns {
-  padding: var(--s10) var(--s6);
-  text-align: center;
-}
-
-.app .empty-patterns h2 {
-  margin: 0;
-  color: var(--ink);
-  font-size: var(--t-lg);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.app .empty-patterns p {
-  max-width: 46ch;
-  margin: var(--s2) auto 0;
-  color: var(--muted);
-  font-size: var(--t-sm);
-}
-
-/* ---------- Responsive ---------- */
-
-@media (max-width: 980px) {
-  .app .patterns-top,
-  .app .patterns-mid,
-  .app .story-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 720px) {
-  .app .focus-body {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--s4);
-  }
-
-  .app .month-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .app .weekday-bars {
-    height: 150px;
-  }
-
-  .app .cat-list li {
-    grid-template-columns: 8px minmax(0, 1fr) 36px 76px;
-  }
-
-  .app .cat-change {
-    display: none;
-  }
-
-  .app .heat-cell {
-    width: 18px;
-    height: 18px;
-  }
-
-  .app .heat-weekdays,
-  .app .heat-week {
-    grid-template-rows: repeat(7, 18px);
-    gap: var(--s1);
-  }
-
-  .app .heat-body {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .app .heat-side {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .app .heat-hint,
-  .app .heat-detail {
-    grid-column: 1 / -1;
-  }
-}
-
-@media (max-width: 480px) {
-  .app .try-item {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .app .try-save {
-    grid-column: 2;
-    justify-self: start;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -355,10 +355,8 @@ export function Welcome({
           <div className="lp-hero-copy">
             <h1 className="lp-h1" id="lp-title">Transaction intelligence you run yourself.</h1>
             <p className="lp-lede">
-              Settle is a spending ledger being rebuilt into transaction intelligence you can run
-              yourself: statement import, merchant matching, recurring-charge and anomaly detection,
-              and a cash-flow forecast. Today it logs spending to a double-entry ledger and shows
-              patterns from it; this page marks what works now and what is planned.
+              Settle logs spending to a double-entry ledger, shows patterns from it, and marks each
+              pipeline stage as working today or planned.
             </p>
             <div className="lp-actions">
               <button
@@ -564,9 +562,6 @@ export function Welcome({
             <span className="lp-tag is-planned">Planned · M8</span>
           </p>
           <div className="lp-actions">
-            <a className="lp-btn lp-btn-secondary" href={REPO} target="_blank" rel="noopener noreferrer">
-              View the source
-            </a>
             <button
               type="button"
               className="lp-btn lp-btn-primary"
@@ -575,6 +570,9 @@ export function Welcome({
             >
               {exploreLabel}
             </button>
+            <a className="lp-link" href={REPO} target="_blank" rel="noopener noreferrer">
+              View the source
+            </a>
           </div>
         </div>
       </section>

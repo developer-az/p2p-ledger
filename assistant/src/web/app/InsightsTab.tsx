@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import './styles/views.css';
 import './styles/insights.css';
 import { categoryMeta } from './categories.js';
@@ -10,6 +10,15 @@ import { Icon, ProgressRing, Skeleton } from './ui.js';
 import type { WalletData } from './data.js';
 
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+/** Register label for each observation, in place of the old glyph marks. */
+const STORY_FLAGS: Record<string, string> = {
+  top: 'Leads',
+  trend: 'Changed',
+  weekday: 'Peak',
+  streak: 'Logged',
+  projection: 'Outlook',
+};
 
 export function InsightsTab({
   data,
@@ -40,66 +49,85 @@ export function InsightsTab({
       <header className="insight-head">
         <div>
           <h1 className="v-title">Insights</h1>
-          <p className="v-sub">Built only from what you log. No bank feed, no guessing.</p>
+          <p className="v-sub">Built only from what you log, with no bank feed.</p>
         </div>
         <button type="button" className="btn btn-sm" onClick={onAsk}><Icon name="chat" size={16} /> Ask about this</button>
       </header>
 
       {state.kind === 'none' ? (
-        <section className="card empty-patterns">
-          <h2>Your first pattern is one log away.</h2>
-          <p className="muted">Log a coffee, a bus ride, a grocery run. After a few days, this page starts to look like you.</p>
-          <div className="row-wrap" style={{ justifyContent: 'center', marginTop: 16 }}>
-            <button type="button" className="btn btn-primary" onClick={onLog}>Log a spend</button>
-            <button type="button" className="btn" onClick={() => onSetup(0)}>Set your baseline</button>
+        <section className="ins-row" aria-labelledby="empty-title">
+          <div className="ins-label">
+            <p className="ins-kicker">Getting started</p>
+            <h2 className="ins-title" id="empty-title">No spending logged yet.</h2>
+          </div>
+          <div className="ins-body">
+            <p className="hint">Log a few everyday spends and this page starts showing patterns from your own logs.</p>
+            <div className="ins-actions">
+              <button type="button" className="btn btn-primary" onClick={onLog}>Log a spend</button>
+              <button type="button" className="btn" onClick={() => onSetup(0)}>Set your baseline</button>
+            </div>
           </div>
         </section>
       ) : state.kind === 'stale' ? (
-        <section className="card empty-patterns">
-          <h2>Nothing logged in the last 30 days.</h2>
-          <p className="muted">
-            Your last log was {new Date(state.lastLoggedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. Log a spend to bring this page up to date.
-          </p>
-          <div className="row-wrap" style={{ justifyContent: 'center', marginTop: 16 }}>
-            <button type="button" className="btn btn-primary" onClick={onLog}>Log a spend</button>
-            <button type="button" className="btn" onClick={() => onSetup(0)}>Set your baseline</button>
+        <section className="ins-row" aria-labelledby="stale-title">
+          <div className="ins-label">
+            <p className="ins-kicker">No recent logs</p>
+            <h2 className="ins-title" id="stale-title">Nothing logged in the last 30 days.</h2>
+          </div>
+          <div className="ins-body">
+            <p className="hint">
+              Your last log was {new Date(state.lastLoggedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. Log a spend to bring this page up to date.
+            </p>
+            <div className="ins-actions">
+              <button type="button" className="btn btn-primary" onClick={onLog}>Log a spend</button>
+              <button type="button" className="btn" onClick={() => onSetup(0)}>Set your baseline</button>
+            </div>
           </div>
         </section>
       ) : (
         <>
-          <div className="patterns-top">
-            <section className="card week-focus" aria-labelledby="focus-title">
-              <div className="card-head">
-                <div><p className="eyebrow">This week</p><h2 id="focus-title">Your pace</h2></div>
-                <button type="button" className="link-btn" onClick={() => onSetup(2)}>Edit plan</button>
-              </div>
-              <div className="focus-body">
-                <ProgressRing
-                  value={patterns ? patterns.week.budgetMinor ? Math.min(1, patterns.week.spentMinor / patterns.week.budgetMinor) : 0 : 0}
-                  size={132}
-                  stroke={11}
-                  tone={plan.overBudget ? 'bad' : 'accent'}
-                  label="Weekly plan progress"
-                >
-                  <strong>{patterns?.week.remainingMinor === null || patterns?.week.remainingMinor === undefined ? '—' : money(patterns.week.remainingMinor)}</strong>
-                  <span>left</span>
-                </ProgressRing>
-                <div className="focus-copy">
-                  <p className="focus-big num">{money(patterns?.week.spentMinor ?? 0)}</p>
-                  <p className="muted">{patterns?.week.budgetMinor ? `of ${money(patterns.week.budgetMinor)} this week` : 'No weekly plan yet'}</p>
-                  <p className="hint" style={{ marginTop: 8 }}>
-                    {patterns && patterns.week.lastWeekSpentMinor > 0
-                      ? `${money(Math.abs(patterns.week.spentMinor - patterns.week.lastWeekSpentMinor))} ${patterns.week.spentMinor >= patterns.week.lastWeekSpentMinor ? 'more' : 'less'} than this point last week.`
-                      : 'Your first week of data. The comparison appears next week.'}
-                  </p>
+          <section className="ins-row" aria-labelledby="focus-title">
+            <div className="ins-label">
+              <p className="ins-kicker">This week</p>
+              <h2 className="ins-title" id="focus-title">Weekly pace</h2>
+            </div>
+            <div className="ins-body">
+              <div className="ins-panel">
+                <div className="ins-panel-head">
+                  <p className="hint">Spent against the weekly plan.</p>
+                  <button type="button" className="link-btn" onClick={() => onSetup(2)}>Edit plan</button>
+                </div>
+                <div className="focus-body">
+                  <ProgressRing
+                    value={patterns ? patterns.week.budgetMinor ? Math.min(1, patterns.week.spentMinor / patterns.week.budgetMinor) : 0 : 0}
+                    size={132}
+                    stroke={11}
+                    tone={plan.overBudget ? 'bad' : 'accent'}
+                    label="Weekly plan progress"
+                  >
+                    <strong>{patterns?.week.remainingMinor === null || patterns?.week.remainingMinor === undefined ? '—' : money(patterns.week.remainingMinor)}</strong>
+                    <span>left</span>
+                  </ProgressRing>
+                  <div className="focus-copy">
+                    <p className="focus-big num">{money(patterns?.week.spentMinor ?? 0)}</p>
+                    <p className="muted">{patterns?.week.budgetMinor ? `of ${money(patterns.week.budgetMinor)} this week` : 'No weekly plan yet'}</p>
+                    <p className="hint">
+                      {patterns && patterns.week.lastWeekSpentMinor > 0
+                        ? `${money(Math.abs(patterns.week.spentMinor - patterns.week.lastWeekSpentMinor))} ${patterns.week.spentMinor >= patterns.week.lastWeekSpentMinor ? 'more' : 'less'} than this point last week.`
+                        : 'Your first week of data. The comparison appears next week.'}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </section>
+            </div>
+          </section>
 
-            <section className="card month-focus" aria-labelledby="month-title" data-tour="insights-charts">
-              <div className="card-head">
-                <div><p className="eyebrow">{patterns?.month.label}</p><h2 id="month-title">This month</h2></div>
-              </div>
+          <section className="ins-row" aria-labelledby="month-title" data-tour="insights-charts">
+            <div className="ins-label">
+              <p className="ins-kicker">{patterns?.month.label}</p>
+              <h2 className="ins-title" id="month-title">Month to date</h2>
+            </div>
+            <div className="ins-body">
               <div className="month-grid">
                 <div><span className="stat-label">Logged out</span><strong className="num">{money(patterns?.month.spentMinor ?? 0)}</strong></div>
                 <div><span className="stat-label">Logged in</span><strong className="num">{money(patterns?.month.incomeMinor ?? 0)}</strong></div>
@@ -112,63 +140,70 @@ export function InsightsTab({
                 <span className="muted">Day {patterns?.month.dayOfMonth} of {patterns?.month.daysInMonth}</span>
                 <span className="pill">{patterns?.totals.activeDays30d ?? 0} active days</span>
               </div>
-            </section>
-          </div>
-
-          <section className="card heat-card" aria-labelledby="heat-title">
-            <div className="card-head">
-              <div>
-                <p className="eyebrow">Eight weeks</p>
-                <h2 id="heat-title">A calendar of your spending</h2>
-              </div>
-              <div className="heat-legend" aria-hidden="true"><span>$0</span><i /><i /><i /><i /><span>{money(heatMax)}</span></div>
             </div>
-            <div className="heat-body">
-              <Heatmap days={patterns?.days ?? []} onSelect={setSelectedDay} selected={selectedDay} />
-              <div className="heat-side">
-                <div>
-                  <span className="stat-label">Biggest day</span>
-                  <strong>{patterns?.totals.biggestDay ? money(patterns.totals.biggestDay.spendMinor) : '—'}</strong>
-                  <small>{patterns?.totals.biggestDay ? new Date(`${patterns.totals.biggestDay.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No logs yet'}</small>
+          </section>
+
+          <section className="ins-row" aria-labelledby="heat-title">
+            <div className="ins-label">
+              <p className="ins-kicker">Eight weeks</p>
+              <h2 className="ins-title" id="heat-title">Spending calendar</h2>
+            </div>
+            <div className="ins-body">
+              <div className="ins-panel">
+                <div className="ins-panel-head">
+                  <p className="hint">Daily total, darkest is the highest.</p>
+                  <div className="heat-legend" aria-hidden="true"><span>$0</span><i /><i /><i /><i /><span>{money(heatMax)}</span></div>
                 </div>
-                <div>
-                  <span className="stat-label">Active days</span>
-                  <strong>{patterns?.totals.activeDays30d ?? 0}</strong>
-                  <small>in the last 30</small>
-                </div>
-                <div>
-                  <span className="stat-label">On an active day</span>
-                  <strong>{money(patterns?.totals.averageActiveDayMinor ?? 0)}</strong>
-                  <small>average spend</small>
-                </div>
-                {selected ? (
-                  <div className="heat-detail" role="status">
-                    <strong>{new Date(`${selected.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</strong>
-                    <span>{selected.count === 0 ? 'No logs' : `${money(selected.spendMinor)} across ${selected.count} ${selected.count === 1 ? 'log' : 'logs'}`}</span>
-                    <button type="button" className="link-btn" onClick={() => setSelectedDay(null)}>Clear</button>
+                <div className="heat-body">
+                  <Heatmap days={patterns?.days ?? []} onSelect={setSelectedDay} selected={selectedDay} />
+                  <div className="heat-side">
+                    <div>
+                      <span className="stat-label">Biggest day</span>
+                      <strong>{patterns?.totals.biggestDay ? money(patterns.totals.biggestDay.spendMinor) : '—'}</strong>
+                      <small>{patterns?.totals.biggestDay ? new Date(`${patterns.totals.biggestDay.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No logs yet'}</small>
+                    </div>
+                    <div>
+                      <span className="stat-label">Active days</span>
+                      <strong>{patterns?.totals.activeDays30d ?? 0}</strong>
+                      <small>in the last 30</small>
+                    </div>
+                    <div>
+                      <span className="stat-label">On an active day</span>
+                      <strong>{money(patterns?.totals.averageActiveDayMinor ?? 0)}</strong>
+                      <small>average spend</small>
+                    </div>
+                    {selected ? (
+                      <div className="heat-detail" role="status">
+                        <strong>{new Date(`${selected.date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</strong>
+                        <span>{selected.count === 0 ? 'No logs' : `${money(selected.spendMinor)} across ${selected.count} ${selected.count === 1 ? 'log' : 'logs'}`}</span>
+                        <button type="button" className="link-btn" onClick={() => setSelectedDay(null)}>Clear</button>
+                      </div>
+                    ) : (
+                      <p className="hint heat-hint">Tap a day to see the detail.</p>
+                    )}
                   </div>
-                ) : (
-                  <p className="hint heat-hint">Tap a day to see the detail. Empty days are not failures.</p>
-                )}
+                </div>
               </div>
             </div>
           </section>
 
-          {patterns ? (
-            <section className="card trend-card" aria-labelledby="trend-title">
-              <div className="card-head">
-                <div><p className="eyebrow">Last 30 days</p><h2 id="trend-title">Day by day</h2></div>
-              </div>
-              <DailyTrendChart days={patterns.days} />
-            </section>
-          ) : null}
+          <section className="ins-row" aria-labelledby="trend-title">
+            <div className="ins-label">
+              <p className="ins-kicker">Last 30 days</p>
+              <h2 className="ins-title" id="trend-title">Daily spending</h2>
+            </div>
+            <div className="ins-body">
+              {patterns ? <DailyTrendChart days={patterns.days} /> : null}
+            </div>
+          </section>
 
-          <div className="patterns-mid">
-            <section className="card cat-card" aria-labelledby="cat-title">
-              <div className="card-head">
-                <div><p className="eyebrow">Last 30 days</p><h2 id="cat-title">Where it went</h2></div>
-              </div>
-              <h3 className="movers-title">What changed</h3>
+          <section className="ins-row" aria-labelledby="cat-title">
+            <div className="ins-label">
+              <p className="ins-kicker">By category</p>
+              <h2 className="ins-title" id="cat-title">Where it went</h2>
+            </div>
+            <div className="ins-body">
+              <h3 className="ins-sub">What changed</h3>
               <CategoryMoversChart categories={patterns?.categories ?? []} />
               <ul className="cat-list">
                 {(patterns?.categories ?? []).slice(0, 6).map((c) => (
@@ -185,73 +220,91 @@ export function InsightsTab({
                   </li>
                 ))}
               </ul>
-            </section>
+            </div>
+          </section>
 
-            <section className="card weekday-card" aria-labelledby="weekday-title">
-              <div className="card-head">
-                <div><p className="eyebrow">Eight-week average</p><h2 id="weekday-title">Your week has a shape</h2></div>
-              </div>
+          <section className="ins-row" aria-labelledby="weekday-title">
+            <div className="ins-label">
+              <p className="ins-kicker">Eight-week average</p>
+              <h2 className="ins-title" id="weekday-title">Spending by weekday</h2>
+            </div>
+            <div className="ins-body">
               <WeekdayBars weekdays={patterns?.weekdays ?? []} peakWeekday={peak ? peak.weekday : null} />
               <p className="hint">
                 {peak
                   ? `${peak.label}s run ${peak.multiple}x your other days (${money(peak.averageMinor)} vs ${money(peak.othersAverageMinor)}).`
                   : 'Bars show average logged spend per day of the week.'}
               </p>
-            </section>
-          </div>
+            </div>
+          </section>
 
           {actions.length > 0 ? (
-            <section className="card try-card" aria-labelledby="try-title">
-              <div className="card-head">
-                <div><p className="eyebrow">Based on your last 30 days</p><h2 id="try-title">Try this week</h2></div>
+            <section className="ins-row" aria-labelledby="try-title">
+              <div className="ins-label">
+                <p className="ins-kicker">Next week</p>
+                <h2 className="ins-title" id="try-title">Try this week</h2>
               </div>
-              <ol className="try-list">
-                {actions.map((a) => (
-                  <li className="try-item" key={a.id}>
-                    <div className="try-copy"><h3>{a.title}</h3><p>{a.detail}</p></div>
-                    <span className="try-save num">Save ~{money(a.savingsMinor)}</span>
-                  </li>
-                ))}
-              </ol>
+              <div className="ins-body">
+                <ol className="try-list">
+                  {actions.map((a) => (
+                    <li className="try-item" key={a.id}>
+                      <div className="try-copy"><h3>{a.title}</h3><p>{a.detail}</p></div>
+                      <span className="try-save num">Save ~{money(a.savingsMinor)}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
             </section>
           ) : null}
 
-          <section className="card story-card" aria-labelledby="story-title">
-            <div className="card-head">
-              <div><p className="eyebrow">What stands out</p><h2 id="story-title">Three things worth knowing</h2></div>
+          <section className="ins-row" aria-labelledby="story-title">
+            <div className="ins-label">
+              <p className="ins-kicker">Summary</p>
+              <h2 className="ins-title" id="story-title">What stands out</h2>
             </div>
-            <div className="story-grid">
-              {stories.slice(0, 3).map((story) => (
-                <article key={story.key} className={`story story-${story.tone}`}>
-                  <span className="story-mark" aria-hidden="true">{story.tone === 'good' ? '✓' : story.tone === 'warn' ? '!' : '·'}</span>
-                  <h3>{story.title}</h3>
-                  <p>{story.body}</p>
-                </article>
-              ))}
+            <div className="ins-body">
+              <ul className="story-list">
+                {stories.slice(0, 3).map((story) => (
+                  <li key={story.key} className="story">
+                    <p className="ins-flag">{STORY_FLAGS[story.key] ?? 'Note'}</p>
+                    <div className="story-copy">
+                      <h3>{story.title}</h3>
+                      <p>{story.body}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
           </section>
 
           {plan.creditMinor > 0 ? (
-            <section className="card payoff-card" aria-labelledby="payoff-title">
-              <div className="card-head">
-                <div><p className="eyebrow">A way out</p><h2 id="payoff-title">Card payoff, made small</h2></div>
-                <span className="amount">{money(plan.creditMinor)}</span>
+            <section className="ins-row" aria-labelledby="payoff-title">
+              <div className="ins-label">
+                <p className="ins-kicker">Card balance</p>
+                <h2 className="ins-title" id="payoff-title">Payoff plan</h2>
               </div>
-              <p className="muted">Move the slider. No commitment — just a picture of what a weekly payment does. Interest is not modeled.</p>
-              <label className="payoff-slider">
-                <span>Pay <strong>{money(weeklyPayment)}</strong> / week</span>
-                <input
-                  type="range"
-                  min={1000}
-                  max={Math.max(20_000, Math.ceil(plan.creditMinor / 4 / 1000) * 1000)}
-                  step={500}
-                  value={weeklyPayment}
-                  onChange={(e) => setWeeklyPayment(Number(e.target.value))}
-                />
-              </label>
-              <div className="payoff-result">
-                <strong>{monthsToClear(plan.creditMinor, weeklyPayment)} weeks</strong>
-                <span className="muted">to a zero balance at this pace.</span>
+              <div className="ins-body">
+                <div className="ins-panel">
+                  <div className="ins-panel-head">
+                    <p className="hint">Move the slider to see what a weekly payment does. Interest is not modeled.</p>
+                    <span className="amount num">{money(plan.creditMinor)}</span>
+                  </div>
+                  <label className="payoff-slider">
+                    <span>Pay <strong>{money(weeklyPayment)}</strong> / week</span>
+                    <input
+                      type="range"
+                      min={1000}
+                      max={Math.max(20_000, Math.ceil(plan.creditMinor / 4 / 1000) * 1000)}
+                      step={500}
+                      value={weeklyPayment}
+                      onChange={(e) => setWeeklyPayment(Number(e.target.value))}
+                    />
+                  </label>
+                  <div className="payoff-result">
+                    <strong>{monthsToClear(plan.creditMinor, weeklyPayment)} weeks</strong>
+                    <span className="muted">to a zero balance at this pace.</span>
+                  </div>
+                </div>
               </div>
             </section>
           ) : null}

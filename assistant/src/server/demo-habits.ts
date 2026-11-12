@@ -146,7 +146,10 @@ export async function seedDemoHabits(
     weeklyBudgetMinor: profile.weeklyBudgetMinor,
     spendLogsAffectWallet: true,
   }, now);
-  await finance.recordIncome(accountId, {
+  // Income lives in the shared database while spend logs can be per-instance
+  // memory, so check income separately: a cold instance must not add it again.
+  const incomeSoFar = await finance.listIncome(accountId, { limit: 1 });
+  if (incomeSoFar.length === 0) await finance.recordIncome(accountId, {
     amountMinor: profile.incomeMinor,
     source: profile.incomeSource,
     note: 'Demo income · this month',

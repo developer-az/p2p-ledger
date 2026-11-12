@@ -267,6 +267,7 @@ html.js-reveal .app .lp-section[data-in="true"] {
   white-space: nowrap;
 }
 .app .lp-tag.is-planned { color: var(--muted); }
+.app .lp-tag.is-live { color: var(--accent); }
 
 /* ---------- 03 Sample data ---------- */
 

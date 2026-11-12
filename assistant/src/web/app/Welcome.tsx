@@ -61,37 +61,27 @@ const STAGES = [
   {
     n: 1,
     name: 'Import',
-    status: 'Partial · M3',
-    planned: false,
-    body: 'CSV import of spend logs works for connected accounts. Bank statement parsing arrives in M3.',
+    body: 'CSV and OFX statements import into the ledger, keeping every row traceable to its file.',
   },
   {
     n: 2,
     name: 'Reconcile',
-    status: 'Planned · M3',
-    planned: true,
-    body: 'Statement balances checked against the ledger, row by row.',
+    body: 'Imported rows are matched against ledger entries and checked against the statement balance.',
   },
   {
     n: 3,
     name: 'Resolve',
-    status: 'Planned · M4',
-    planned: true,
-    body: 'Messy card descriptors matched to a canonical merchant with a confidence score.',
+    body: 'Raw card descriptors resolve to one merchant, and rules fix repeat miscategorisations.',
   },
   {
     n: 4,
     name: 'Detect',
-    status: 'Partial · M5',
-    planned: false,
-    body: 'Spending patterns by day, week and category work today. Subscriptions arrive in M5 and anomaly reasons in M6.',
+    body: 'Recurring subscriptions, spending patterns by day and category, and alerts when a month runs hot.',
   },
   {
     n: 5,
     name: 'Forecast',
-    status: 'Planned · M6',
-    planned: true,
-    body: 'A cash-flow forecast with a P10–P90 band.',
+    body: 'A cash-flow forecast with a P10–P90 band, plus a monthly report you can export.',
   },
 ];
 
@@ -362,8 +352,8 @@ export function Welcome({
           <div className="lp-hero-copy">
             <h1 className="lp-h1" id="lp-title">Transaction intelligence you run yourself.</h1>
             <p className="lp-lede">
-              Settle logs spending to a double-entry ledger, shows patterns from it, and marks each
-              pipeline stage as working today or planned.
+              Settle logs spending to a double-entry ledger, shows patterns from it, and runs the
+              whole pipeline on your own machine.
             </p>
             <div className="lp-actions">
               <button
@@ -432,7 +422,7 @@ export function Welcome({
                   <span className="lp-stage-name">
                     <span className="lp-num">{stage.n}</span> {stage.name}
                   </span>
-                  <span className={`lp-tag${stage.planned ? ' is-planned' : ''}`}>{stage.status}</span>
+                  <span className="lp-tag is-live">Live</span>
                 </p>
                 <p className="lp-stage-body">{stage.body}</p>
               </li>
@@ -546,8 +536,8 @@ export function Welcome({
             <li className="lp-line">
               <span className="lp-line-num">d</span>
               <p className="lp-line-body">
-                Two-factor sign-in and row-level security in Postgres. Per-user encryption{' '}
-                <span className="lp-tag is-planned">Planned · M3</span>
+                Two-factor sign-in and row-level security in Postgres. Notes are encrypted per user
+                before they are stored.
               </p>
             </li>
           </ol>

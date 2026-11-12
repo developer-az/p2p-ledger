@@ -24,12 +24,13 @@ describe('landing page', () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
   });
 
-  it('shows the five pipeline stages and labels unbuilt ones as planned', () => {
+  it('shows the five pipeline stages as live', () => {
     const html = render();
     for (const stage of ['Import', 'Reconcile', 'Resolve', 'Detect', 'Forecast']) expect(html).toContain(stage);
-    expect(html).toContain('Planned · M3');
-    expect(html).toContain('Planned · M4');
-    expect(html).toContain('Planned · M6');
+    expect(html.match(/>Live</g)).toHaveLength(5);
+    expect(html).not.toMatch(/Partial · M[0-9]/);
+    /* Self-hosting is the one piece still ahead of us. */
+    expect(html).toContain('Planned · M8');
   });
 
   it('labels the figure strip as sample data', () => {

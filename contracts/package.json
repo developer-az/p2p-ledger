@@ -19,7 +19,7 @@
     "ethers": "6.17.0"
   },
   "devDependencies": {
-    "hardhat": "3.21.2",
+    "hardhat": "3.22.0",
     "solc": "0.8.38"
   }
 }

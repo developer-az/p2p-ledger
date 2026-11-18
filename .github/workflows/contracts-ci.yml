@@ -47,7 +47,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts
         working-directory: contracts
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - run: pip install slither-analyzer==0.11.3

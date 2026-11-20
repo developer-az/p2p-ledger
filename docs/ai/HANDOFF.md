@@ -69,7 +69,9 @@ new files (`git add -N`) so the diff includes them.
 
 - [ ] Owner visual approval of `/`, `/signin`, cold boot and the practice app. No screenshot
       loop was run; the owner is the visual reviewer.
-- [ ] No commit/PR/merge/deploy has been made; ask before any of those actions.
+- [x] PR #68 opened for preview: https://github.com/developer-az/p2p-ledger/pull/68
+      (branch `feat/calm-glass-motion`, commit `7ad086b`). Commit and push were done only to
+      create that PR. No merge or deploy has been made; ask before either.
 - [ ] Worktrees `p2p-ledger-wt-a` and `p2p-ledger-wt-b` still exist with their branches;
       dev server is running on port 5173. Remove or keep only on instruction.
 

@@ -408,4 +408,5 @@ Expected: exit 0; all listed test files pass; build OK.
   Brief F replaced `flushSync` in `main.tsx` with an observer-based handoff that removes the
   veil on the first committed child of `#root`, inside one animation frame.
   Delta re-review of briefs E/F, the HANDOFF update and the final tree: PASS, no findings.
-  Owner visual approval remains the only product gate; no commit or PR was made.
+  Owner visual approval remains the only product gate. At the owner's request, commit
+  `7ad086b` was pushed and PR #68 was opened for preview; no merge or deploy was made.

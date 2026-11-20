@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { m, useReducedMotion } from 'motion/react';
 import { api, type AccountRef, type BootstrapResponse, type PatternDay } from '../api.js';
 import { PRACTICE_ANTHONY_ID } from '../practice-fixture.js';
 import { BrandMark } from './BrandMark.js';
 import { categoryLabel } from './categories.js';
 import { money } from './format.js';
 import { landingFigures, type LandingFigures } from './landing-figures.js';
+import { enter, staggerDelay } from './motion-presets.js';
 import { navigate, routeHref } from './router.js';
 import type { Session } from './session.js';
 import './styles/landing.css';
@@ -106,6 +108,7 @@ export function Welcome({
   bootError: string | null;
   onStart: (session: Session) => void;
 }) {
+  const reduce = useReducedMotion();
   const pageRef = useRef<HTMLDivElement | null>(null);
   const dialRef = useRef<HTMLDivElement | null>(null);
   const figsRef = useRef<HTMLDivElement | null>(null);
@@ -349,7 +352,7 @@ export function Welcome({
           <div className="lp-hero-dial is-paused" ref={dialRef} aria-hidden="true">
             <BrandMark size={280} variant="hero" />
           </div>
-          <div className="lp-hero-copy">
+          <m.div className="lp-hero-copy" {...enter(reduce)}>
             <h1 className="lp-h1" id="lp-title">Transaction intelligence you run yourself.</h1>
             <p className="lp-lede">
               Settle logs spending to a double-entry ledger, shows patterns from it, and runs the
@@ -369,7 +372,7 @@ export function Welcome({
             </div>
             {demoError ? <p className="lp-error" role="alert">{demoError}</p> : null}
             {bootError ? <p className="lp-error" role="alert">{bootError}</p> : null}
-          </div>
+          </m.div>
         </div>
       </section>
 
@@ -443,8 +446,8 @@ export function Welcome({
         <div className="lp-content">
           <p className="lp-kicker">Sample data · a synthetic household, regenerated on every visit</p>
           <div className="lp-figs" ref={figsRef} aria-busy={figures ? undefined : 'true'}>
-            {cells.map((cell) => (
-              <div className="lp-fig glass" key={cell.label}>
+            {cells.map((cell, index) => (
+              <m.div className="lp-fig glass" key={cell.label} {...enter(reduce, staggerDelay(index, reduce))}>
                 <p className="lp-fig-label">{cell.label}</p>
                 <p
                   className="lp-fig-value num"
@@ -454,9 +457,9 @@ export function Welcome({
                 >
                   {cell.value}
                 </p>
-              </div>
+              </m.div>
             ))}
-            <div className="lp-fig glass">
+            <m.div className="lp-fig glass" {...enter(reduce, staggerDelay(5, reduce))}>
               <p className="lp-fig-label">Largest category</p>
               <p className="lp-fig-value lp-fig-category">
                 <span className="lp-fig-name">
@@ -466,8 +469,8 @@ export function Welcome({
                   <span className="lp-fig-share num">{figures.topCategorySharePct}%</span>
                 ) : null}
               </p>
-            </div>
-            <div className="lp-fig lp-fig-wide glass">
+            </m.div>
+            <m.div className="lp-fig lp-fig-wide glass" {...enter(reduce, staggerDelay(6, reduce))}>
               <p className="lp-fig-label">Daily spend</p>
               <svg
                 className="lp-chart"
@@ -509,7 +512,7 @@ export function Welcome({
                   ? `Thirty days of sample spending total ${money(totalSpend)}.`
                   : 'Daily spending for the sample household loads with the figure strip.'}
               </p>
-            </div>
+            </m.div>
           </div>
         </div>
       </section>

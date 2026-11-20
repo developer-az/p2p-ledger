@@ -83,7 +83,7 @@
   background: var(--surface);
   color: var(--ink);
   font-size: var(--t-base);
-  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1)), background-color var(--dur) var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1));
 }
 
 .signin-field input:hover {
@@ -118,7 +118,7 @@
   font-size: var(--t-sm);
   font-weight: 500;
   text-decoration: none;
-  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1)), background-color var(--dur) var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1));
 }
 
 .signin-reveal:hover {
@@ -140,7 +140,7 @@
   color: var(--accent-ink);
   font-size: var(--t-base);
   font-weight: 600;
-  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1)), background-color var(--dur) var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1));
 }
 
 .signin-submit:hover:not(:disabled) {
@@ -165,7 +165,7 @@
   color: var(--ink);
   font-size: var(--t-base);
   font-weight: 500;
-  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1)), background-color var(--dur) var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1));
 }
 
 .signin-ghost:hover {
@@ -182,7 +182,7 @@
   font-size: var(--t-sm);
   text-decoration: underline 1px;
   text-underline-offset: 2px;
-  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1)), background-color var(--dur) var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1));
 }
 
 .signin-text:hover {
@@ -220,7 +220,8 @@
 .signin-aside {
   padding: var(--s6);
   border-left: 1px solid var(--line);
-  background: var(--surface-2);
+  border-radius: var(--r4, 16px);
+  background: var(--glass-bg);
 }
 
 .signin .signin-aside-mark {

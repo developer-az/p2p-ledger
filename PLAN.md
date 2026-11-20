@@ -209,3 +209,203 @@ DONE WHEN: docs reviewed by the user (this milestone is a decision gate).
 
 ## Run log
 (see docs/ai/HANDOFF.md)
+
+---
+
+# Calm glass + motion pass (2026-11-19)
+
+Base: `main` at `0ae5a23febc5fa7947ca4d626872bcdabf4b91f0`, fetched and clean at plan time.
+Implementation model: `@coder-hy4` (free Hy4 Flash) for every brief, per owner instruction.
+No new packages: `motion@^14.10.1` (Motion, formerly Framer Motion) is already a dependency and
+`LazyMotion features={loadMotion} strict` is already mounted in `ConsumerApp.tsx:159`; every
+animation component must use `m.*` from `motion/react`, never `motion.*`.
+
+## Goal
+
+The owner asked for a relaxing loading screen that waits for the Render ledger to load, an
+Apple-like clean/glassy look across the website, and a redesign of motion using Motion.
+Concretely:
+
+1. A pre-paint boot veil so there is no blank white/dark gap before React mounts; it is removed
+   only after React has committed the preloader.
+2. A calm loader: guilloché dial, slow breathing halo, an **ambient** ring (not a percentage —
+   the boot state can still be partial at handoff), quiet step text, glass card. The
+   Render-ledger wake stays visible as a named step. The splash still ends on bootstrap +
+   720 ms (frozen), so a signed-in wait hands off to the in-app `.boot-card`; that card gets
+   the same glass material so the calm wait is continuous. No timing or readiness logic changes.
+3. Landing and sign-in get the same material language and one coherent Motion entrance
+   language (soft ease, small travel, short stagger).
+4. App chrome (sidebar/top bar/palette/sheets/toasts) gets restrained glass and press/focus
+   polish. Keyboard-first paths stay instant.
+
+## Design decisions (decided, not open questions)
+
+- **Idea:** a watch instrument waking up. The existing guilloché dial is the one object; it
+  breathes slowly on the loader and returns on the landing hero. No mascot, blobs, gradients
+  behind text, or animation for its own sake.
+- **Glass:** extend the existing `smoked watch crystal` system in `tokens.css` / `base.css`.
+  Do not replace it. User explicitly asked for glass, so the anti-glass house rule from the
+  design-taste skill is overridden here; contrast rules still hold (4.5:1 minimum).
+- **Motion budget (Emil Kowalski rules applied):** one-time entrances 280–420 ms with
+  `cubic-bezier(0.32, 0.72, 0, 1)`; state feedback 120–160 ms; stagger 60 ms capped at 5 items;
+  enter from `scale(0.97)`/`y: 12`, never `scale(0)`; transform + opacity only; no animation on
+  keyboard-initiated actions (palette, shortcuts, route switches keep their current instant
+  behaviour); reduced motion means a 120 ms opacity fade only — no travel, no scale, no stagger.
+- **No false progress:** the loader ring is ambient/indeterminate. Factual status (including
+  the Render-ledger wake and its retries) stays in the existing `LoadingSteps` live region.
+  The ring never claims a percentage, because the splash can hand off while steps are pending.
+- **Readiness semantics are frozen:** `boot-steps.ts` reducer, `boot-progress.ts` store,
+  `ConsumerApp.tsx` 720 ms minimum splash, 440 ms loader exit, wake retry, stall/fallback copy,
+  routes, data and forms are untouched.
+- **Responsive/a11y:** loader card fits 320 px; `role="status"` / `aria-live` list stays; the
+  pre-paint veil is `aria-hidden` and removed on the next animation frame **after** the
+  preloader commits via `flushSync`; the existing skip link, focus rings and reduced-motion
+  CSS keep working.
+- **Concept ledger:** every coder report must list new abstractions with a justification. The
+  only new abstractions permitted are `boot.css` (loader material, one purpose), a shared
+  `motion-presets.ts` (one motion language across 3 surfaces) and the static boot veil in
+  `index.html` (pre-JS paint). Duplicating an existing pattern is a finding, not a feature.
+
+## Baseline (measured on clean main, 2026-11-19)
+
+- `npm --prefix assistant run typecheck` → exit 0.
+- `npm --prefix assistant exec -- vitest run test/boot-steps.test.ts test/boot-progress.test.ts test/brand-dial.test.ts` → 3 files, 18 tests passed, exit 0.
+- `npm --prefix assistant test` → 110 files passed / 1 skipped; 1040 tests passed / 14 skipped, exit 0.
+- No Docker / `SETTLE_TEST_DATABASE_URL` in this environment; the suite is green without it.
+
+## Steps
+
+### Step 1 — Boot veil + calm loader (Lane A, @coder-hy4)
+
+Brief: `C:/Users/Az040/AppData/Local/Temp/opencode/brief-a-loader.md`.
+
+Files allowed: `assistant/index.html`, `assistant/src/web/main.tsx`,
+`assistant/src/web/app/Preloader.tsx`, `assistant/src/web/app/styles/tokens.css`,
+`assistant/src/web/app/styles/boot.css` (new). Nothing else.
+
+Symbols/targets: static `#boot-veil` markup + inline `<style>` in `index.html`; removal of
+`#boot-veil` only after a `flushSync`-committed `createRoot(...).render(...)` plus one
+`requestAnimationFrame`; `AppPreloader` in `Preloader.tsx` gains a glass card, breathing aura
+and an ambient SVG ring (indeterminate — do not derive a percentage from partial boot state);
+the same `boot.css` material is applied to the in-app `.boot-card` for a continuous wait;
+`tokens.css` gains
+`--r4: 16px`, `--ease-soft: cubic-bezier(0.32, 0.72, 0, 1)`,
+`--ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1)`, `--dur-enter: 280ms`; all new loader CSS
+lives in `boot.css`, imported from `Preloader.tsx`. `LoadingSteps` props, markup contract and
+`components.css` loader rules stay as they are; new CSS uses more specific selectors.
+
+DONE WHEN:
+```
+npm --prefix assistant run typecheck
+npm --prefix assistant exec -- vitest run test/boot-steps.test.ts test/boot-progress.test.ts test/brand-dial.test.ts
+npm --prefix assistant run build
+```
+Expected: exit 0; 18/18; build OK. Then `git diff --name-only` plus untracked files match the
+allowlist.
+
+### Step 2 — Landing + sign-in surface/motion (Lane B, @coder-hy4)
+
+Brief: `C:/Users/Az040/AppData/Local/Temp/opencode/brief-b-surfaces.md`.
+
+Files allowed: `assistant/src/web/app/Welcome.tsx`, `assistant/src/web/app/SignIn.tsx`,
+`assistant/src/web/app/motion-presets.ts` (new), `assistant/src/web/app/styles/landing.css`,
+`assistant/src/web/app/styles/signin.css`. Nothing else.
+
+Targets: shared `enter`/`stagger` helpers in `motion-presets.ts` used by both screens; Motion
+entrances on landing hero copy, figure strip and sign-in panel; existing `countUp`, dial
+parallax, IntersectionObserver reveal, API calls and copy stay; CSS easing/radius/glass
+refinements use `--r4`, `--ease-soft`, `--dur-enter` from Step 1 **with inline fallback
+values** so the isolated Lane B build is valid before Step 1 integrates.
+
+DONE WHEN:
+```
+npm --prefix assistant run typecheck
+npm --prefix assistant exec -- vitest run test/landing-page.test.ts test/signin-availability.test.ts test/router.test.ts test/mobile-nav.test.ts
+npm --prefix assistant run build
+```
+Expected: exit 0; all listed test files pass; build OK. Scope gate as above.
+
+### Step 3 — App chrome polish (Lane C, @coder-hy4)
+
+Brief written after Lane A+B integrate: `C:/Users/Az040/AppData/Local/Temp/opencode/brief-c-chrome.md`.
+
+Files allowed: `assistant/src/web/app/styles/shell.css`,
+`assistant/src/web/app/styles/palette.css`,
+`assistant/src/web/app/styles/components.css` (only lines 260-418: sheet + toast blocks).
+Nothing else. CSS only; no component/TSX edits, no new abstractions.
+
+Targets: Apple-style press feedback (`scale(0.97)` on `:active` for pressable chrome),
+softer glass on top bar / palette / sheets / toast, focus rings, easing tokens in view
+transition; no changes to keyboard handling or route semantics.
+
+DONE WHEN:
+```
+npm --prefix assistant run typecheck
+npm --prefix assistant exec -- vitest run test/mobile-nav.test.ts test/shortcuts.test.ts test/palette.test.ts test/sheet-dismiss.test.ts
+npm --prefix assistant run build
+```
+Expected: exit 0; all listed test files pass; build OK.
+
+### Step 4 — Integration, full gate, review, handoff (orchestrator)
+
+- Integrate Lane A and B sequentially into `main` working tree, run targeted tests, then Lane C.
+- Final: `npm --prefix assistant test`, `npm --prefix assistant run typecheck`,
+  `npm --prefix assistant run build`, `npm --prefix assistant run check:bundle`.
+- One browser smoke via `playwright-cli` (not a loop): cold load shows no uncovered frame;
+  `/`, `/signin` and a signed-in practice session at 1280 and 320 px in light/dark, including
+  `prefers-reduced-motion: reduce`, plus a short-viewport (640×360) check that the loader
+  scrolls instead of clipping. Console has 0 errors (this is the runtime check that
+  `LazyMotion strict` works). Owner remains the final visual reviewer.
+- Sol review of original request + PLAN.md + full diff (once, after all steps). Findings go back
+  to a @coder-hy4 fix brief; max 3 rounds.
+- Update `docs/ai/HANDOFF.md` (orchestrator only; coders are not allowed to edit it).
+- Owner is the visual reviewer: hand over `npm run dev` and ask them to look at `/`, `/signin`,
+  and a cold boot. No browser screenshot loop unless the owner asks.
+
+## DO-NOT-FLAG (deliberate choices)
+
+- 720 ms minimum splash and 440 ms loader exit: existing readiness contract, frozen
+  (NOT an excuse for a visual gap — the handoff card must carry the same material).
+- Glass and soft gradients in the loader material: explicitly requested by the owner.
+- View transitions and command palette stay unanimated: keyboard-first, high-frequency paths.
+- `boot-steps` markup stays visible: it carries stall/retry information and a live region.
+
+## Plan review log
+
+- Round 0 (@reviewer, adversarial): FAIL — 2 high, 3 medium, 1 low.
+  1. High: plan promised the splash waits for Render; it does not (bootstrap + 720 ms).
+     Fix: document the handoff and style the signed-in `.boot-card` with the same material.
+  2. High: removing the veil before React commits can expose a blank frame.
+     Fix: `flushSync` the render, remove on the next `requestAnimationFrame`.
+  3. Medium: typecheck/static tests/build cannot prove visual, reduced-motion, narrow-width
+     or runtime `LazyMotion strict` behavior. Fix: one frozen browser smoke in Step 4; owner
+     visual approval stays separate.
+  4. Medium: Lane B consumed Step 1 tokens before they exist. Fix: inline CSS fallbacks.
+  5. Medium: an arc derived from five boot steps can vanish incomplete. Fix: ambient ring,
+     factual progress stays in the step list.
+  6. Low: reduced-motion criteria disagreed. Fix: 120 ms opacity fade only, no travel.
+  All six changes were applied to PLAN.md and briefs A/B before any code was dispatched.
+- Round 1 (@reviewer, delta): FAIL — 1 high, 2 medium, all text-level:
+  1. High: responsive/a11y bullet still said "remove veil before createRoot". Fixed to
+     "after the preloader commits, on the next animation frame".
+  2. Medium: change instructions in briefs B and C still lacked token fallbacks. Fixed.
+  3. Medium: CSS `:active` also fires on keyboard activation. Fixed by permitting one short
+     press-feedback scale for every input while keeping navigation/keyboard paths unanimated.
+  All three were applied before Lane C was dispatched. Round 2 not needed: no further plan
+  changes; the remaining notes are implementation checks, not plan defects.
+- Sol full review of final diff (first): FAIL — 2 code findings + 1 workflow-evidence item.
+  1. Medium: fixed preloader had no vertical scroll; a short viewport could clip step rows.
+     Fix dispatched as brief E: `overflow-y: auto` + `align-items: safe center` in `boot.css`,
+     plus a 640×360 browser check.
+  2. Low: static veil is `aria-hidden`; with JavaScript disabled nothing explains the wait.
+     Fix dispatched as brief E: a styled `<noscript>` message in `index.html`.
+  3. Workflow: per-lane frozen-command outputs, scope checks and concept ledgers must be
+     quoted in the final report (not inferred from the final suite). They are recorded in
+     `docs/ai/HANDOFF.md` and the final reply.
+  Browser smoke after brief E confirmed the short-viewport fix (`overflow-y: auto`,
+  `align-items: safe center`, card top 20 px, scrollTop 152) and the `<noscript>` message,
+  but exposed two React dev errors: `flushSync was called from inside a lifecycle method`.
+  Brief F replaced `flushSync` in `main.tsx` with an observer-based handoff that removes the
+  veil on the first committed child of `#root`, inside one animation frame.
+  Delta re-review of briefs E/F, the HANDOFF update and the final tree: PASS, no findings.
+  Owner visual approval remains the only product gate; no commit or PR was made.

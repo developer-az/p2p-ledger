@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { m, useReducedMotion } from 'motion/react';
 import { api, isApiError, isMfaChallenge, type BootstrapResponse } from '../api.js';
 import { BrandMark } from './BrandMark.js';
 import { GoogleButton } from './GoogleButton.js';
+import { enter, staggerDelay } from './motion-presets.js';
 import {
   credentialToJson,
   isPasskeyCancelled,
@@ -60,6 +62,7 @@ export function SignIn({
   const [challenge, setChallenge] = useState<string | null>(initialChallenge);
   const [mfaCode, setMfaCode] = useState('');
   const [passkeyAvailable, setPasskeyAvailable] = useState(false);
+  const reduce = useReducedMotion();
   const toast = useToast();
   const codeRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
@@ -220,7 +223,7 @@ export function SignIn({
       </div>
 
       <div className="signin-grid">
-        <div className="signin-main">
+        <m.div className="signin-main" {...enter(reduce)}>
           <h1>{mode === 'create' ? 'Create your account' : 'Sign in to Settle'}</h1>
           <p className="signin-lede">
             {mode === 'create'
@@ -402,9 +405,9 @@ export function SignIn({
               <>No account? <a href="/signup" onClick={handleLink('signup')}>Create one</a></>
             )}
           </p>
-        </div>
+        </m.div>
 
-        <aside className="signin-aside glass" aria-labelledby="signin-aside-title">
+        <m.aside className="signin-aside glass" aria-labelledby="signin-aside-title" {...enter(reduce, staggerDelay(1, reduce))}>
           <BrandMark size={40} className="signin-aside-mark" />
           <p className="signin-aside-label" id="signin-aside-title">How your data is handled</p>
           <ul className="signin-aside-list">
@@ -415,7 +418,7 @@ export function SignIn({
             <li>Delete your account and data.</li>
             <li>Sign in with a passkey.</li>
           </ul>
-        </aside>
+        </m.aside>
       </div>
     </div>
   );

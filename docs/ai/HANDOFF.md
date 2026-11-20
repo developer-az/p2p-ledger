@@ -1,5 +1,80 @@
 # Engineering Handoff (latest)
 
+## Session: calm glass loader + Motion pass (2026-11-19/20), working tree on `main`
+
+Owner asked for a relaxing loading screen that stays while the Render ledger wakes, an
+Apple-like clean/glassy website, and Motion-based motion redesign. Implementation ran on
+`@coder-hy4` (free Hy4 Flash) in two worktrees, then integrated sequentially into `main`.
+Base: `0ae5a23`. No packages added (`motion@14.10.1` was already installed); no commits,
+PRs, deploys or merges. Nothing is staged for commit except intent-to-add markers on the two
+new files (`git add -N`) so the diff includes them.
+
+### What shipped
+
+- `assistant/index.html`: static `#boot-veil` (dial, name, sweeping line) painted before JS,
+  scoped inline CSS for light/dark and reduced motion, and a `<noscript>` message added after
+  Sol review. CSP allows inline style, not inline script; no script was added.
+- `assistant/src/web/main.tsx`: `<StrictMode>` kept. `flushSync` was tried first but React dev
+  logged "flushSync was called from inside a lifecycle method"; it is now a `MutationObserver`
+  on `#root` that removes the veil on the first committed child, inside one animation frame.
+- `assistant/src/web/app/Preloader.tsx` + new `styles/boot.css`: glass loader card, breathing
+  aura, ambient ring (no fake percentage), running-step subline with the ledger wake hint,
+  and the same glass material on the signed-in `.boot-card` so the 720 ms splash → wallet
+  handoff reads as one wait. `LoadingSteps` and its live region are untouched.
+- New `assistant/src/web/app/motion-presets.ts`; `Welcome.tsx` and `SignIn.tsx` use
+  `m.*`/`useReducedMotion` with shared 360 ms soft entrances, 60 ms capped stagger, and a
+  120 ms opacity-only reduced-motion path. All asserted copy, links and `class="signin-form"`
+  are unchanged. Landing dial turn and scroll listener were not touched.
+- `styles/tokens.css` gained `--r4`, `--ease-soft`, `--ease-out-strong`, `--dur-enter`.
+  `styles/landing.css`, `signin.css`, `shell.css`, `palette.css` and the sheet/toast region of
+  `components.css` got matching radius/easing, press feedback and panel-edge polish. Brief E
+  added `overflow-y: auto` + `align-items: safe center` to the loader overlay after Sol found
+  short-viewport clipping. Brief D added scoped `transform: none` for `:active` under reduced
+  motion.
+
+### Per-brief reports (hy4 flash legs)
+
+| Brief | Files | Frozen checks | Result / deviations |
+|---|---|---|---|
+| A loader | `index.html`, `main.tsx`, `Preloader.tsx`, `tokens.css`, new `boot.css` | typecheck 0; 3 files / 18 tests passed; build 0 via `npm --prefix assistant run build` | Done. Frozen `npm exec -- vite build` was wrong (cwd at repo root, no `index.html`); command corrected in PLAN.md. Ledger: static veil, observer handoff (later revised), ambient ring, `boot.css` override layer, `.boot-card` material. |
+| B surfaces | `Welcome.tsx`, `SignIn.tsx`, new `motion-presets.ts`, `landing.css`, `signin.css` | typecheck 0; 4 files / 36 tests passed; build 0 | Done. Same build-command deviation; token fallbacks applied after plan review. Ledger: one shared motion language for both public pages. |
+| C chrome | `shell.css`, `palette.css`, sheet/toast region of `components.css` | typecheck 0; 4 files / 36 tests passed; build 0 | Done. CSS-only; used corrected build command. No new abstraction. |
+| D reduced motion | `shell.css`, `components.css` press region | typecheck 0; 2 files / 15 tests passed; build 0 | Done. Scoped `transform: none` under reduced motion. |
+| E Sol fixes | `boot.css`, `index.html` | typecheck 0; 2 files / 16 tests passed; build 0 | Done. Short-viewport scroll and `<noscript>` message. |
+| F veil handoff | `main.tsx` | typecheck 0; build 0 | Done. Replaced `flushSync` with MutationObserver; ledger entry recorded above. |
+
+### Final gate on the final tree
+
+- `npm --prefix assistant test`: 110 files passed / 1 skipped, 1040 tests passed / 14 skipped, exit 0 (baseline identical).
+- `npm --prefix assistant run typecheck`: exit 0.
+- `npm --prefix assistant run build`: exit 0, 536 modules, `dist/index.html` 5.21 kB.
+- `npm --prefix assistant run check:bundle`: PASS, largest 240.2 kB / 300 kB, total 606.8 kB / 700 kB.
+- Browser smoke (playwright-cli, fresh session, 1280×800 and 320×700, light/dark, reduced
+  motion, 640×360 loader, practice sign-in): 0 console errors, 0 warnings. Veil is present at
+  commit and hands off to the React preloader on the next frame; no uncovered frame. 320 px
+  has no horizontal overflow; 640×360 loader has `overflow-y: auto`, `align-items: safe
+  center`, card top 20 px, scrollTop 152. Dark ground `rgb(15,16,18)`. Reduced motion reports
+  opacity 1 and `transform: none`. Practice session reaches `/app/overview`.
+
+### Reviews
+
+- Adversarial plan review round 0: FAIL (2 high, 3 medium, 1 low); all six fixed before code
+  was dispatched. Round 1: FAIL (1 high, 2 medium text-level); all three fixed.
+- Sol full review: FAIL with short-viewport clipping (fixed in brief E), missing no-JS message
+  (fixed in brief E), and a workflow-evidence item (this section and PLAN.md log).
+- Delta re-review of briefs E/F and this handoff: PASS, no findings. Code review does not
+  replace owner visual approval or authorize a merge.
+
+### Open
+
+- [ ] Owner visual approval of `/`, `/signin`, cold boot and the practice app. No screenshot
+      loop was run; the owner is the visual reviewer.
+- [x] PR #68 opened for preview: https://github.com/developer-az/p2p-ledger/pull/68
+      (branch `feat/calm-glass-motion`, commit `7ad086b`). Commit and push were done only to
+      create that PR. No merge or deploy has been made; ask before either.
+- [ ] Worktrees `p2p-ledger-wt-a` and `p2p-ledger-wt-b` still exist with their branches;
+      dev server is running on port 5173. Remove or keep only on instruction.
+
 ## Session: merges, outage fix, M3-M6 (2026-11-11 evening)
 
 - Merged #32-#39, #40 polish, #51 pool fix, #52 mobile nav, #53 M5 Subscriptions, #54 M6 Forecast/Alerts/Reports, #55 M3 Imports, #56 M4 Rules, #57 review follow-ups, and Dependabot #41-#50. Production checked at 390 px: every sidebar page loads and the drawer stays open.

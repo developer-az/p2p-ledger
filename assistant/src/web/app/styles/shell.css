@@ -621,6 +621,27 @@
   outline-offset: 2px;
 }
 
+/* :active also fires on keyboard activation, so only buttons take this short press scale, never nav links. */
+.app .shell-icon-btn,
+.app .shell-search,
+.app .shell-new {
+  transition: transform 140ms var(--ease-out-strong, cubic-bezier(0.23, 1, 0.32, 1));
+}
+
+.app .shell-icon-btn:active,
+.app .shell-search:active,
+.app .shell-new:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app .shell-icon-btn:active,
+  .app .shell-search:active,
+  .app .shell-new:active {
+    transform: none;
+  }
+}
+
 /* ---------- Content column ---------- */
 
 .app .shell .main {
@@ -789,11 +810,11 @@
 }
 
 ::view-transition-old(root) {
-  animation: shell-view-out 160ms var(--ease) both;
+  animation: shell-view-out 160ms var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1)) both;
 }
 
 ::view-transition-new(root) {
-  animation: shell-view-in 160ms var(--ease) both;
+  animation: shell-view-in 160ms var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1)) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

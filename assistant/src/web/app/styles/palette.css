@@ -28,7 +28,7 @@
   justify-content: center;
   /* The panels are glass: the fade runs on the dialog, which carries no
      backdrop filter, so nothing that animates is also blurred. */
-  animation: palette-fade var(--dur) var(--ease);
+  animation: palette-fade var(--dur) var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1));
 }
 
 .app .palette-dialog::backdrop,
@@ -41,9 +41,16 @@
   width: 100%;
   background: var(--surface);
   border: 1px solid var(--line-strong);
-  border-radius: var(--r3);
+  border-radius: var(--r4, 16px);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
+}
+
+/* Brighter cut edge on the dense dialog panels; fill and ink stay put so rows keep 4.5:1. */
+.app .palette-panel.glass,
+.app .shortcut-panel.glass {
+  border-color: color-mix(in srgb, var(--ink) 16%, transparent);
+  box-shadow: var(--glass-shadow-hover);
 }
 
 .app .palette-panel {

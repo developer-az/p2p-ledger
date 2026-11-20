@@ -126,7 +126,8 @@ html.js-reveal .app .lp-section {
 html.js-reveal .app .lp-section[data-in="true"] {
   opacity: 1;
   transform: none;
-  transition: opacity 400ms var(--ease), transform 400ms var(--ease);
+  transition: opacity 400ms var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1)),
+    transform 400ms var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1));
 }
 
 /* ---------- 01 Signature: the guilloché dial ----------
@@ -229,7 +230,7 @@ html.js-reveal .app .lp-section[data-in="true"] {
 /* The diagram carries the glass material: an SVG shape cannot hold a backdrop
    filter, so the panel behind it frosts and the boxes take the translucent
    fill on top of it. */
-.app .lp-flow.glass { padding: var(--s5); border-radius: var(--r3); }
+.app .lp-flow.glass { padding: var(--s5); border-radius: var(--r4, 16px); }
 /* Under 640px the diagram is too dense to read; the numbered list stands alone. */
 @media (max-width: 639px) {
   .app .lp-flow { display: none; }
@@ -286,7 +287,7 @@ html.js-reveal .app .lp-section[data-in="true"] {
   min-height: 104px;
   min-width: 0;
   padding: var(--s4);
-  background: var(--bg);
+  background: var(--glass-bg);
 }
 .app .lp-fig-label {
   margin: 0;

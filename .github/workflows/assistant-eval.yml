@@ -36,7 +36,7 @@ jobs:
       EVAL_REQUIRE_COMPLETE: "1"
       TRIALS: ${{ inputs.trials }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 22

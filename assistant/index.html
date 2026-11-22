@@ -30,8 +30,117 @@
     <link rel="preload" href="/fonts/instrument-serif-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
     <script src="/theme-init.js"></script>
+    <style>
+      #boot-veil {
+        --bv-accent: #2d4fc4;
+        position: fixed;
+        inset: 0;
+        z-index: 999;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 20px;
+        pointer-events: none;
+        background: #fafaf9;
+        color: #17181a;
+        font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      #boot-veil .boot-veil-dial {
+        width: 56px;
+        height: 56px;
+        animation: boot-veil-breathe 4s ease-in-out infinite;
+      }
+      #boot-veil .boot-veil-ring {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        opacity: 0.35;
+      }
+      #boot-veil .boot-veil-arc {
+        fill: none;
+        stroke: var(--bv-accent);
+        stroke-width: 2.5;
+        stroke-linecap: round;
+      }
+      #boot-veil .boot-veil-name {
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      #boot-veil .boot-veil-line {
+        width: 96px;
+        height: 2px;
+        border-radius: 2px;
+        background: currentColor;
+        opacity: 0.25;
+        overflow: hidden;
+      }
+      #boot-veil .boot-veil-line::after {
+        content: "";
+        display: block;
+        width: 40%;
+        height: 100%;
+        background: var(--bv-accent);
+        animation: boot-veil-sweep 4s ease-in-out infinite;
+      }
+      @keyframes boot-veil-breathe {
+        0%, 100% { opacity: 0.55; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.04); }
+      }
+      @keyframes boot-veil-sweep {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(250%); }
+      }
+      :root[data-theme="dark"] #boot-veil {
+        --bv-accent: #8aa2ff;
+        background: #0f1012;
+        color: #ececea;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) #boot-veil {
+          --bv-accent: #8aa2ff;
+          background: #0f1012;
+          color: #ececea;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-veil .boot-veil-dial,
+        #boot-veil .boot-veil-line::after {
+          animation: none;
+        }
+      }
+      #no-js-message {
+        position: fixed;
+        bottom: 16px;
+        left: 50%;
+        z-index: 1000;
+        transform: translateX(-50%);
+        max-width: calc(100vw - 32px);
+        padding: 10px 14px;
+        border: 1px solid #8b8b88;
+        border-radius: 8px;
+        background: #17181a;
+        color: #ececea;
+        font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-size: 14px;
+        line-height: 1.4;
+        text-align: center;
+      }
+    </style>
   </head>
   <body>
+    <div id="boot-veil" aria-hidden="true">
+      <svg class="boot-veil-dial" viewBox="0 0 56 56" aria-hidden="true">
+        <circle class="boot-veil-ring" cx="28" cy="28" r="24" />
+        <circle class="boot-veil-ring" cx="28" cy="28" r="17" />
+        <circle class="boot-veil-arc" cx="28" cy="28" r="21" stroke-dasharray="26 106" transform="rotate(-90 28 28)" />
+      </svg>
+      <span class="boot-veil-name">Settle</span>
+      <span class="boot-veil-line"></span>
+    </div>
+    <noscript>
+      <div id="no-js-message">Settle needs JavaScript to load. Enable it and reload.</div>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/web/main.tsx"></script>
   </body>

@@ -117,10 +117,11 @@
   --r1: 4px;
   --r2: 6px;
   --r3: 8px;
+  --r4: 16px;
 
   /* Type scale. */
   --t-xs: 12px;
-  --t-sm: 13px;
+  --t-sm: 14px;
   --t-base: 14px;
   --t-md: 16px;
   --t-lg: 20px;
@@ -135,6 +136,9 @@
   /* Motion. */
   --dur: 120ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-soft: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --dur-enter: 280ms;
 
   /* Density: comfortable by default, compact via [data-density]. */
   --row-h: 40px;

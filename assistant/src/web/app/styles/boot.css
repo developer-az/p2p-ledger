@@ -1,0 +1,119 @@
+/* Splash and wallet wait share one glass material so the handoff reads as one wait. */
+
+/* Taller-than-viewport cards must scroll and align to the top, not clip. */
+.app-preloader {
+  overflow-y: auto;
+  align-items: safe center;
+}
+
+.app-preloader .loader-card {
+  display: grid;
+  justify-items: center;
+  gap: var(--s4);
+  width: min(420px, calc(100vw - 32px));
+  padding: var(--s8) var(--s6) var(--s6);
+  border-radius: var(--r4);
+  color: var(--ink);
+  font-family: var(--font);
+  text-align: center;
+}
+
+/* The card owns the width; the factual step list fills it without overflow. */
+.app-preloader .loader-card .boot-steps-root {
+  width: 100%;
+  max-width: none;
+}
+
+.app-preloader .loader-aura {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: min(560px, 90vw);
+  height: min(560px, 90vw);
+  margin: auto;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--accent) 14%, transparent) 0%,
+    transparent 68%
+  );
+  pointer-events: none;
+  animation: loader-aura-breathe 5s ease-in-out infinite;
+}
+
+@keyframes loader-aura-breathe {
+  0%, 100% { opacity: 0.5; transform: scale(0.96); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+
+.app-preloader .loader-emblem {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  color: var(--ink);
+}
+
+.app-preloader .loader-emblem .loader-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  animation: loader-ring-turn 6s linear infinite;
+}
+
+@keyframes loader-ring-turn {
+  to { transform: rotate(360deg); }
+}
+
+.app-preloader .loader-title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--t-xl);
+  font-weight: 400;
+  line-height: 1.15;
+}
+
+.app-preloader .loader-subline {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-base);
+  line-height: 1.4;
+}
+
+.app-preloader .loader-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.app .boot-card {
+  position: relative;
+  isolation: isolate;
+  padding: var(--s8) var(--s6) var(--s6);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r4);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+}
+
+.app .boot-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at 50% 0%,
+    color-mix(in srgb, var(--accent) 12%, transparent),
+    transparent 70%
+  );
+  pointer-events: none;
+  animation: loader-aura-breathe 6s ease-in-out infinite;
+}

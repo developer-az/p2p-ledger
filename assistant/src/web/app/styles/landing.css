@@ -126,7 +126,8 @@ html.js-reveal .app .lp-section {
 html.js-reveal .app .lp-section[data-in="true"] {
   opacity: 1;
   transform: none;
-  transition: opacity 400ms var(--ease), transform 400ms var(--ease);
+  transition: opacity 400ms var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1)),
+    transform 400ms var(--ease-soft, cubic-bezier(0.32, 0.72, 0, 1));
 }
 
 /* ---------- 01 Signature: the guilloché dial ----------
@@ -229,7 +230,7 @@ html.js-reveal .app .lp-section[data-in="true"] {
 /* The diagram carries the glass material: an SVG shape cannot hold a backdrop
    filter, so the panel behind it frosts and the boxes take the translucent
    fill on top of it. */
-.app .lp-flow.glass { padding: var(--s5); border-radius: var(--r3); }
+.app .lp-flow.glass { padding: var(--s5); border-radius: var(--r4, 16px); }
 /* Under 640px the diagram is too dense to read; the numbered list stands alone. */
 @media (max-width: 639px) {
   .app .lp-flow { display: none; }
@@ -286,7 +287,7 @@ html.js-reveal .app .lp-section[data-in="true"] {
   min-height: 104px;
   min-width: 0;
   padding: var(--s4);
-  background: var(--bg);
+  background: var(--glass-bg);
 }
 .app .lp-fig-label {
   margin: 0;
@@ -375,3 +376,20 @@ html.js-reveal .app .lp-section[data-in="true"] {
   .app .lp-stages { grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
   .app .lp-figs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Polish on main's look: bigger serif headline, gold glow behind the dial, firmer CTA. */
+.app .lp-h1 { font-size: clamp(44px, 6vw, 72px); line-height: 1.0; max-width: 14ch; }
+.app .lp-hero-dial { position: relative; }
+.app .lp-hero-dial::before { content: ""; position: absolute; inset: -18%; z-index: -1; border-radius: 50%; background: radial-gradient(closest-side, var(--wash-gold), transparent 72%); }
+.app .lp-btn-primary { color: var(--accent-ink); font-weight: 600; min-height: 48px; padding-inline: var(--s6); }
+.app .lp-label-text { letter-spacing: 0.1em; }
+
+/* ---------- Design review fixes (contrast, hit areas) ---------- */
+/* Small text on tinted fills needs 4.5:1: use the stronger ink tones, not --muted. */
+.app .lp-tag.is-live { color: var(--accent-hover); }
+.app .lp-tag.is-planned { color: var(--ink-2); }
+.app .shell-badge, .app .shell-search kbd, .app .pill { color: var(--ink-2); }
+/* 44px-class hit areas for inline links and small controls without changing their look. */
+.app .v-link, .app .link-btn, .app .site-footer a, .app .lp-nav a:not(.lp-btn) { position: relative; }
+.app .v-link::after, .app .link-btn::after, .app .site-footer a::after, .app .lp-nav a:not(.lp-btn)::after { content: ""; position: absolute; inset: -12px -8px; }
+.app .v-seg button { min-height: 36px; }

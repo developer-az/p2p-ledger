@@ -295,13 +295,19 @@ body:has(.app), body:has(.app-preloader) {
   overflow: auto;
   padding: var(--s6);
   border: 1px solid var(--line);
-  border-radius: var(--r3);
+  border-radius: var(--r4, 16px);
   background: var(--surface);
   color: var(--ink);
   box-shadow: var(--shadow-lg);
   font-family: var(--font);
   font-size: var(--t-base);
   line-height: 1.5;
+}
+
+/* Brighter cut edge on the dense dialog panel; fill and ink stay unchanged. */
+.app .app-sheet-panel.glass {
+  border-color: color-mix(in srgb, var(--ink) 16%, transparent);
+  box-shadow: var(--glass-shadow-hover);
 }
 
 .app-sheet-panel-wide {
@@ -358,7 +364,7 @@ body:has(.app), body:has(.app-preloader) {
     width: 100%;
     max-height: 92vh;
     padding-bottom: calc(var(--s6) + env(safe-area-inset-bottom));
-    border-radius: var(--r3) var(--r3) 0 0;
+    border-radius: var(--r4, 16px) var(--r4, 16px) 0 0;
   }
 }
 
@@ -413,6 +419,23 @@ body:has(.app), body:has(.app-preloader) {
   color: inherit;
   font-size: var(--t-xs);
   font-weight: 600;
+}
+
+.app-sheet-head .btn-quiet,
+.toasts .toast-action {
+  transition: transform 140ms var(--ease-out-strong, cubic-bezier(0.23, 1, 0.32, 1));
+}
+
+.app-sheet-head .btn-quiet:active,
+.toasts .toast-action:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-sheet-head .btn-quiet:active,
+  .toasts .toast-action:active {
+    transform: none;
+  }
 }
 
 /* ---------- Skeletons ---------- */

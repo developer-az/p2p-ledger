@@ -895,3 +895,13 @@
     min-height: 44px;
   }
 }
+
+/* ---------- Design review fixes (contrast, hit areas) ---------- */
+/* Small text on tinted fills needs 4.5:1: use the stronger ink tones, not --muted. */
+.app .lp-tag.is-live { color: var(--accent-hover); }
+.app .lp-tag.is-planned { color: var(--ink-2); }
+.app .shell-badge, .app .shell-search kbd, .app .pill { color: var(--ink-2); }
+/* 44px-class hit areas for inline links and small controls without changing their look. */
+.app .v-link, .app .link-btn, .app .site-footer a, .app .lp-nav a:not(.lp-btn) { position: relative; }
+.app .v-link::after, .app .link-btn::after, .app .site-footer a::after, .app .lp-nav a:not(.lp-btn)::after { content: ""; position: absolute; inset: -12px -8px; }
+.app .v-seg button { min-height: 36px; }

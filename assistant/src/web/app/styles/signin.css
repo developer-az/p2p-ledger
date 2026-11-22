@@ -300,3 +300,9 @@
     min-height: 44px;
   }
 }
+
+/* Polish on main's look: label contrast, gold hairline, softer panel. */
+.app .signin .signin-submit { color: var(--accent-ink); font-weight: 600; letter-spacing: 0.01em; }
+.app .signin .signin-submit:disabled { color: var(--muted); }
+.app .signin-main h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(36px, 5vw, 48px); letter-spacing: -0.01em; line-height: 1.05; }
+.app .signin-aside { border-top: 2px solid var(--brand-gold); }

@@ -1,5 +1,29 @@
 # Engineering Handoff (latest)
 
+## Session: PR merges — look polish + Dependabot (2026-11-22)
+
+Owner asked to merge PR #69 if good, plus the open Dependabot dependency upgrades. All nine
+open PRs were merged into `main`; `gh pr list --state open` is now empty.
+
+- #69 "Polish main's look" (`redesign/unrecognizable`) — CSS-only sign-in contrast, landing
+  headline, type scale and hit areas. All checks green, merge state CLEAN.
+- Dependabot: #60 hardhat 3.22.0 in /contracts, #61 maven-minor-patch group (2 updates) in
+  /ledger-service, #62 docker/setup-buildx-action v4, #63 actions/setup-python v7,
+  #64 actions/setup-java v6, #65 docker/build-push-action v7, #66 actions/checkout v7,
+  #67 assistant-minor-patch group (8 updates).
+- #65 and #66 first failed with "merge conflicts" in `.github/workflows/ledger-ci.yml`: the
+  checkout / buildx / build-push steps sit in one block that several of these bumps edit.
+  #65 was resolved locally on `resolve/dependabot-65` (kept buildx v4 from main and
+  build-push-action v7 from the PR), pushed to its Dependabot branch, then merged after CI.
+  Dependabot force-rebased #66 onto newer main meanwhile, so its local merge commit was
+  discarded with `git reset --hard` to the rebased remote and the PR merged cleanly.
+- The slow check was `native` — GraalVM native compile plus binary smoke test in `ledger-ci.yml`
+  (45-minute timeout). It took 6m17s on #65 and 5m34s on #66; everything else passed in
+  under two minutes. Nothing was stuck.
+- Verified on `origin/main` (`1845565`): checkout@v7, setup-java@v6, setup-node@v7,
+  setup-buildx-action@v4, build-push-action@v7. No code was authored, no tests run locally,
+  no deploy triggered by this session. Workspace restored to `redesign/unrecognizable`, clean.
+
 ## Session: calm glass loader + Motion pass (2026-11-19/20), working tree on `main`
 
 Owner asked for a relaxing loading screen that stays while the Render ledger wakes, an

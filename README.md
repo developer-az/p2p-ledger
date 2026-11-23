@@ -83,13 +83,13 @@ Live workflows require the same random 32+ character `LEDGER_API_KEY` on Java an
 | **Imports, Rules, Reports** | CSV/OFX statements with column mapping and dedupe; merchant → category rules with a preview; month-over-month reports. |
 
 <p align="center">
-  <img src="docs/images/settle-overview.png" width="470" alt="Settle's Overview: net position, cash, cards and weekly plan, a recent transactions list, this month's total and top categories">
-  <img src="docs/images/settle-insights.png" width="470" alt="Settle's Insights: weekly pace, month to date, a 30-day trend and the eight-week spending calendar">
+  <img src="docs/images/settle-overview.png" width="405" alt="Settle's Overview: net position, cash, cards and weekly plan, a recent transactions list, this month's total and top categories">
+  <img src="docs/images/settle-insights.png" width="405" alt="Settle's Insights: weekly pace, month to date, a 30-day trend and the eight-week spending calendar">
 </p>
 <p align="center"><sub><strong>Overview</strong> — four numbers, the recent list, and where the month went. <strong>Insights</strong> — the pace you set, the month so far, and the days you actually spent.</sub></p>
 
 <p align="center">
-  <img src="docs/images/settle-subscriptions.png" width="470" alt="Settle's Subscriptions: monthly run-rate, a year at that pace, active streams with a price-rise flag, and possible subscriptions">
+  <img src="docs/images/settle-subscriptions.png" width="405" alt="Settle's Subscriptions: monthly run-rate, a year at that pace, active streams with a price-rise flag, and possible subscriptions">
   <img src="docs/images/settle-insights-phone.png" width="220" alt="Settle on a phone: the weekly pace and month-to-date figures">
 </p>
 <p align="center"><sub><strong>Subscriptions</strong> finds the recurring charges in what you log and flags a price rise. The same figures hold up on a phone.</sub></p>

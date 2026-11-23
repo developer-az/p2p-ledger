@@ -1,20 +1,29 @@
-# p2p-ledger
-
-**Production-style peer-to-peer payments ledger with an LLM support layer** — double-entry money movement in Java, a TypeScript terminal and BFF, and deterministic evals over real account data.
+<h1 align="center">p2p-ledger</h1>
 
 <p align="center">
-  <a href="https://p2p-ledger-pi.vercel.app"><strong>Live demo</strong></a>
+  <em>Double-entry peer-to-peer payments where the ledger can prove itself.<br>
+  Java and PostgreSQL underneath, a TypeScript product on top, an LLM that answers without touching money.</em>
+</p>
+
+<p align="center">
+  <a href="https://ledger.anthony-zhou.com"><strong>Live demo</strong></a>
   ·
   <a href="docs/API.md">API</a>
   ·
   <a href="docs/ARCHITECTURE.md">Architecture</a>
   ·
   <a href="docs/BRIEFING.md">Ops briefing</a>
+  ·
+  <a href="docs/SECURITY.md">Security</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/developer-az/p2p-ledger/actions/workflows/ledger-ci.yml"><img src="https://github.com/developer-az/p2p-ledger/actions/workflows/ledger-ci.yml/badge.svg" alt="ledger CI"></a>
   <a href="https://github.com/developer-az/p2p-ledger/actions/workflows/assistant-ci.yml"><img src="https://github.com/developer-az/p2p-ledger/actions/workflows/assistant-ci.yml/badge.svg" alt="assistant CI"></a>
+  <a href="https://github.com/developer-az/p2p-ledger/actions/workflows/contracts-ci.yml"><img src="https://github.com/developer-az/p2p-ledger/actions/workflows/contracts-ci.yml/badge.svg" alt="contracts CI"></a>
+  <img alt="Java 21" src="https://img.shields.io/badge/Java-21-1b1b1b">
+  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-17-336791">
+  <img alt="GraalVM native" src="https://img.shields.io/badge/GraalVM-native-1b1b1b">
 </p>
 
 <p align="center">
@@ -22,6 +31,16 @@
   <img src="docs/images/settle-habits-phone.png" alt="Settle on a phone: a weekly pace and spending patterns" width="220">
 </p>
 <p align="center"><sub><strong>Settle</strong>, the app on top of the ledger: a calm money snapshot, two-tap spend logging, weekly pace, and patterns from your own history. Demo only, no real money. The original terminal lives at <code>/ops</code>.</sub></p>
+
+<p align="center">
+  <a href="#overview">Overview</a> ·
+  <a href="#live-surfaces">Live surfaces</a> ·
+  <a href="#the-settle-experience">Settle</a> ·
+  <a href="#terminal-ui">Terminal</a> ·
+  <a href="#system-context">Architecture</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#engineering-notes">Engineering notes</a>
+</p>
 
 ---
 
@@ -47,7 +66,7 @@ Live workflows require the same random 32+ character `LEDGER_API_KEY` on Java an
 
 | Surface | URL / config |
 |---------|----------------|
-| **Assistant** (UI + `/api`) | [p2p-ledger-pi.vercel.app](https://p2p-ledger-pi.vercel.app) |
+| **Assistant** (UI + `/api`) | [ledger.anthony-zhou.com](https://ledger.anthony-zhou.com) · alias [p2p-ledger-pi.vercel.app](https://p2p-ledger-pi.vercel.app) |
 | **Ledger API** | Render service → Vercel `LEDGER_URL` |
 
 **Try it:** open the demo → **Start the guided demo** (or **F2 ONBOARD** in `/ops`; live Postgres when `LEDGER_URL` is set), or resume a saved wallet. In **Settle**, set cash, cards and a weekly pace once, then log a spend in two taps. **Patterns** turns those logs into an eight-week heatmap, category shifts, a weekday rhythm and a card-payoff planner. The original terminal lives at `/ops`; command line: `pay sam 10 lunch`, `bank in`, **F3** company audit. Setup: [DEVELOPMENT.md](docs/DEVELOPMENT.md) · Troubleshooting: [BRIEFING.md](docs/BRIEFING.md).
@@ -81,6 +100,12 @@ Three panes plus a fixed **CMD** bar:
 | **AUDIT / MSG** | Company-wide integrity (F3) and AI Q&A via CMD |
 
 Shortcuts: **F1** help · **F2** onboard · **F3** audit · **F4** idempotency race.
+
+<p align="center">
+  <img src="docs/images/terminal-workstation.png" width="820" alt="The terminal at /ops: a WATCH pane with balance and peers, a BLOTTER of transfers with their statuses, and a CMD bar reading 'pay sam 10 lunch'">
+</p>
+<p align="center"><sub>A signed-in session: WATCH, BLOTTER and the CMD bar. The same commands work from the shell —
+<code>pay sam 10 lunch</code>, <code>split 50 sam dinner</code>, <code>bank in</code>.</sub></p>
 
 ```mermaid
 flowchart LR
@@ -181,7 +206,7 @@ Checklist: [GITHUB.md](docs/GITHUB.md).
 - [x] Ops briefing and README figures
 - [ ] Owner prefix search (Java)
 - [ ] OAuth / session-bound wallets
-- [ ] On-chain attestation bridge (optional) — [P2P-SOLIDITY-AND-SCALE.md](docs/P2P-SOLIDITY-AND-SCALE.md)
+- [x] On-chain attestation registry — local chain and integration test; no public deployment yet ([contracts](contracts/README.md), [notes](docs/P2P-SOLIDITY-AND-SCALE.md))
 
 ## Engineering notes
 

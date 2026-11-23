@@ -138,14 +138,19 @@ cd assistant && ALLOW_LIVE_LLM_EVAL=1 npm run eval
 
 ## Capturing README screenshots
 
-After `npm run dev:stack` with the Bloomberg terminal branch:
+The gallery in the root README comes from the deployed sample household, signed
+out. To refresh it:
 
-1. Sign in via **F2 ONBOARD** or open a new handle.
-2. Capture **WATCH** (balance + SIM BANK), **BLOTTER**, **PEERS** panel, and **CMD** line.
-3. Save as `docs/images/terminal-watch.png`, `terminal-blotter.png`, `terminal-peers.png`, `terminal-audit.png`.
-4. Update image paths in root `README.md`.
+1. Open [ledger.anthony-zhou.com](https://ledger.anthony-zhou.com) and choose
+   **Explore the sample household**.
+2. Close the **Guided tour** rail so it does not cover the figures.
+3. Capture **Overview**, **Insights**, **Subscriptions** and the landing page at
+   1440×1100 (device scale factor 2), plus Insights at 390×844.
+4. Downscale by half, save under `docs/images/`, and follow the table in
+   [`docs/images/README.md`](images/README.md).
 
-Until those PNGs are checked in, the README uses **Mermaid figures** for the same flows.
+`/ops` is signed in against a live wallet; with `npm run dev:stack`, use
+**F2 ONBOARD** and capture SNAPSHOT / ACTIVITY when a terminal figure is needed.
 
 ## API references
 

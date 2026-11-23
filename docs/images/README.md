@@ -1,34 +1,29 @@
 # Documentation images
 
-PNG assets for the root **README** and portfolio use. Prefer captures from **live** or `npm run dev:stack` after UI changes.
-
-## Terminal (current product)
-
-| File | Capture |
-|------|---------|
-| `terminal-workstation.png` | Signed-in session: WATCH · BLOTTER · AUDIT/MSG · CMD (1280×720 or wider) |
-| `terminal-watch.png` | Same as workstation hero, or crop on WATCH + bank dock |
-
-## Settle (consumer app)
+PNG assets for the root **README** and portfolio use. Captures come from the
+deployed app (`ledger.anthony-zhou.com`), signed out, inside its sample
+household. Re-capture from live — or from `npm run dev:stack` — after UI changes.
 
 | File | Capture |
 |------|---------|
-| `settle-home.png` | Desktop **Today** above the fold: guided demo, net position, weekly pace, quick actions, patterns peek (1440×1040) |
-| `settle-habits-phone.png` | Mobile **Today** with the guided demo and weekly pace (390×844) |
-
-**How to refresh Settle shots**
-
-1. `cd assistant && npm run dev` (practice mode is fine).
-2. Open `http://localhost:5173`, start the guided demo, and let the personal history load.
-3. Desktop: capture **Today** above the fold. Mobile: capture the same screen at 390×844.
-4. Save under `docs/images/` and commit.
+| `settle-landing.png` | Landing page: hero, pipeline, sample-data section (1440×1100) |
+| `settle-overview.png` | Sample household → **Overview**, guided tour closed (1440×1100) |
+| `settle-insights.png` | **Insights** from the top: weekly pace, month to date (1440×1100) |
+| `settle-subscriptions.png` | **Subscriptions**: run-rate, active streams, possible charges (1440×1100) |
+| `settle-insights-phone.png` | The same Insights view at 390×844 |
 
 **How to refresh**
 
-1. Open [p2p-ledger-pi.vercel.app](https://p2p-ledger-pi.vercel.app) (or local `npm run dev:stack`).
-2. **F2 ONBOARD** or resume a saved wallet.
-3. Full-page screenshot; save under `docs/images/` and commit.
+1. Open the site and choose **Explore the sample household**.
+2. Close the **Guided tour** rail (top right) so it does not cover the figures.
+3. Capture at 1440×1100 with device scale factor 2; mobile at 390×844.
+4. Downscale by half, save here, and update the README if a section moved.
 
-## Archive (guided UI, pre-terminal)
+The `/ops` terminal signs in against a live wallet, so the signed-out console is
+empty and is not captured. Use **F2** there with a live ledger when a terminal
+figure is needed.
 
-`assistant-signin.png`, `assistant-overview.png`, `assistant-send.png`, `assistant-ask.png` — older multi-pane UI; kept for history only.
+## Archive
+
+`assistant-signin.png`, `assistant-overview.png`, `assistant-send.png`,
+`assistant-ask.png` — older multi-pane UI; kept for history only.

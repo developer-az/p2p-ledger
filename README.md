@@ -27,10 +27,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/settle-home.png" alt="Settle guided demo: progress card, net position, weekly pace, and patterns peek" width="640">
-  <img src="docs/images/settle-habits-phone.png" alt="Settle on a phone: a weekly pace and spending patterns" width="220">
+  <img src="docs/images/settle-landing.png" alt="The Settle landing page: 'Transaction intelligence you run yourself', the five-stage pipeline, and the sample household entry point" width="880">
 </p>
-<p align="center"><sub><strong>Settle</strong>, the app on top of the ledger: a calm money snapshot, two-tap spend logging, weekly pace, and patterns from your own history. Demo only, no real money. The original terminal lives at <code>/ops</code>.</sub></p>
+<p align="center"><sub><strong>Settle</strong>, the app on top of the ledger: import a statement, reconcile it against a double-entry ledger, resolve merchants, detect recurring charges, and forecast the next 90 days — all from records you can open. Demo only, no real money. The original terminal lives at <code>/ops</code>.</sub></p>
 
 <p align="center">
   <a href="#overview">Overview</a> ·
@@ -49,14 +48,14 @@
 | | |
 |---|---|
 | **Problem** | P2P money needs one source of truth: correct balances under concurrency, safe retries, auditable history, explainable declines. |
-| **Approach** | `ledger-service` (Spring Boot + PostgreSQL) is the system of record. `assistant` is the product: a consumer **Settle** app with a money snapshot (cash, cards, weekly pace), **two-tap spend logging**, **Patterns** over the user's own history, **simulated bank corridors**, and read-only **LLM tools**. P2P endpoints remain in the API and `/ops`, but the consumer app is focused on spending habits. |
+| **Approach** | `ledger-service` (Spring Boot + PostgreSQL) is the system of record. `assistant` is the product: a consumer **Settle** app with an overview (net position, cash, cards, weekly pace), **two-tap spend logging**, CSV/OFX **imports** with merchant **rules**, **Insights** over your own records, **subscription detection**, a 90-day **forecast**, and read-only **LLM tools**. P2P endpoints remain in the API and `/ops`, but the consumer app is focused on spending habits. |
 | **Scope** | End-to-end portfolio system: Docker, native-image CI, Render + Vercel deploy path, k6 load tests, integration tests. Not a licensed bank — [SECURITY.md](docs/SECURITY.md). |
 
 ## Java workflows and chain receipts
 
 Live bill splits, payment-request settlement, spending records and expense CSV import now run in `ledger-service`. Paying a request locks it and commits its status, ledger entries, retry result and event together; a racing cancel or external-settlement action cannot leave the request book disagreeing with the money movement. TypeScript keeps the UI, session authorization, read-only assistant and practice fixtures.
 
-In **Wallet → Import expenses**, use the CSV template to bring statement expenses into Activity and Patterns. Java validates the complete file before committing. Reimporting the same file skips duplicates; a stable `transactionId` also detects overlaps across statements. Expense logs do not move money. See [Java workflows and rollout](docs/JAVA-WORKFLOWS.md).
+In **Imports**, upload a CSV or OFX statement, map its columns, and review every row before it reaches Transactions. Java validates the complete file before committing. Reimporting the same file skips duplicates; a stable `transactionId` also detects overlaps across statements. Expense logs do not move money, and **Rules** turns the resulting descriptors into one visible merchant → category decision. See [Java workflows and rollout](docs/JAVA-WORKFLOWS.md).
 
 The optional **Solidity registry** records immutable receipts for completed Java transfers. The Java relay checks the deployed bytecode and chain IDs, bounds gas and retries, and waits for finalized contract storage. Activity can download the receipt for independent verification. This is an attestation integration; funding remains simulated. Setup, tests, deployment roles and release boundaries: [contracts/README.md](contracts/README.md).
 
@@ -69,43 +68,52 @@ Live workflows require the same random 32+ character `LEDGER_API_KEY` on Java an
 | **Assistant** (UI + `/api`) | [ledger.anthony-zhou.com](https://ledger.anthony-zhou.com) · alias [p2p-ledger-pi.vercel.app](https://p2p-ledger-pi.vercel.app) |
 | **Ledger API** | Render service → Vercel `LEDGER_URL` |
 
-**Try it:** open the demo → **Start the guided demo** (or **F2 ONBOARD** in `/ops`; live Postgres when `LEDGER_URL` is set), or resume a saved wallet. In **Settle**, set cash, cards and a weekly pace once, then log a spend in two taps. **Patterns** turns those logs into an eight-week heatmap, category shifts, a weekday rhythm and a card-payoff planner. The original terminal lives at `/ops`; command line: `pay sam 10 lunch`, `bank in`, **F3** company audit. Setup: [DEVELOPMENT.md](docs/DEVELOPMENT.md) · Troubleshooting: [BRIEFING.md](docs/BRIEFING.md).
+**Try it:** open the live app and choose **Explore the sample household** — a fixed, synthetic household seeded on read, with no sign-in and nothing written to your own records (or **F2 ONBOARD** in `/ops` when a live ledger is attached). The five-step tour covers Overview, Transactions, Insights, the command palette and appearance settings, then steps out of the way. Sign in to start your own wallet: set cash, cards and a weekly pace once, then log a spend in two taps. Setup: [DEVELOPMENT.md](docs/DEVELOPMENT.md) · Troubleshooting: [BRIEFING.md](docs/BRIEFING.md).
 
 ## The Settle experience
 
-| Surface | What it answers |
+| Section | What it answers |
 |---------|-----------------|
-| **Today** | What is my net position, what is left this week, what needs an answer (Settle Up), and what needs a log? |
-| **Activity** | Every payment, logged spend and income — grouped by day, with a receipt on each payment. |
-| **Patterns** | Where the money went, how this month is trending, which weekday is expensive, and how fast a card can reach zero. |
+| **Overview** | What is my net position, what is left this week, what did I just spend, and where did this month go? |
+| **Transactions** | Every payment, logged spend and imported row in date order — filter by kind, search a name or note, open a row for detail. |
+| **Insights** | Weekly pace, month to date, an eight-week spending calendar, the daily trend, categories, weekday rhythm, and a card payoff plan. |
+| **Subscriptions** | Which charges recur, what they cost a month and a year, which one raised its price, and which are trials or near-duplicates. |
+| **Forecast** | Cash out to 90 days, the low point, and the assumptions under the line. |
 | **Ask** | Read-only questions about your records; the assistant cannot move money. |
-| **Wallet** | Edit the snapshot, review logging stats, fund the demo ledger, download a statement and open the trust lab. |
-| **Settle Up** | The wedge: request money or split a bill, then settle in-app **or on any rail** (Zelle, Cash App, Venmo, cash, crypto) with the rail recorded on the receipt. |
+| **Imports, Rules, Reports** | CSV/OFX statements with column mapping and dedupe; merchant → category rules with a preview; month-over-month reports. |
 
-The design rules: **three numbers to start** (cash, card balance, weekly pace), **two taps to log** (amount + category, with recent repeats and undo), and **no mixing** between user logs and ledger transfers. Habit totals never pretend to be a bank feed.
+<p align="center">
+  <img src="docs/images/settle-overview.png" width="470" alt="Settle's Overview: net position, cash, cards and weekly plan, a recent transactions list, this month's total and top categories">
+  <img src="docs/images/settle-insights.png" width="470" alt="Settle's Insights: weekly pace, month to date, a 30-day trend and the eight-week spending calendar">
+</p>
+<p align="center"><sub><strong>Overview</strong> — four numbers, the recent list, and where the month went. <strong>Insights</strong> — the pace you set, the month so far, and the days you actually spent.</sub></p>
 
-**The demo is a guided tour, not a sandbox.** It seeds a believable personal history and a five-step progress card: set the baseline, log a spend, log income, open Patterns, adjust the weekly pace. Each step points at a real feature and the state updates as you go. A **Demo** pill reopens the guide; **Start my own wallet** leaves the tour.
+<p align="center">
+  <img src="docs/images/settle-subscriptions.png" width="470" alt="Settle's Subscriptions: monthly run-rate, a year at that pace, active streams with a price-rise flag, and possible subscriptions">
+  <img src="docs/images/settle-insights-phone.png" width="220" alt="Settle on a phone: the weekly pace and month-to-date figures">
+</p>
+<p align="center"><sub><strong>Subscriptions</strong> finds the recurring charges in what you log and flags a price rise. The same figures hold up on a phone.</sub></p>
 
-**Your wallet is isolated from the demo.** Creating an account opens a new ledger account that **starts empty** — no simulated deposit, no fake first payment. The setup sheet collects your own cash, cards, and weekly pace, and the account starts with no spend logs, no demo household, and no demo progress. In live mode the wallet persists in PostgreSQL; in practice mode it lives in memory.
+The design rules: **three numbers to start** (net position, cash, cards — with the weekly plan beside them), **two taps to log** (amount + category, with recent repeats and undo), and **no mixing** between user logs and ledger transfers. Imported rows are statement facts; logged spends are yours; habit totals never pretend to be a bank feed.
+
+**The sample is a guided tour, not a sandbox.** It loads a believable personal history — statements, logs, subscriptions, a peer transfer — and opens a five-step rail: overview figures, the transactions list, the insight charts, the command palette, appearance settings. Each step points at a real anchor and the route follows along. **Guided tour** in the account menu reopens it; **Exit sample** leaves the demo.
+
+**Your wallet is isolated from the demo.** Creating an account opens a new ledger account that **starts empty** — no simulated deposit, no fake first payment. The setup sheet collects your own cash, cards, and weekly pace, and the account starts with no spend logs, no sample household, and no tour progress. In live mode the wallet persists in PostgreSQL; in practice mode it lives in memory.
 
 
 ## Terminal UI
 
-Three panes plus a fixed **CMD** bar:
+`/ops` keeps the original engineering console. It signs in against a live wallet,
+so it is not part of the sample household tour.
 
 | Pane | Purpose |
 |------|---------|
-| **WATCH** | **HABITS** (weekly logged spend, quick LOG), wallet balance, peers, **bank dock** (ACH IN/OUT, +DEP, export) |
-| **BLOTTER** | Transfers; click a row to expand/collapse ledger detail |
-| **AUDIT / MSG** | Company-wide integrity (F3) and AI Q&A via CMD |
+| **SNAPSHOT** | Balance, 30-day in/out, peers, the **bank dock** (ACH IN/OUT, +DEP) and exports. |
+| **ACTIVITY** | Logged spends, income and ledger transfers in one feed; open a row for ledger detail. |
+| **ASK** | Read-only questions about the wallet, plus the company-wide integrity check. |
 
-Shortcuts: **F1** help · **F2** onboard · **F3** audit · **F4** idempotency race.
-
-<p align="center">
-  <img src="docs/images/terminal-workstation.png" width="820" alt="The terminal at /ops: a WATCH pane with balance and peers, a BLOTTER of transfers with their statuses, and a CMD bar reading 'pay sam 10 lunch'">
-</p>
-<p align="center"><sub>A signed-in session: WATCH, BLOTTER and the CMD bar. The same commands work from the shell —
-<code>pay sam 10 lunch</code>, <code>split 50 sam dinner</code>, <code>bank in</code>.</sub></p>
+Shortcuts: **F1** help · **F2** demo/onboard · **F3** ledger integrity. The same commands work from the CMD bar:
+`pay sam 10 lunch`, `split 50 sam dinner`, `bank in`, `log 15 groceries`.
 
 ```mermaid
 flowchart LR

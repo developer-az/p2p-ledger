@@ -24,11 +24,11 @@
     "check:release": "tsx scripts/check-release.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^1.8.0",
-    "@google/genai": "^3.3.0",
-    "@hono/node-server": "^2.1.8",
-    "hono": "^4.13.18",
-    "jose": "^6.2.17",
+    "@anthropic-ai/sdk": "^1.12.0",
+    "@google/genai": "^3.6.1",
+    "@hono/node-server": "^2.1.11",
+    "hono": "^4.13.20",
+    "jose": "^6.2.18",
     "motion": "^14.14.0",
     "pg": "^8.23.1",
     "react": "^19.3.1",
@@ -45,6 +45,6 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   }
 }

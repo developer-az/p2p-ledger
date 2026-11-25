@@ -20,6 +20,6 @@
   },
   "devDependencies": {
     "hardhat": "3.22.0",
-    "solc": "0.8.38"
+    "solc": "0.8.39"
   }
 }
